@@ -1,0 +1,40 @@
+# JS
+node_modules/
+*.log
+
+# C
+*.o
+*.a
+*.so
+*.exe
+test_runner
+smoke_runner
+map.txt
+build/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.zcode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tool artifacts (ACL scan reports / local temp backups)
+.acl-reports/
+*.tmp
+*.obj
+*.out
+*.bak
+*.orig
+*.rej
+*~
+tmp/
+temp/
+
+# Comment-cleanup working copies (timestamped backups, not project content)
+.comment-cleanup-backup/
+tools/comment-cleanup/

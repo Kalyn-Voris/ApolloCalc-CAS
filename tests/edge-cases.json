@@ -1,0 +1,28 @@
+{
+  "description": "ApolloCalc-CAS 共享一致性测试：边界与错误。错误码约定——parseError: 1=非法字符 2=池溢出 3=括号不匹配 4=空表达式；evalError: 1=除零 2=域错误 3=溢出 4=内部错；solveError: 1=次数门禁 2=preCheck 拒绝 3=奇异矩阵。数组表示可接受码集合；\"expect\": \"error\" 表示必须报错但码未约定；\"expectedImprove\": true 表示 64KB 拒绝该输入而 128KB 放行（一致性测试判为 IMPROVE 而非 FAIL）。",
+  "cases": [
+    { "id": "empty-input", "input": "", "stage": "parse", "parseError": [4] },
+    { "id": "unbalanced-open", "input": "(1+2", "stage": "parse", "parseError": [3] },
+    { "id": "unbalanced-close", "input": "1+2)", "stage": "parse", "parseError": [3] },
+    { "id": "illegal-char", "input": "2 # 3", "stage": "parse", "parseError": [1] },
+    { "id": "double-operator", "input": "x^^2", "stage": "parse", "expect": "error" },
+    { "id": "dangling-operator", "input": "x+", "stage": "eval", "evalError": [4] },
+    { "id": "div-zero", "input": "1/0", "stage": "eval", "evalError": [1] },
+    { "id": "domain-sqrt-negative", "input": "sqrt(-1)", "stage": "eval", "evalError": [2] },
+    { "id": "domain-pow-zero-negative", "input": "0^(-1)", "stage": "eval", "evalError": [2] },
+    { "id": "ln-zero", "input": "ln(0)", "stage": "eval", "evalError": [2, 3] },
+    { "id": "overflow-pow", "input": "2^1024", "stage": "eval", "evalError": [3] },
+    { "id": "quintic-rejected", "input": "x^5-1=0", "degree": 5, "stage": "solve", "solveError": [1] },
+    { "id": "sextic-rejected", "input": "x^6+x-1=0", "degree": 6, "stage": "solve", "expect": "error" },
+    { "id": "precheck-depth", "input": "((((x))))", "stage": "solve", "solveError": [2], "expectedImprove": true, "note": "64KB 拒绝（深度>3）；128KB 放行（深度≤6）" },
+    { "id": "precheck-funcs", "input": "sin(x)+cos(x)+tan(x)", "stage": "solve", "solveError": [2], "expectedImprove": true, "note": "64KB 拒绝（函数>2）；128KB 放行（函数≤4）" },
+    { "id": "precheck-vars", "input": "x+x+x+x+x+x", "stage": "solve", "solveError": [2], "expectedImprove": true, "note": "64KB 拒绝（变量>5）；128KB 放行（变量≤10）" },
+    { "id": "non-polynomial-extract", "input": "sqrt(x)=0", "stage": "extract", "expect": "error", "note": "采样点域错误，系数必须清零" },
+    { "id": "exact-form-invalid-mixed", "input": "x^2-x-1=0", "degree": 2, "stage": "solve", "expectedRoots": [[1.618033988749895, 0], [-0.6180339887498949, 0]], "tolerance": 1e-9, "exactValid": false, "note": "混合形式 (1±√5)/2 数值根有效，精确形式置无效" },
+    { "id": "degenerate-x2", "input": "x^2=0", "degree": 2, "stage": "solve", "expectedRoots": [[0, 0], [0, 0]], "tolerance": 1e-9 },
+    { "id": "complex-roots-accepted", "input": "x^2+2x+2=0", "degree": 2, "stage": "solve", "expectedRoots": [[-1, 1], [-1, -1]], "tolerance": 1e-9 },
+    { "id": "linear-singular-2x2", "linearSystem": { "n": 2, "augmented": [[1, 1, 1], [1, 1, 2]] }, "stage": "solve", "solveError": [3] },
+    { "id": "linear-singular-3x3", "linearSystem": { "n": 3, "augmented": [[1, 2, 3, 6], [2, 4, 6, 12], [1, 1, 1, 1]] }, "stage": "solve", "solveError": [3] },
+    { "id": "linear-13var-over-boundary", "linearSystem": { "n": 13, "augmented": [[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4], [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 5], [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 6], [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7], [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 8], [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 9], [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 11], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 12], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 13]] }, "stage": "solve", "expect": "error", "note": "超出 12 元边界（矩阵池 156 < 13×14），必须拒绝" }
+  ]
+}

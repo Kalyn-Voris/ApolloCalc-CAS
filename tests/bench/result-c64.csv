@@ -1,0 +1,14 @@
+stage,name,iterations,total_ms,us_per_op
+parse,short,10000,0.085,0.0085
+parse,quadratic,10000,0.236,0.0236
+parse,cubic,10000,0.356,0.0356
+parse,quartic,10000,0.282,0.0282
+parse,funcs,10000,0.498,0.0498
+parse,implicit,10000,0.225,0.0225
+parse,sci,10000,0.510,0.0510
+parse,nested,10000,0.389,0.0389
+eval,poly2,100000,3.163,0.0316
+eval,poly4,100000,4.704,0.0470
+eval,trig,100000,8.059,0.0806
+eval,exp_log,100000,7.057,0.0706
+bench-c: solve 阶段 TODO —— 跳过（内核 ac_solvers 未落地）

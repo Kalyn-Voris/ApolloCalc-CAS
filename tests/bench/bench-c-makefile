@@ -1,0 +1,60 @@
+# ApolloCalc-CAS · C 端压测 Makefile
+# 用法：
+#   make -f bench-c-makefile                            # C/64KB（默认）
+#   make -f bench-c-makefile KERNEL=../../C/128KB/src   # C/128KB
+#   make -f bench-c-makefile clean
+# 说明：
+#   - 源清单按 KERNEL 自动裁剪：C 128KB 独有 ac_ratroot.c / ac_calculus.c，
+#     C 64KB 独有 ac_numtheory.c / ac_base.c / ac_util.c；用 $(wildcard) 过滤，
+#     同一份 makefile 服务两个版本（此前写死 6 个文件名，导致 C128 链接失败）
+#   - 池：pool_c.h 由 gen_pool_c.py 从 pool.json 生成，作为依赖参与增量构建
+#   - 提示走 make 内建 $(info)（不经 shell，避免 cmd 代码页把 UTF-8 中文打成乱码）
+
+CC      = gcc
+CFLAGS  = -std=c99 -O2 -Wall
+KERNEL  = ../../C/64KB/src
+
+INCLUDES = -I$(KERNEL)
+TEST     = bench-c.c
+POOLHDR  = pool_c.h
+
+# 内核源清单：$(wildcard) 自动过滤该版本不存在的文件
+# （C 128KB：ac_ratroot / ac_calculus / ac_bigint / ac_matrix / ac_special / ac_symbolic）
+# （C 64KB ：ac_numtheory / ac_base / ac_util / ac_complex）
+SOURCES  = $(wildcard $(KERNEL)/ac_parser.c $(KERNEL)/ac_evaluator.c \
+                     $(KERNEL)/ac_exact.c $(KERNEL)/ac_solvers.c \
+                     $(KERNEL)/ac_math.c $(KERNEL)/ac_complex.c \
+                     $(KERNEL)/ac_ratroot.c $(KERNEL)/ac_calculus.c \
+                     $(KERNEL)/ac_numtheory.c $(KERNEL)/ac_base.c \
+                     $(KERNEL)/ac_util.c $(KERNEL)/ac_bigint.c \
+                     $(KERNEL)/ac_matrix.c $(KERNEL)/ac_special.c \
+                     $(KERNEL)/ac_symbolic.c)
+
+# 内核存在性哨兵：第 1 轮产物 ac_parser.c（纯 make 语法，不依赖 shell）
+KERNEL_PARSER := $(wildcard $(KERNEL)/ac_parser.c)
+
+# Windows 上 rm 通常不在 PATH（MinGW 未提供 sh/rm），改用 cmd 内建 del
+ifeq ($(OS),Windows_NT)
+RM = del /Q
+else
+RM = rm -f
+endif
+
+.PHONY: all bench-c clean
+
+all: bench-c
+
+ifeq ($(strip $(KERNEL_PARSER)),)
+$(info ERROR: 内核未实现 —— 未找到 $(KERNEL)/ac_parser.c)
+$(info        C 端压测暂不可用：先按 docs/c99-64kb.md 落地内核，或用 KERNEL=<路径> 指向已实现的内核目录)
+bench-c:
+	@exit 1
+clean:
+else
+bench-c: $(SOURCES) $(TEST) $(POOLHDR)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(SOURCES) $(TEST) -lm
+
+clean:
+	-$(RM) bench-c.exe
+	-$(RM) bench-c
+endif

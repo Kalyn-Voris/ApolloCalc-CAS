@@ -1,0 +1,31 @@
+{
+  "parse": [
+    { "name": "short",     "src": "2+3" },
+    { "name": "quadratic", "src": "x^2-5x+6=0" },
+    { "name": "cubic",     "src": "x^3-6x^2+11x-6=0" },
+    { "name": "quartic",   "src": "x^4-5x^2+4=0" },
+    { "name": "funcs",     "src": "sin(x)+cos(x)+tan(x)+ln(x)+exp(x)" },
+    { "name": "implicit",  "src": "2x^2+3x-5" },
+    { "name": "sci",       "src": "1.5e-10+2.7e20" },
+    { "name": "nested",    "src": "((((1+2)*3)-4)/5)^2" }
+  ],
+  "eval": [
+    { "name": "poly2",   "src": "x^2-5x+6",       "x": 3 },
+    { "name": "poly4",   "src": "x^4-5x^2+4",     "x": 1.5 },
+    { "name": "trig",    "src": "sin(x)+cos(x)",  "x": 0.7, "angleMode": "RAD" },
+    { "name": "exp_log", "src": "exp(x)*ln(x)",   "x": 2.5 }
+  ],
+  "solve": [
+    { "name": "quad_int",   "src": "x^2-5x+6=0",       "degree": 2 },
+    { "name": "quad_irr",   "src": "x^2-2=0",          "degree": 2 },
+    { "name": "quad_gold",  "src": "x^2-x-1=0",        "degree": 2 },
+    { "name": "cubic",      "src": "x^3-6x^2+11x-6=0", "degree": 3 },
+    { "name": "quartic",    "src": "x^4-5x^2+4=0",     "degree": 4 },
+    { "name": "linear6",    "matrix": "diag6",         "n": 6 }
+  ],
+  "iterations": {
+    "parse": 10000,
+    "eval": 100000,
+    "solve": 1000
+  }
+}
