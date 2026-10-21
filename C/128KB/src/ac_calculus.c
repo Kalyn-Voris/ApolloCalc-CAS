@@ -10,6 +10,7 @@
 #include "ac_calculus.h"
 #include "ac_parser.h"
 #include "ac_evaluator.h"
+#include "ac_scratch.h"     /* shared scratch overlay (see AC_SCRATCH_CALC) */
 
 /* ==================== 模块状态（唯一声明处） ==================== */
 
@@ -23,7 +24,14 @@ double g_taylor_coeffs[16];              /* 展开系数 c_k（最多 16 阶） 
 int    g_taylor_order = 0;               /* 当前展开阶数 */
 double g_taylor_center = 0.0;            /* 展开中心 x0 */
 
+/* [English] Difference-table workspace lives in the shared union when
+   AC_SCRATCH_CALC is on. Unlike the CRC table (which was a lazily built
+   cache guarded by a ready flag), this buffer is fully rewritten on every
+   ac_calc_taylor() call -- j runs 0..2K unconditionally -- so it is true
+   scratch: it never survives a call and cannot be observed stale. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_CALC)
 static double s_taylor_work[256];        /* 差分表工作区（2K+1 ≤ 33，用完即弃） */
+#endif
 
 /* ==================== 模块一：域检查与内部求值 ==================== */
 

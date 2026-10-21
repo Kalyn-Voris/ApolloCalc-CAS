@@ -22,6 +22,7 @@
 #include "ac_ratroot.h"
 #include "ac_calculus.h"
 #include "ac_solvers.h"
+#include "ac_scratch.h"   /* sizeof(union ac_stk_u) for the watermark estimate */
 
 /* [English] Exact-component bound, same as JS 64KB SOLVER_INT_MAX (2^53-1).
    Doubles beyond this are not exact integers, so both languages must
@@ -679,6 +680,34 @@ int ac_check_memory_watermark(void) {
     double used;
 
     g_solve_error = 0;
+    /* [English] The watermark mirrors the real static footprint. With
+       AC_SCRATCH_STK the operator stack and the eval stack are the same
+       1024 B block, so counting both would double-count; use the union's
+       size instead. Otherwise fall back to the original two terms. */
+#if AC_SCRATCH_UNION && AC_SCRATCH_STK && AC_SCRATCH_LRHS
+    /* Both savings active: stacks share one 1024 B union, and the lhs/rhs
+       token copies no longer exist (in-place slicing). */
+    used = (double)(sizeof(g_token_pool) + sizeof(g_number_pool) +
+                    sizeof(union ac_stk_u) + sizeof(g_matrix_pool) +
+                    sizeof(g_rpn_token) +
+                    sizeof(g_coeffs) +
+                    sizeof(g_root_re) + sizeof(g_root_im) +
+                    sizeof(g_root_exact_rat) + sizeof(g_root_exact_rad_num) +
+                    sizeof(g_root_exact_rad) + sizeof(g_root_exact_den) +
+                    sizeof(g_root_exact_exp) + sizeof(g_root_exact_valid)) +
+           (double)(g_token_count << 3) + (double)(g_number_count << 3) + 2048.0;
+#elif AC_SCRATCH_UNION && AC_SCRATCH_STK
+    used = (double)(sizeof(g_token_pool) + sizeof(g_number_pool) +
+                    sizeof(union ac_stk_u) + sizeof(g_matrix_pool) +
+                    sizeof(g_rpn_token) +
+                    sizeof(g_lhs_token) + sizeof(g_rhs_token) +
+                    sizeof(g_coeffs) +
+                    sizeof(g_root_re) + sizeof(g_root_im) +
+                    sizeof(g_root_exact_rat) + sizeof(g_root_exact_rad_num) +
+                    sizeof(g_root_exact_rad) + sizeof(g_root_exact_den) +
+                    sizeof(g_root_exact_exp) + sizeof(g_root_exact_valid)) +
+           (double)(g_token_count << 3) + (double)(g_number_count << 3) + 2048.0;
+#else
     used = (double)(sizeof(g_token_pool) + sizeof(g_number_pool) +
                     sizeof(g_eval_stack) + sizeof(g_matrix_pool) +
                     sizeof(g_rpn_token) + sizeof(g_op_stack) +
@@ -689,6 +718,7 @@ int ac_check_memory_watermark(void) {
                     sizeof(g_root_exact_rad) + sizeof(g_root_exact_den) +
                     sizeof(g_root_exact_exp) + sizeof(g_root_exact_valid)) +
            (double)(g_token_count << 3) + (double)(g_number_count << 3) + 2048.0;
+#endif
     if (used > 98304.0) { g_solve_error = 4; return 1; }   /* 128KB × 75% */
     return 0;
 }

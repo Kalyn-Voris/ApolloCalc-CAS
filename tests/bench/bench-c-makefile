@@ -21,6 +21,8 @@ POOLHDR  = pool_c.h
 # 内核源清单：$(wildcard) 自动过滤该版本不存在的文件
 # （C 128KB：ac_ratroot / ac_calculus / ac_bigint / ac_matrix / ac_special / ac_symbolic）
 # （C 64KB ：ac_numtheory / ac_base / ac_util / ac_complex）
+# v1.1.0：C 128KB 新增 ac_scratch.c（union overlay 的唯一定义处，含 g_ac_scratch /
+#         g_ac_stk 两个符号）；C 64KB 无此文件，wildcard 自动略过。
 SOURCES  = $(wildcard $(KERNEL)/ac_parser.c $(KERNEL)/ac_evaluator.c \
                      $(KERNEL)/ac_exact.c $(KERNEL)/ac_solvers.c \
                      $(KERNEL)/ac_math.c $(KERNEL)/ac_complex.c \
@@ -28,7 +30,8 @@ SOURCES  = $(wildcard $(KERNEL)/ac_parser.c $(KERNEL)/ac_evaluator.c \
                      $(KERNEL)/ac_numtheory.c $(KERNEL)/ac_base.c \
                      $(KERNEL)/ac_util.c $(KERNEL)/ac_bigint.c \
                      $(KERNEL)/ac_matrix.c $(KERNEL)/ac_special.c \
-                     $(KERNEL)/ac_symbolic.c)
+                     $(KERNEL)/ac_symbolic.c \
+                      $(KERNEL)/ac_scratch.c)
 
 # 内核存在性哨兵：第 1 轮产物 ac_parser.c（纯 make 语法，不依赖 shell）
 KERNEL_PARSER := $(wildcard $(KERNEL)/ac_parser.c)

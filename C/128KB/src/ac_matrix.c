@@ -6,6 +6,7 @@
  * Zero-GC：无 malloc、无 VLA、无递归；全部工作区预分配。
  * ============================================================ */
 #include "ac_matrix.h"
+#include "ac_scratch.h"     /* shared scratch overlay (see AC_SCRATCH_MAT) */
 #include <math.h>
 
 /* ==================== 全局矩阵 + 模块工作区 ==================== */
@@ -15,10 +16,19 @@ double g_mat_b[AC_MATRIX_MAX_SIZE];
 double g_mat_c[AC_MATRIX_MAX_SIZE];
 double g_mat_work[AC_MATRIX_MAX_SIZE];
 
+/* [English] Private scratch buffers live in the shared union g_ac_scratch
+   when AC_SCRATCH_MAT is on. They are strictly internal to this file:
+   every access is a direct subscript inside one of the four leaf routines
+   below (mul / transpose / inverse / QR), and no pointer to them is ever
+   passed to another function. mat_echelon() takes the CALLER's `work`
+   argument (g_mat_work), never one of these. They also never nest, so a
+   single storage view suffices. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_MAT)
 static double s_mat_mul[AC_MATRIX_MAX_SIZE];        /* mul 中转（防别名） */
 static double s_mat_tr[AC_MATRIX_MAX_SIZE];         /* transpose 中转 */
 static double s_mat_aug[AC_MATRIX_MAX_SIZE * 2];    /* 逆矩阵增广 [A|I]：12×24 = 288 */
 static double s_qr_a[AC_MATRIX_MAX_SIZE];           /* QR 的 A 拷贝（防别名） */
+#endif
 
 /* ==================== 乘法 / 转置 ==================== */
 

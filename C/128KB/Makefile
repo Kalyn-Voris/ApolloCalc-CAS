@@ -9,7 +9,7 @@ ifeq ($(LUT),1)
 CFLAGS += -DAC_MATH_USE_LUT
 endif
 
-SRC     = src/ac_parser.c src/ac_evaluator.c src/ac_exact.c src/ac_solvers.c src/ac_ratroot.c src/ac_math.c src/ac_complex.c src/ac_calculus.c src/ac_numtheory.c src/ac_base.c src/ac_bigint.c src/ac_matrix.c src/ac_special.c src/ac_symbolic.c src/ac_util.c
+SRC     = src/ac_parser.c src/ac_evaluator.c src/ac_exact.c src/ac_solvers.c src/ac_ratroot.c src/ac_math.c src/ac_complex.c src/ac_calculus.c src/ac_numtheory.c src/ac_base.c src/ac_bigint.c src/ac_matrix.c src/ac_special.c src/ac_symbolic.c src/ac_scratch.c src/ac_util.c
 TEST    = test/test_main.c test/test_parser_smoke.c test/test_evaluator.c test/test_exact.c test/test_solvers.c test/test_ratroot.c test/test_newton.c test/test_math.c test/test_complex.c test/test_calculus.c test/test_numtheory.c test/test_base.c test/test_bigint.c test/test_matrix.c test/test_special.c test/test_symbolic.c test/test_util.c
 
 # 可选：启用 sin/cos 查表加速（命令行覆盖：mingw32-make CFLAGS+=-DAC_MATH_USE_LUT）

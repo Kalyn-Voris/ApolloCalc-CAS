@@ -9,13 +9,21 @@
  * ============================================================ */
 #include <string.h>   /* 仅 strlen：入口测长一次，热路径零字符串函数 */
 #include "ac_parser.h"
+#include "ac_scratch.h"   /* shared scratch overlay (see AC_SCRATCH_STK) */
 
 /* ==================== 全局内存池（全内核唯一声明处，后续模块直接引用） ==================== */
 int32_t g_token_pool[TOKEN_POOL_SIZE];
 int     g_token_count = 0;
 double  g_number_pool[NUMBER_POOL_SIZE];
 int     g_number_count = 0;
+
+/* [English] g_eval_stack used to be DEFINED here but is USED entirely by
+   ac_evaluator.c (it is declared extern in ac_parser.h). When the stack
+   aliasing is enabled it moves to g_ac_stk in ac_scratch.c, which is the
+   only translation unit that can own the shared storage. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_STK)
 double  g_eval_stack[EVAL_STACK_SIZE];
+#endif
 double  g_matrix_pool[MATRIX_POOL_SIZE];
 
 /* ---------- 扫描游标（文件内私有） ---------- */

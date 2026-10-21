@@ -8,6 +8,7 @@
  * Zero-GC：无 malloc、无 VLA、无递归、无 __int128。
  * ============================================================ */
 #include "ac_bigint.h"
+#include "ac_scratch.h"     /* shared scratch overlay (see AC_SCRATCH_BIGINT) */
 #include <stdio.h>
 
 /* ==================== 全局池 + 模块工作区 ==================== */
@@ -18,12 +19,20 @@ ac_bigint_t g_bi_tmp;
 ac_bigint_t g_bi_work1;
 ac_bigint_t g_bi_work2;
 
+/* [English] Divmod scratch and the multiplication raw-product buffer share
+   one union view. They are mutually exclusive: ac_bi_divmod() uses the
+   divmod set, ac_bi_mul() uses s_bi_prod, and divmod calls only the local
+   helper bi_mul_small() (which writes the CALLER's buffer, s_bi_t2) -- it
+   never calls ac_bi_mul. Both paths fully rewrite their buffers (explicit
+   zero-fill first), so neither depends on the previous contents. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_BIGINT)
 static ac_bigint_t s_bi_r;     /* divmod 余数工作区 */
 static ac_bigint_t s_bi_da;    /* divmod 被除数拷贝（q/r 可别名 a/b） */
 static ac_bigint_t s_bi_db;    /* divmod 除数拷贝（q/r 可别名 a/b） */
 static uint32_t s_bi_t2[AC_BIGINT_LIMBS + 1];   /* divmod 试探积 b·d（≤ 21 limb） */
 static uint32_t s_bi_prod[AC_BIGINT_LIMBS * 2];  /* 乘法原始积（防别名） */
 static uint32_t s_bi_q[AC_BIGINT_LIMBS];         /* 除法商数字（base 1e9） */
+#endif
 
 /* ==================== 内部助手（幅值域，忽略符号） ==================== */
 

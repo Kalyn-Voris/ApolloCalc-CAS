@@ -12,19 +12,34 @@
 #include "ac_parser.h"    /* 复用第 1 轮全局池：g_token_pool / g_number_pool / g_eval_stack */
 #include "ac_evaluator.h"
 #include "ac_math.h"      /* ac_apply_function / AC_PI / AC_E */
+#include "ac_scratch.h"   /* shared scratch overlay (see AC_SCRATCH_STK) */
 
 /* ==================== 全局内存池与状态（本文件唯一声明处） ==================== */
 int32_t g_rpn_token[RPN_POOL_SIZE];
 int     g_rpn_len = 0;
+
+/* [English] ac_to_rpn (Shunting-Yard) uses g_op_stack; ac_eval_rpn (the
+   stack machine) uses g_eval_stack. They never run at the same time --
+   g_rpn_token is always the hand-off in between. When AC_SCRATCH_STK is
+   on they share g_ac_stk (defined in ac_scratch.c) so the 512 B operator
+   stack costs nothing extra. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_STK)
 int32_t g_op_stack[OP_STACK_SIZE];
+#endif
 int     g_op_sp = 0;
 int     g_eval_sp = 0;
 double  g_eval_x = 0.0;
 int     g_eval_error = EVAL_OK;
 double  g_eval_result = 0.0;
 
+/* [English] The lhs/rhs token copies (2 x 1024 B) were pure overhead:
+   ac_to_rpn takes a const source and never writes it, so the equation
+   segments are now sliced straight out of g_token_pool. Removed entirely
+   when AC_SCRATCH_LRHS is on; the #else keeps them for rollback. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_LRHS)
 int32_t g_lhs_token[TOKEN_POOL_SIZE / 2];
 int32_t g_rhs_token[TOKEN_POOL_SIZE / 2];
+#endif
 int     g_lhs_count = 0;
 int     g_rhs_count = 0;
 double  g_lhs_result = 0.0;
@@ -294,9 +309,9 @@ double ac_eval_equation_at(double x) {
 
     if (eq_pos < 0) { return ac_eval_expression_at(x); }
 
-    /* 等号两段拷入预分配区（零新分配，for 循环原地写定长数组）。
-       段长 > half 时钳制拷贝与转换长度：JS Int32Array 越界写被丢弃、
-       toRPN 读越界得 undefined 码元被跳过，可观测输出与本钳制一致 */
+    /* 等号两段原地切片（零拷贝）。段长 > half 时钳制转换长度：
+       JS Int32Array 越界写被丢弃、toRPN 读越界得 undefined 码元被跳过，
+       可观测输出与本钳制一致 —— 钳制逻辑与改造前完全相同。 */
     g_lhs_count = eq_pos;
     g_rhs_count = g_token_count - eq_pos - 1;
     if (g_lhs_count == 0 || g_rhs_count == 0) {
@@ -304,19 +319,24 @@ double ac_eval_equation_at(double x) {
         g_eval_result = NAN;
         return NAN;
     }
+
+    /* [English] No copy needed any more: ac_to_rpn only READS its source
+       (src is const), and g_token_pool / g_rpn_token are separate arrays,
+       so the two segments are sliced in place. The slice
+       [eq_pos+1, eq_pos+1+rhs_n) stays inside g_token_pool because
+       rhs_n <= g_rhs_count = g_token_count - eq_pos - 1. The clamping
+       lengths below are kept EXACTLY as before. */
     lhs_n = (g_lhs_count < half) ? g_lhs_count : half;
     rhs_n = (g_rhs_count < half) ? g_rhs_count : half;
-    for (i = 0; i < lhs_n; i++) { g_lhs_token[i] = g_token_pool[i]; }
-    for (i = 0; i < rhs_n; i++) { g_rhs_token[i] = g_token_pool[eq_pos + 1 + i]; }
 
     /* 左侧 f(x) */
-    g_rpn_len = ac_to_rpn(g_lhs_token, lhs_n, g_rpn_token);
+    g_rpn_len = ac_to_rpn(g_token_pool, lhs_n, g_rpn_token);
     if (g_eval_error != EVAL_OK) { g_eval_result = NAN; return NAN; }
     g_lhs_result = ac_eval_rpn(g_rpn_token, g_rpn_len);
     if (g_eval_error != EVAL_OK) { g_eval_result = NAN; return NAN; }
 
     /* 右侧 g(x) */
-    g_rpn_len = ac_to_rpn(g_rhs_token, rhs_n, g_rpn_token);
+    g_rpn_len = ac_to_rpn(g_token_pool + eq_pos + 1, rhs_n, g_rpn_token);
     if (g_eval_error != EVAL_OK) { g_eval_result = NAN; return NAN; }
     g_rhs_result = ac_eval_rpn(g_rpn_token, g_rpn_len);
     if (g_eval_error != EVAL_OK) { g_eval_result = NAN; return NAN; }

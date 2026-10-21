@@ -15,6 +15,7 @@
 #include "ac_solvers.h"
 #include "ac_ratroot.h"
 #include "ac_exact.h"
+#include "ac_scratch.h"     /* shared scratch overlay (see AC_SCRATCH_SYM) */
 #include <math.h>
 
 /* ==================== 全局状态 + 模块工作区 ==================== */
@@ -22,11 +23,21 @@
 ac_sym_node_t g_sym_nodes[AC_SYM_MAX_NODES];
 int           g_sym_count = 0;
 
+/* [English] Scratch pools live in the shared union g_ac_scratch when
+   AC_SCRATCH_SYM is on (mutex contract in ac_scratch.h):
+     s_sym_stack + s_sym_dmap -> ac_sym_derivative
+     s_sym_stack + s_sym_val  -> ac_sym_eval
+     s_sym_pa    + s_sym_pb   -> ac_sym_equal
+   These three sets are never active at the same time (no call path links
+   them), so they share one storage block. Turning the switch off restores
+   the private static arrays below without any other source change. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_SYM)
 static int32_t s_sym_stack[AC_SYM_MAX_NODES * 2 + 8];  /* 遍历栈（节点压两次） */
 static int32_t s_sym_dmap[AC_SYM_MAX_NODES];           /* 原节点 → 导数节点 */
 static double  s_sym_val[AC_SYM_MAX_NODES];            /* 求值结果表 */
 static int32_t s_sym_pa[AC_SYM_MAX_NODES];             /* equal 比较栈 A 侧 */
 static int32_t s_sym_pb[AC_SYM_MAX_NODES];             /* equal 比较栈 B 侧 */
+#endif
 
 int    g_sym_factor_count = 0;
 ac_int_t g_sym_factor_rat[8];

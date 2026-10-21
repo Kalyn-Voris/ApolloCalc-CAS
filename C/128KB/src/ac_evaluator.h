@@ -2,20 +2,29 @@
 #define AC_EVALUATOR_H
 
 #include "ac_types.h"
+#include "ac_scratch_cfg.h"   /* AC_SCRATCH_STK guard */
 
-/* [English] RPN buffer and evaluation state (mirrors core_evaluator.js). */
+/* [English] RPN buffer and evaluation state (mirrors core_evaluator.js).
+   When AC_SCRATCH_STK is on, g_op_stack is a macro aliasing g_ac_stk.op
+   (declared in ac_scratch.h), so this array declaration must be skipped. */
 extern int32_t  g_rpn_token[RPN_POOL_SIZE];
 extern int      g_rpn_len;
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_STK)
 extern int32_t  g_op_stack[OP_STACK_SIZE];
+#endif
 extern int      g_op_sp;
 extern int      g_eval_sp;
 extern double   g_eval_x;
 extern int      g_eval_error;
 extern double   g_eval_result;
 
-/* [English] LHS/RHS token buffers for equation splitting. */
+/* [English] LHS/RHS token buffers for equation splitting.
+   Removed when AC_SCRATCH_LRHS is on: the segments are sliced in place out
+   of g_token_pool, saving 2048 B. The counters/results stay. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_LRHS)
 extern int32_t  g_lhs_token[TOKEN_POOL_SIZE / 2];
 extern int32_t  g_rhs_token[TOKEN_POOL_SIZE / 2];
+#endif
 extern int      g_lhs_count;
 extern int      g_rhs_count;
 extern double   g_lhs_result;

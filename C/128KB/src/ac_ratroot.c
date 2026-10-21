@@ -9,14 +9,23 @@
 #include "ac_ratroot.h"
 #include "ac_exact.h"
 #include "ac_solvers.h"
+#include "ac_scratch.h"     /* shared scratch overlay (see AC_SCRATCH_RATROOT) */
 
 /* ==================== 模块状态（唯一声明处） ==================== */
 
+/* [English] The four rational-root scratch buffers live in the shared union
+   when AC_SCRATCH_RATROOT is on. All uses are direct subscripts inside
+   ac_rat_root_descent(), which calls nothing but itself; s_rr_count stays
+   here because it is scalar bookkeeping, not storage.
+   ac_rat_root_finish() (which DOES call the solvers) touches only the
+   session-state g_root_* / g_rat_root_* arrays, never these buffers. */
+#if !(AC_SCRATCH_UNION && AC_SCRATCH_RATROOT)
 static int32_t s_rr_cand[64];        /* 候选根缓存：p/q 交错存放（至多 32 组） */
-static int     s_rr_count = 0;       /* 最近一次枚举生成的候选数 */
 static double  s_rr_work[16];        /* 降次工作区：当前整系数多项式（升幂） */
 static double  s_rr_trial[16];       /* 综合除法试除区（失败即弃，不污染 work） */
 static int     s_rr_divs[128];       /* 常数项 |a0| 的因数表（试除到 √） */
+#endif
+static int     s_rr_count = 0;       /* 最近一次枚举生成的候选数 */
 
 double   g_rat_root_values[8];       /* 根值（发现顺序，栈） */
 ac_int_t g_rat_root_num[8];          /* 精确形式分子 p */

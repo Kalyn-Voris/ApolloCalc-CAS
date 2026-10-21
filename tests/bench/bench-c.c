@@ -42,6 +42,22 @@
 #  define AC_IS_128KB 0
 #endif
 
+/* ---- v1.1.0 scratch overlay：ac_scratch.h 为 C 128KB 独有 ----
+ * 开启后 g_eval_stack / g_op_stack 变成 g_ac_stk 的宏视图，
+ * g_lhs_token / g_rhs_token 被整块移除（原地切片），故静态占用统计
+ * 必须改用 union 的尺寸，否则 sizeof(宏视图) 仍可编译但口径重复计数、
+ * 而 lhs/rhs 则直接 undeclared。C 64KB 无此头，走原路径。 */
+#if defined(__has_include)
+#  if __has_include("ac_scratch.h")
+#    include "ac_scratch.h"
+#    define AC_HAS_SCRATCH 1
+#  else
+#    define AC_HAS_SCRATCH 0
+#  endif
+#else
+#  define AC_HAS_SCRATCH 0
+#endif
+
 #include "pool_c.h"
 
 /* ---- 计时工具（POSIX 单调时钟，不受系统时间跳变影响） ---- */
@@ -169,17 +185,28 @@ static void bench_pool(const char *stage, const pool_entry_t **items,
 
 /* ==================== 表达式池静态占用 ====================
  * 仅统计本 bench 实际使用的表达式类池（编译期 sizeof 确定，确定性无波动）。
- * 不新增任何内核静态数组；整版 .bss 另见 BENCH-1M.md（size 口径）。 */
+ * 不新增任何内核静态数组；整版 .bss 另见 BENCH-1M.md（size 口径）。
+ *
+ * v1.1.0 口径修正（scratch overlay 开启时）：
+ *   - g_eval_stack 与 g_op_stack 合并为 union ac_stk_u 的一块 1024 B，
+ *     两项相加会重复计数，故改用 sizeof(union ac_stk_u)；
+ *   - g_lhs_token / g_rhs_token 已被移除（等号两侧改为 g_token_pool 原地切片），
+ *     不再计入。
+ * 这样「表达式类池」口径在 v1.0.0 / v1.1.0 之间仍可比（同一组逻辑池）。 */
 static size_t static_pool_bytes(void) {
     size_t t = 0;
     t += sizeof(g_token_pool);
     t += sizeof(g_number_pool);
+#if AC_HAS_SCRATCH
+    t += sizeof(union ac_stk_u);      /* 取代 g_eval_stack + g_op_stack */
+#else
     t += sizeof(g_eval_stack);
-    t += sizeof(g_matrix_pool);
-    t += sizeof(g_rpn_token);
     t += sizeof(g_op_stack);
     t += sizeof(g_lhs_token);
     t += sizeof(g_rhs_token);
+#endif
+    t += sizeof(g_matrix_pool);
+    t += sizeof(g_rpn_token);
     t += sizeof(g_coeffs);
     t += sizeof(g_root_re);
     t += sizeof(g_root_im);
