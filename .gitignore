@@ -38,3 +38,12 @@ temp/
 # Comment-cleanup working copies (timestamped backups, not project content)
 .comment-cleanup-backup/
 tools/comment-cleanup/
+
+# Session metadata and out-of-tree build artifacts
+.dsh/
+.tmp-build/
+
+# Benchmark result tables are usually throwaway, but tests/bench/ is the
+# tracked baseline dataset -- the negation below keeps new runs committable.
+*.csv
+!tests/bench/*.csv
