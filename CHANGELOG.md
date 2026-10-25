@@ -90,6 +90,106 @@ Pro 层两个新方向落地：A5 实特征向量 + Hotelling 收缩 deflation�
   均已实现并通过 175 条测试，但**不随本版发布**，与 JS 侧其它跨端改动一并在
   v2.0.0 推出。`JS/128KB/` 在本版保持 v1.1.0 状态，逐字节未动。
 
+## v1.3.0 (2026-10-24)
+
+`C/128KB-ProTEXT`（Pro 层）**首次入库**：在冻结的 16 模块上游内核之上落地方向 A
+多变量层——A1 多变量 GCD、A2 有理根因式分解、A3 Sylvester 结式。全部状态跑在既有
+Pro scratch union 上；union 峰值视图由 `lu`（2352 B）移到 `mv`（2688 B），
+`.bss` 41104 → **41456 B**；上游 `C/128KB/` 既有文件逐字节未动。
+本提交同时把 v1.2 的全部成果（门禁修复 + 起手三件套，见下节）一并带入 git。
+
+### Added
+
+- **A1 多变量 GCD** `ac_pro_multi_var_gcd`（`src/ac_pro_multi.c`）：主变量上的
+  subresultant PRS + 单项式因子兜底 + 对原始输入的精确除法回验。
+- **A2 有理根因式分解** `ac_pro_multi_var_factor`：整数 content 提取 + 有理根降次，
+  每个候选因子展开 `c * prod(den*x - num) * remainder` 并要求被 f 精确整除来复验。
+- **A3 Sylvester 结式** `ac_pro_resultant / _build / _sylvester`：x0 处 Horner 提取
+  y 系数、Sylvester 矩阵组装、经既有矩阵核求行列式；`df + dg > 12` 拒绝而非溢出。
+- **`mv` scratch 视图**：2688 B = 6 槽 × 28 项 × 16 B。`AC_PRO_MV_TERMS = 28` 不是 8：
+  总次数 ≤ 6 的二元多项式有 C(8,2) = 28 个单项式，把验证阶段钳到 8 项会误判合法
+  输入（实测 9 项 GCD 被误拒 rc = −1）。
+- 整个 `C/128KB-ProTEXT/` 目录（16 个上游模块 Pro 接线 + ext 层 + Makefile 的
+  bss-check / degraded-check + verify.ps1）、设计说明、
+  `tools/ref_prs.py`（PRS 参考实现）首次入库。
+
+### Fixed
+
+开发过程中发现并修复的七个缺陷（记录于设计说明）：
+
+1. **项解析器系数初值为 1 而非 0**：`mv_parse_term` 以 `c = 1` 起步、仅见到数字才
+   覆写，每个字面整数都被前缀一个 1（"2" → 12、"0" → 10）；毒化 A2 的 content
+   提取（`2*x^2-8` 被解析成 `122*x^2-18`）。初值改 0，隐式系数由后续
+   `if (!saw_coef) c = 1` 补上。
+2. **指数上界被当成语法错误**：`x^7 + y` 误报 EPARSE（`g_solve_error = 2`）而非
+   语义拒绝（= 1）；上界改为字段宽度（`EXP_MASK`），由 GCD 入口的度预检负责拒绝。
+3. **零操作数不可达**：`mv_pick_main_var` 在两输入无共享变量时返回 2，调用方把它当
+   "互素，答案 1"；缺陷 1 修复后 "0" 解析为空项表同样命中该分支，`gcd(f, 0)` 答 1
+   而非 f。零操作数测试移到共享变量分派之前。
+4. **`mv_selfcheck_factor` 拿精确除法助手做整除测试**：`mv_div_exact` 返回的是商的
+   项数而非状态码，之前"通过"纯属巧合；改为显式比对"重建乘积等于 f"。
+5. **验证阶段栈垃圾**：`mv_validate_gcd` 的四个局部 `mv_sp_t` 只被部分写入（写
+   `[0, n)`），属潜伏问题；全部先 memset，且项数先做边界检查再写入。
+6. **两条 A1 测试期望值数学上就是错的**（实现本来就对）：
+   `gcd(x²−y², x−y) = x−y` 而非 `x+y`；`gcd(x³+y³, x²−xy+y²) = x²−xy+y²` 而非 `x+y`。
+7. **测试 runner 里 v1.2 的账本常量过期**：`sizeof(ac_pro_scratch_t)` 2352 → 2688、
+   `sizeof(g_ac_pro_storage)` 2432 → 2784、足迹 41104 → 41456 等随 union 峰值
+   迁移同步更新。
+
+### Performance
+
+- **静态内存**：`.bss` 内核口径 41104 → **41456 B**（+352 B 含对齐垫：union 峰值
+  视图 lu 2352 → mv 2688，`g_ac_pro_storage` 2432 → 2784）；runner 口径
+  41136 → 41488；降级构建 38672 B 不变。
+- **校验**：115 → **152 条**（A1 16 + A2 9 + A3 12 = 37 新增），0 失败。
+
+### Verification
+
+- `-std=c99 -Wall -Wextra -Wstrict-prototypes -Werror -O2` 零警告。
+- pro_runner 152 checks / 0 failed，RESULT: PASS；bss-check 三档命中
+  41488 / 41456 / 39408；degraded-check 38672 B。
+- 上游 `C/128KB/`：16 套件全绿，`git status -- C/128KB` 为空。
+
+## v1.2.0 (未单独发版；代码随 v1.3.0 于 2026-10-24 首次入库)
+
+Pro 层起点：上游门禁缺陷修复（阶段一）+ Pro 独立 scratch union 与起手三件套
+B1/A4/A6（阶段二）+ 验证与对拍（阶段三）。内核口径 `.bss` 目标 **41104 B**
+（38672 + 80 + 2352 + 16），占 114688 B（112 KiB）门禁的 **35.84%**。
+v1.2 只存在于工作区、从未单独提交或打 tag——git 中它的代码与账本随 v1.3.0
+一并出现；校验基线 **115 条**（v1.3.0 的 verify.ps1 校验数从 115 调到 152）。
+
+### Added
+
+- **阶段一：上游门禁缺陷修复**（设计说明 §6.3 判定的两处）：
+  - **内存水位门禁在上游是死代码**：估算上限 17320 B、阈值 98304 B，比值 5.68×，
+    任何输入都不触发；且漏算 `g_ac_scratch`（8224）与 `g_sym_nodes`（12288）共
+    27496 B。Pro 侧以 `ac_pro_memory_used`（`src/ac_pro_solvers_ext.c`）重建口径：
+    静态量取编译期真实足迹（含两块漏算），Pro 增量单独叠加，`extra_bytes` 参数让
+    门禁边界可以被真正测出来而不是靠改全局变量造数据。
+  - **编译期断言从严 `>=` → `==`**：union 总尺寸与逐视图尺寸精确钉死，并以受控
+    实验（人为撑大 union）证明校验真的会响，不是摆设。
+- **阶段二：Pro union（模式 β）+ 起手三件套**：
+  - `ac_pro_scratch_t`（`src/ac_pro_scratch.h`）首版三视图：`nr` 264 B /
+    `sym` 1792 B / `lu` 2352 B（峰值）；存储实体 `g_ac_pro_storage`
+    2432 = 2352 + 80 + 16；8 字节对齐由 `offsetof` 探针在编译期证明。
+  - **B1 五次以上数值求根**（牛顿迭代，`nr` 视图 264 B；不收敛 →
+    `g_solve_error = 3`）——解除用户最可见的 degree > 4 直接拒绝限制。
+  - **A4 LU 分解**（`lu` 视图 2352 B，决定 v1.2 union 尺寸；消元核复用上游
+    `ac_matrix.c`，只把乘数抄出，人日成本最低）。
+  - **A6 隐函数求导**（`g_var_val[10]` +80 B，工作区在栈上零增量；复用上游
+    `ac_sym_derivative` + `ac_sym_eval`，`T_VAR` payload 从恒 0 变为变量 ID，
+    8 bit 免费）。
+  - 三件套共同点：零新解析器语义、零 arena 预算、零 bigint——风险最低、收益最
+    直接的起点（设计说明 §7.1）。
+- **阶段三：验证与对拍**：verify.ps1 一键验收脚本、pro_kernel_main 账本与
+  test_pro_runner 规模账本初版。
+
+### Performance
+
+- **静态内存**：内核口径 **41104 B**（35.84% of 114688）/ runner 口径
+  **41136 B**；相对上游增量 = 80 + 2352 + 16 = **2432 B**。
+- 校验 **115 条**，0 失败；上游 16 模块回归全绿。
+
 ## v1.1.0 (2026-10-21)
 
 C/128KB 零堆内存压缩：`.bss` **57.64 KiB → 38.48 KiB（39.4 KB）**，减少 19,616 B（**−33.24%**）。
