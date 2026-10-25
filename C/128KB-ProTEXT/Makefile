@@ -28,7 +28,7 @@
 #          mingw32-make OUTDIR=F:/ApolloCalc-CAS/.tmp-build/pro
 #      把 .exe 重定向到可写位置；源文件仍从本目录读取，目录结构不变。
 #
-# 【Pro v1.3 的 .bss 三层账本 / Three-tier .bss ledger】
+# 【Pro v1.3.5 的 .bss 三层账本 / Three-tier .bss ledger】
 #   内核口径（16 上游模块 + trivial main）      38672 B
 #     + g_var_val[10]                            80 B
 #     + g_ac_pro_scratch（Pro union，峰值 mv）  2688 B
@@ -86,9 +86,11 @@ PRO_SRC      := $(patsubst ac_%.c,src/ac_pro_%.c,$(notdir $(UPSTREAM_SRC)))
 # 这些文件在 AC_PRO_DEGRADED=1 时整体编译成空对象（零 .bss）。
 PRO_EXTRA    := src/ac_pro_extra_globals.c src/ac_pro_solvers_ext.c \
                 src/ac_pro_symbolic_ext.c \
-                src/ac_pro_multi.c src/ac_pro_resultant.c
+                src/ac_pro_multi.c src/ac_pro_resultant.c \
+                src/ac_pro_eigen.c src/ac_pro_integrate.c
 SRC          := $(PRO_SRC) $(PRO_EXTRA) src/ac_pro_smoke.c
-TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c
+TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
+                test/test_pro_eigen.c test/test_pro_integrate.c
 # 内核口径构建用的 trivial main（零静态存储，只为了让 .bss 口径可比）
 KERNEL_MAIN  := test/pro_kernel_main.c
 
@@ -99,10 +101,11 @@ KEXE   := $(OUTDIR)/pro_kernel.exe
 DEXE   := $(OUTDIR)/degraded/pro_kernel.exe
 
 # ---- .bss 门禁常量 ----
-# v1.3：41456 = 38672（上游 16 模块内核口径）+ 80（g_var_val）+ 2688（Pro union）
-#                + 16（AC_PRO_ALIGN_PAD_BYTES，对齐填充）
+# v1.3.5：41456 = 38672（上游 16 模块内核口径）+ 80（g_var_val）+ 2688（Pro union）
+#                 + 16（AC_PRO_ALIGN_PAD_BYTES，对齐填充）
 # v1.2 是 41104（Pro union 峰值 lu 2352）；v1.3 引入 mv 视图（6 槽 × 28 项 × 16 B
 # = 2688）后峰值上移，.bss 相应 +352（2688-2352 = 336 的视图增量 + 16 对齐填充）。
+# v1.3.5 新增 eig 视图 2592 B，比 mv 小 96 B 被完全吸收，此三行数字不变。
 KERNEL_BSS_EXPECT := 41456
 # 41488 = 41456 + 32（test/test_pro_runner.c 的 .bss 段 16 + 链接对齐 16）
 PRO_BSS_EXPECT    := 41488

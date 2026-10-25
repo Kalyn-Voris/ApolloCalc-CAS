@@ -2,12 +2,12 @@
 # ApolloCalc-CAS · C/128KB-ProTEXT/verify.ps1
 # ------------------------------------------------------------
 # 【职责 / Responsibility】
-#   Pro v1.3 的**可重复验收脚本**。一条命令跑完全部硬指标：
+#   Pro v1.3.5 的**可重复验收脚本**。一条命令跑完全部硬指标：
 #
 #       1) 三份产物构建（pro_runner / pro_kernel / degraded）
 #       2) .bss 三层账本精确比对（41456 / 41488 / 39408 / 38672）
-#       3) 测试套件执行（152 项测试，0 失败）
-#       4) B1 / A4 / A6 各自 ≥ 5 个用例的覆盖度
+#       3) 测试套件执行（259 项测试，0 失败）
+#       4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 覆盖度
 #       5) 上游 C/128KB 零改动（git status + git diff 双证）
 #       6) 负向编译检查（AC_PRO=2 / AC_PRO=0 无 DEGRADED 必须编译失败）
 #       7) 关键符号唯一性（拦截层没有制造重复定义）
@@ -59,14 +59,14 @@ function Get-Bss([string]$exe) {
 
 Write-Host ''
 Write-Host '============================================================'
-Write-Host ' ApolloCalc-CAS · ProTEXT v1.3 verification'
+Write-Host ' ApolloCalc-CAS · ProTEXT v1.3.5 verification'
 Write-Host '============================================================'
 
 # ---------- 1) 构建 ----------
 Write-Host ''
 Write-Host '--- 1) builds ---'
 Push-Location $proDir
-& mingw32-make OUTDIR=$OutDir pro_runner kernel 2>&1 |
+& mingw32-make SHELL=cmd.exe OUTDIR=$OutDir pro_runner kernel 2>&1 |
     Where-Object { $_ -match 'error|Error' } | Select-Object -First 5
 $runner = Join-Path $OutDir 'pro_runner.exe'
 $kernel = Join-Path $OutDir 'pro_kernel.exe'
@@ -107,12 +107,18 @@ Write-Host '--- 4) per-feature coverage (task book: >= 5 each) ---'
 $b1 = ([regex]::Matches($runOut, '\[case B1-\d+\]')).Count
 $a4 = ([regex]::Matches($runOut, '\[case A4-\d+\]')).Count
 $a6 = ([regex]::Matches($runOut, '\[case A6-\d+\]')).Count
+$a5 = ([regex]::Matches($runOut, '\[case A5-\d+\]')).Count
+$b2 = ([regex]::Matches($runOut, '\[case B2-\d+\]')).Count
 Write-Host "  B1 numeric roots  : $b1 cases"
 Write-Host "  A4 LU             : $a4 cases"
 Write-Host "  A6 implicit deriv : $a6 cases"
+Write-Host "  A5 eigen/deflation: $a5 cases"
+Write-Host "  B2 integrate      : $b2 cases"
 Verdict ($b1 -ge 5) 'B1 has >= 5 cases' "$b1"
 Verdict ($a4 -ge 5) 'A4 has >= 5 cases' "$a4"
 Verdict ($a6 -ge 5) 'A6 has >= 5 cases' "$a6"
+Verdict ($a5 -ge 5) 'A5 has >= 5 cases' "$a5"
+Verdict ($b2 -ge 6) 'B2 has >= 6 cases' "$b2"
 
 # ---------- 5) 上游零改动 ----------
 Write-Host ''
@@ -128,7 +134,7 @@ Pop-Location
 Write-Host ''
 Write-Host '--- 6) degraded build (AC_PRO_DEGRADED=1) ---'
 Push-Location $proDir
-& mingw32-make OUTDIR=$OutDir degraded-check 2>&1 |
+& mingw32-make SHELL=cmd.exe OUTDIR=$OutDir degraded-check 2>&1 |
     Where-Object { $_ -match 'error|Error' } | Select-Object -First 3
 $deg = Join-Path $OutDir 'degraded\pro_kernel.exe'
 if (Test-Path $deg) {

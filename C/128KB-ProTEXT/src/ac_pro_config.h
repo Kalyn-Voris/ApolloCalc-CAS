@@ -91,7 +91,7 @@
 
 /* Pro 层版本标签：与上游 v1.1.0 组合口径（仅字符串，不占存储） */
 #define AC_PRO_LAYER_NAME "ProTEXT"
-#define AC_PRO_LAYER_VERSION "1.3"
+#define AC_PRO_LAYER_VERSION "1.3.5"
 
 /* ---- 多变量基础设施上限（v1.3 A1/A2/A3）----
  * 设计说明 §6.4 的 preCheck 参数矩阵：
@@ -115,11 +115,11 @@
 #define AC_STATIC_FOOTPRINT          38672   /* 16 上游模块 + trivial main，size 实测 */
 #define AC_PRO_VAR_VAL_BYTES         80      /* double g_var_val[10] */
 #define AC_PRO_ALIGN_PAD_BYTES       16      /* double align_pad[2]: pad to a 32-byte multiple */
-#define AC_PRO_SCRATCH_BYTES         2688    /* sizeof(ac_pro_scratch_t)，v1.3 峰值 mv */
+#define AC_PRO_SCRATCH_BYTES         2688    /* sizeof(ac_pro_scratch_t)，峰值仍是 mv（v1.3 起） */
 #define AC_PRO_STATIC_EXTRA          (AC_PRO_VAR_VAL_BYTES + AC_PRO_SCRATCH_BYTES + AC_PRO_ALIGN_PAD_BYTES)
 #define AC_PRO_STATIC_FOOTPRINT      (AC_STATIC_FOOTPRINT + AC_PRO_STATIC_EXTRA)
 #define AC_PRO_UPSTREAM_BASELINE_BSS AC_STATIC_FOOTPRINT
-#define AC_PRO_TARGET_BSS            41456   /* 38672 + 80 + 2688 + 16，v1.3 */
+#define AC_PRO_TARGET_BSS            41456   /* 38672 + 80 + 2688 + 16，v1.3.5 */
 #define AC_PRO_GATE_BSS              114688  /* 112 KiB = 128 KiB × 87.5% */
 
 #endif /* AC_PRO_CONFIG_H */

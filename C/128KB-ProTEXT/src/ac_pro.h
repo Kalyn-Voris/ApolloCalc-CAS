@@ -191,4 +191,93 @@ int                  ac_pro_multi_parse_into(const char *src, int slot);
 const ac_pro_term_t *ac_pro_multi_slot_terms(int slot);
 int                  ac_pro_multi_slot_degree(int slot);
 
+/* ==================== v1.3.5 A5：实特征向量 + Hotelling 收缩 ====================
+ *
+ * 【算法 / Algorithm】
+ *   ① 主特征对：对 A 做带位移的幂迭代（Rayleigh 商），得到 |λ_1| 最大的
+ *      特征对 (λ_1, x_1)。
+ *   ② 特征向量求解的**第二条路径**（也是测试对拍的依据）：解
+ *      (A − λI)v = 0 的零空间 —— 把 A − λI 做行阶梯消元（复用
+ *      ac_mat_rank 同款 mat_echelon 逻辑），自由变量取 1、回代出 v。
+ *      幂迭代给出 x_1 后，用零空间解再求一次并比对（两者必须平行），
+ *      这是「特征向量确实满足 (A−λI)v=0」的直接证据，而不是只验证
+ *      「Av ≈ λv」。
+ *   ③ Deflation：Hotelling 收缩 A ← A − λ_1 · x_1 · x_1ᵀ（x_1 已归一化），
+ *      收缩后的矩阵把 λ_1 压成 0，其余特征值不变；再对收缩矩阵求主
+ *      特征对，重复 n 轮即得全部 n 个特征对。
+ *
+ * 【约束 / Constraints】
+ *   n 必须 1..12（AC_PRO_MATRIX_MAX_DIM）。矩阵**行主序**、n×n、稠密。
+ *   要求 A 为**实对称**矩阵（Hotelling 收缩在非对称矩阵上不保谱，
+ *   这是 A5 的适用范围声明，不是实现缺陷）；非对称输入返回 -2。
+ *
+ * 【视图 / View】eig（2592 B：V 144 + A 副本 144 + λ 12 + work 24）。
+ *   **一次调用只持有 eig 视图**，调用期间不得嵌套任何其它 Pro 视图 API。
+ *   调用方矩阵 `a` 在整个调用期间必须有效且只读（内部不写它）。
+ *
+ * 【结果读取 / Result accessors】
+ *   特征值：ac_pro_eig_value(k)，按 |λ| 降序，k = 0..n−1。
+ *   特征向量：ac_pro_eig_vector(k) 返回**列主序**第 k 列的起始指针，
+ *            即 v[i] 位于 ac_pro_eig_vector(k)[i]，i = 0..n−1。
+ *             两者都返回内部视图指针，跨 API 调用后失效。
+ *
+ * 【返回 / Return】
+ *   1 = 成功（n 个特征对全部求出，视图已写入）；
+ *   ≤ 0 = 失败，且**错误码就是返回值本身**：
+ *        0  = 内部错误（不应出现）
+ *       -1  = n 越界（必须 1..12）
+ *       -2  = 非对称矩阵（A5 适用范围外）
+ *       -3  = 幂迭代不收敛（max_iter 内未达容差）
+ *       -4  = 零向量 / 退化为零矩阵（特征向量无法归一化）
+ *   失败时视图内容未定义，调用方不得读取。
+ *
+ *   【为什么错误码走返回值而不是 ac_pro_eig_error() / Why no error getter】
+ *   本仓库实测（gcc 8.1.0 / MinGW-w64 ld，见 ac_pro_symbolic_ext.c:97-111）：
+ *   一个 `static int` 会让该 TU 产生 16 B 的 .bss 段，叠加 16 B 链接对齐，
+ *   全程序 .bss 净涨 **32 B**（41456 → 41488），直接破坏任务书的门禁。
+ *   错误码作为返回值不需要任何静态存储，且更易测（不依赖调用顺序）。
+ *   这是判据 2 的直接推论：「不在 union 里的静态量按 32 B 计，不是 4 B」。 */
+int            ac_pro_eig_all(const double *a, int n);
+double         ac_pro_eig_value(int k);
+const double  *ac_pro_eig_vector(int k);
+int            ac_pro_eig_count(void);
+
+/* ==================== v1.3.5 B2：符号积分（表匹配 + 一层分部积分）====================
+ *
+ * 【算法 / Algorithm】
+ *   ① 表匹配：64 项标准积分表（static const，落 .rdata，**不占 .bss**）。
+ *      输入表达式先做线性替换归一化，再按「函数头 + 线性内层」的模式
+ *      逐项匹配，命中即返回原函数。
+ *   ② 分部积分：∫u dv = u·v − ∫v du，**只做一层**。当表匹配失败时，
+ *      把被积函数拆成 u · dv 两部分，对 ∫v du 再试一次表匹配；仍失败
+ *      则直接返回错误码（绝不递归、绝不无限展开）。
+ *
+ * 【节点预算 / Node budget —— 硬约束】
+ *   复用上游 g_sym_nodes arena（AC_SYM_MAX_NODES = 512，全局共享）。
+ *   进入前必须检查剩余预算：
+ *       表匹配路径   ≤ 256 节点
+ *       分部积分路径 ≤  96 节点（额外）
+ *   预算不足时返回 AC_PRO_INT_EBUDGET，**绝不越界写 arena**。
+ *   这条检查不是防御性编程的客套 —— g_sym_nodes 是上游 6 个 TU 共享的
+ *   单一 arena，越界写会静默破坏其它模块的表达式树。
+ *
+ * 【输入语法 / Input syntax】
+ *   变量固定为 x。支持：整数/小正常量、x、+ − * / ^、括号、一元负号，
+ *   以及 sin/cos/tan/exp/ln/log/sqrt/asin/acos/atan/sinh/cosh/tanh。
+ *   输出写到调用方缓冲（out/out_len），不产生静态存储。
+ *
+ * 【返回 / Return】0 = 成功（out 已写入）；负值 = 错误码（见下）。
+ *   失败时 out 内容未定义，调用方不得使用。 */
+int ac_pro_integrate(const char *expr, char *out, int out_len);
+
+#define AC_PRO_INT_OK        0    /* 成功 */
+#define AC_PRO_INT_EPARSE   (-1)  /* 语法错误 / 空输入 / 非法字符 */
+#define AC_PRO_INT_ETABLE   (-2)  /* 64 项积分表未命中（且分部积分也未命中） */
+#define AC_PRO_INT_EBUDGET  (-3)  /* g_sym_nodes 预算不足（表 256 / 分部 96） */
+#define AC_PRO_INT_EOVER    (-4)  /* 输出缓冲不足 */
+#define AC_PRO_INT_EDEGREE  (-5)  /* 次数/指数超限（如 x^1000） */
+
+/* 积分表规模（供测试核对表项数与设计说明一致）。 */
+#define AC_PRO_INT_TABLE_SIZE 64
+
 #endif /* AC_PRO_H */

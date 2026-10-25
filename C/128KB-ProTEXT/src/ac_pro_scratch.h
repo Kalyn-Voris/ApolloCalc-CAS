@@ -15,13 +15,21 @@
  *
  * 【判据 1 在 Pro union 内部依然成立】
  *   Pro 各视图互斥（一次调用只持有一个视图），故 union 尺寸 = max(视图)
- *   而不是 sum(视图)。v1.3 的五个视图：
+ *   而不是 sum(视图)。v1.3.5 的六个视图：
  *       nr  =  264 B  （B1 Durand-Kerner，n ≤ 8）
  *       lu  = 2352 B  （A4 LU 分解，n ≤ 12）
  *       sym = 1792 B  （A6 隐函数求导工作区）
  *       mv  = 2688 B  （A1/A2/A3 多变量项池，6 槽）   <-- 峰值
  *       res = 1152 B  （A3 结式 Sylvester 缓冲）
+ *       eig = 2592 B  （A5 实特征向量 + Hotelling 收缩，n ≤ 12）
  *   引入更大视图时改尺寸即可，下面那行校验会把不一致炸出来。
+ *
+ *   【v1.3.5 关键判据：eig 2592 < mv 2688 —— .bss 零增长】
+ *     eig 视图比 mv 峰值小 96 B，因此 v1.3.5 加入 A5 后 union 尺寸**不变**，
+ *     sizeof(ac_pro_scratch_t) 仍精确为 2688，.bss 仍为 41456。
+ *     这正是「union 吸收」判据在 v1.3.5 的第二次兑现（第一次是 v1.3 的 mv
+ *     吸收 lu）。若有人把 eig 里的任一数组调大 96 B 以上，下面两条校验
+ *     （pro_scratch_is_exactly_peak / pro_view_eig_absorbed）会立刻炸掉。
  *
  * 【8 字节对齐 / 8-byte alignment】
  *   C99 没有 _Alignas。union 成员含 double 与 int32_t，自然按 8 对齐
@@ -29,7 +37,7 @@
  *   事实钉在编译期，而不是靠注释保证。
  *
  * 【.bss 账本 / Ledger】
- *   g_ac_pro_storage = 2784 B（2688 + 80 + 16 对齐），Pro v1.3 目标 .bss：
+ *   g_ac_pro_storage = 2784 B（2688 + 80 + 16 对齐），Pro v1.3.5 目标 .bss：
  *       38672（上游 16 模块内核口径） + 80 + 2688 + 16 = 41456 B
  *   注意：g_var_val 刻意**不**进 union —— 它是跨调用会话态（判据 3），
  *   求值前由调用方写入、求值后仍可读，放进 union 会被其它视图覆写。
@@ -166,7 +174,7 @@ typedef union {
      *   **并发驻留**，真实峰值是 2688 而非 1792。此处按实测落地。 */
     struct {
         ac_pro_term_t slot[AC_PRO_MV_SLOTS][AC_PRO_MV_TERMS];  /* 6 × 28 × 16 = 2688 */
-    } mv;                                                 /* 合计 2688 B  <-- v1.3 峰值 */
+    } mv;                                                 /* 合计 2688 B  <-- 峰值（v1.3 起，v1.3.5 未变） */
 
     /* ---- A3：结式的 Sylvester 行主序缓冲（n ≤ 12）----
      *   设计说明 §3.1.5 说「复用 g_mat_work[144]，新增 0 B」。那条路径成立，
@@ -178,6 +186,36 @@ typedef union {
     struct {
         double sylv[AC_PRO_MATRIX_MAX_SIZE];              /* 144 × 8 = 1152 */
     } res;                                                /* 合计 1152 B */
+
+    /* ---- A5：实特征向量 + Hotelling 收缩 deflation，n ≤ 12 ----
+     *
+     * 【四块缓冲的分工 / Four buffers】
+     *   v[144]    V 矩阵，列主序：第 k 列（v[k*n + i]）是 λ_k 的特征向量。
+     *   a[144]    调用方矩阵的**可破坏**工作副本。每求一个特征对就从
+     *             调用方的 const 矩阵重新拷入（见下），再做行阶梯消元
+     *             求 (A − λI)v = 0 的零空间 —— 消元会毁掉这块缓冲，
+     *             所以它必须是副本，绝不能在调用方矩阵上就地操作。
+     *   lam[12]   特征值，按 |λ| 降序（Hotelling 每轮取主特征对）。
+     *   work[24]  幂迭代的 x / y 两个 n 向量（各 ≤ 12）+ Rayleigh 商暂存。
+     *
+     * 【为什么 a 副本可以在每轮重新拷入 / Why re-copy each round】
+     *   朴素实现需要同时驻留「原始 A + 当前 deflated 矩阵 + 消元工作区」
+     *   三个 n×n（3 × 1152 = 3456 B），远超 2592 B 预算。
+     *   本实现利用 A5 的 API 签名 `const double *a`：**调用方的矩阵在
+     *   整个调用期间保持有效且只读**，于是「当前 deflated 矩阵」不必常驻 ——
+     *   每轮从调用方矩阵重拷一份，再按已求出的 (λ_j, v_j) 逐项扣除
+     *       D_k = A − Σ_{j<k} λ_j · v_j · v_jᵀ
+     *   即可。代价是 O(n) 轮 × O(n²) 次减法 = O(n³)，对 n ≤ 12 是
+     *   3456 次乘加，可忽略；换来的是省下一整个 n×n 缓冲。
+     *
+     * 【尺寸 / Size】1152 + 1152 + 96 + 192 = 2592 B ≤ 2688（mv 峰值）。
+     *   被 mv 完全吸收，.bss 零增长 —— v1.3.5 的门禁值仍是 41456。 */
+    struct {
+        double v   [AC_PRO_MATRIX_MAX_SIZE];              /* 144 × 8 = 1152 */
+        double a   [AC_PRO_MATRIX_MAX_SIZE];              /* 144 × 8 = 1152 */
+        double lam [AC_PRO_MATRIX_MAX_DIM];               /*  12 × 8 =   96 */
+        double work[2 * AC_PRO_MATRIX_MAX_DIM];           /*  24 × 8 =  192 */
+    } eig;                                                /* 合计 2592 B */
 } ac_pro_scratch_t;
 
 /* ==================== 编译期断言（从严，全部用 ==） ==================== */
@@ -185,7 +223,7 @@ typedef union {
 /* 核心校验：Pro union 的尺寸必须**精确**等于当前峰值视图。
    用 == 而不是 >=（设计说明 §8.3 对上游 >= 的批评），这样任何人悄悄
    加一个更大的视图都会在编译期被拦下，而不是让 .bss 静默增长。
-   v1.3 峰值是 mv（2688），已高于 lu（2352）。 */
+   峰值是 mv（2688，v1.3 起），已高于 lu（2352）与 eig（2592）。 */
 AC_STATIC_ASSERT(sizeof(ac_pro_scratch_t) == 2688, pro_scratch_is_exactly_peak);
 
 /* 逐视图尺寸：防止「总量没变但视图错位」这种更隐蔽的漂移。 */
@@ -194,6 +232,7 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->nr)  ==  264, pro_view_nr_is_26
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sym) == 1792, pro_view_sym_is_1792);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->mv)  == 2688, pro_view_mv_is_2688);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->res) == 1152, pro_view_res_is_1152);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->eig) == 2592, pro_view_eig_is_2592);
 
 /* 判据 1 在 Pro union 内部：每个视图都必须 ≤ 峰值，
    否则「union 尺寸 = max(视图)」这条前提被破坏。 */
@@ -205,6 +244,14 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->lu)  <= sizeof(((ac_pro_scratch
                  pro_view_lu_absorbed);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->res) <= sizeof(((ac_pro_scratch_t *)0)->mv),
                  pro_view_res_absorbed);
+/* v1.3.5 A5：eig 2592 < mv 2688，这是「.bss 零增长」的充要条件。 */
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->eig) <= sizeof(((ac_pro_scratch_t *)0)->mv),
+                 pro_view_eig_absorbed);
+/* 再显式钉一次「小 96 B」这个具体差值，防止有人把 mv 缩到和 eig 一样大
+   却仍声称零增长（那时 union 尺寸会变，但 absorbed 校验仍会通过）。 */
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->mv) -
+                 sizeof(((ac_pro_scratch_t *)0)->eig) == 96,
+                 pro_eig_is_96_bytes_under_mv);
 
 /* 8 字节对齐：把一个 char 放在 union 前面，union 的偏移必须正好是 8。
    若有人把 double 换成 char 数组，这条校验立刻失败。 */
@@ -219,6 +266,7 @@ AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, nr) == 0, pro_view_nr_starts_at_zero
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, lu) == 0, pro_view_lu_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, mv) == 0, pro_view_mv_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, res) == 0, pro_view_res_starts_at_zero);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, eig) == 0, pro_view_eig_starts_at_zero);
 
 /* g_var_val 的字节数必须与账本常量一致（80 = 10 × 8）。 */
 AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80_bytes);
@@ -236,7 +284,7 @@ AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80
  *   而 union 成员会被 lu/nr/mv 视图覆写。
  */
 typedef struct {
-    ac_pro_scratch_t scratch;                    /* 2688 B: Pro standalone union (v1.3 peak: mv) */
+    ac_pro_scratch_t scratch;                    /* 2688 B: Pro standalone union (peak: mv, since v1.3) */
     double           var_val[AC_PRO_VAR_COUNT];  /*   80 B: variable values (criterion 3) */
     double           align_pad[2];               /*   16 B: pad to a 32-byte multiple */
 } ac_pro_storage_t;
@@ -273,11 +321,21 @@ extern ac_pro_storage_t g_ac_pro_storage;
 #define s_pro_mv_slot(i) (g_ac_pro_scratch.mv.slot[(i)])
 /* A3：结式的 Sylvester 行主序缓冲（n ≤ 12，n² ≤ 144） */
 #define s_pro_res_sylv   (g_ac_pro_scratch.res.sylv)
+/* A5：实特征向量 + Hotelling 收缩（n ≤ 12）。
+   s_pro_eig_v    V 矩阵，**列主序**：第 k 列特征向量 = &s_pro_eig_v[k * n]。
+   s_pro_eig_a    调用方矩阵的可破坏工作副本（每轮从 const 源重拷）。
+   s_pro_eig_lam  特征值，|λ| 降序。
+   s_pro_eig_work 幂迭代的两个 n 向量：x = &work[0]，y = &work[n]。 */
+#define s_pro_eig_v      (g_ac_pro_scratch.eig.v)
+#define s_pro_eig_a      (g_ac_pro_scratch.eig.a)
+#define s_pro_eig_lam    (g_ac_pro_scratch.eig.lam)
+#define s_pro_eig_work   (g_ac_pro_scratch.eig.work)
 
 /* ---- 视图持有纪律（写进头注，而不是靠调用方自觉） ----
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，
-      ac_pro_multi_var_gcd 用 mv，ac_pro_resultant 用 res —— 任意两者都
-      不得嵌套调用（它们共享同一块存储，后进者会整块覆写先前者）。
+      ac_pro_multi_var_gcd 用 mv，ac_pro_resultant 用 res，
+      ac_pro_eig_all 用 eig —— 任意两者都不得嵌套调用（它们共享同一块
+      存储，后进者会整块覆写先前者）。
    ② g_var_val 不参与 overlay：它是跨调用的会话态，任何函数都不得把它
       当草稿写。
    ③ 视图里的数据在**跨 API 调用后即失效**；需要跨调用保留的结果必须

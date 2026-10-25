@@ -785,6 +785,23 @@ pro_multi_tally_t test_multi_gcd(void);
 pro_multi_tally_t test_multi_factor(void);
 pro_multi_tally_t test_resultant(void);
 
+/* ==================== v1.3.5 测试（独立 TU） ====================
+ * A5 实特征向量 + Hotelling 收缩：test/test_pro_eigen.c
+ * B2 符号积分（表匹配 + 一层分部）：test/test_pro_integrate.c
+ * 同样用「返回计数结构」的跨 TU 约定，本文件不感知其内部类型。 */
+pro_multi_tally_t test_eigen_2x2(void);
+pro_multi_tally_t test_eigen_3x3(void);
+pro_multi_tally_t test_eigen_repeated(void);
+pro_multi_tally_t test_eigen_illconditioned(void);
+pro_multi_tally_t test_eigen_deflation(void);
+
+pro_multi_tally_t test_integrate_poly(void);
+pro_multi_tally_t test_integrate_trig(void);
+pro_multi_tally_t test_integrate_by_parts(void);
+pro_multi_tally_t test_integrate_table(void);
+pro_multi_tally_t test_integrate_budget(void);
+pro_multi_tally_t test_integrate_errors(void);
+
 int main(void) {
     tally_t t;
 
@@ -850,6 +867,35 @@ int main(void) {
         t.failed += a1.failed + a2.failed + a3.failed;
         printf("--- v1.3 direction A: A1 %d/%d, A2 %d/%d, A3 %d/%d (checks/failed) ---\n",
                a1.checks, a1.failed, a2.checks, a2.failed, a3.checks, a3.failed);
+    }
+
+    /* v1.3.5 A5：实特征向量 + Hotelling 收缩（test/test_pro_eigen.c） */
+    {
+        pro_multi_tally_t e1 = test_eigen_2x2();
+        pro_multi_tally_t e2 = test_eigen_3x3();
+        pro_multi_tally_t e3 = test_eigen_repeated();
+        pro_multi_tally_t e4 = test_eigen_illconditioned();
+        pro_multi_tally_t e5 = test_eigen_deflation();
+        t.checks += e1.checks + e2.checks + e3.checks + e4.checks + e5.checks;
+        t.failed += e1.failed + e2.failed + e3.failed + e4.failed + e5.failed;
+        printf("--- v1.3.5 A5 eigen: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
+               e1.checks, e1.failed, e2.checks, e2.failed, e3.checks, e3.failed,
+               e4.checks, e4.failed, e5.checks, e5.failed);
+    }
+
+    /* v1.3.5 B2：符号积分（test/test_pro_integrate.c） */
+    {
+        pro_multi_tally_t i1 = test_integrate_poly();
+        pro_multi_tally_t i2 = test_integrate_trig();
+        pro_multi_tally_t i3 = test_integrate_by_parts();
+        pro_multi_tally_t i4 = test_integrate_table();
+        pro_multi_tally_t i5 = test_integrate_budget();
+        pro_multi_tally_t i6 = test_integrate_errors();
+        t.checks += i1.checks + i2.checks + i3.checks + i4.checks + i5.checks + i6.checks;
+        t.failed += i1.failed + i2.failed + i3.failed + i4.failed + i5.failed + i6.failed;
+        printf("--- v1.3.5 B2 integrate: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
+               i1.checks, i1.failed, i2.checks, i2.failed, i3.checks, i3.failed,
+               i4.checks, i4.failed, i5.checks, i5.failed, i6.checks, i6.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
