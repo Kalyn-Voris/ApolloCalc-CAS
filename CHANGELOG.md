@@ -3,6 +3,60 @@
 本项目的所有重要变更记录于此。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循 [语义化版本](https://semver.org/)。
 
+## v2.0.0 (2026-10-26)
+
+双侧同步的多变量引擎升级：C 侧 Pro 层三项能力以零 `.bss` 增长落地，
+JS 侧多变量模块转正并补齐矩阵/特殊函数。上游 `C/128KB/` 逐字节未动。
+
+### Added（C 侧 · C/128KB-ProTEXT）
+
+- **多变量符号求导**（`src/ac_pro_diff_multi.c`，211 行）：`ac_pro_diff_multi(src, var_index, out, out_len)`
+  对 mv 项表逐项幂法则求导（d/dx、d/dy），复用 Pro union mv 视图的槽 0/1，
+  溢出走 `ac_safe_mul` + `g_solve_error = 5`。12 条测试。**`.bss` 零增长**。
+- **多变量多项式积分**（`src/ac_pro_integrate_multi.c`，257 行）：
+  `ac_pro_integrate_multi` 逐项 ∫c·x^a·y^b dx，**精确整除约束**（c % (指数+1) ≠ 0
+  拒绝，专用错误码 `AC_PRO_MVI_ENONEXACT (-6)` 直接走返回值——实测 static 错误槽
+  会净涨 32 B `.bss`）；结果总次数 ≤ 6 门禁。10 条测试。**零 `.bss` 增长**，
+  任务卡预留的 frac 视图（480 B）都未动用。
+- **sin/cos LUT 常量表化**（`src/ac_pro_math.c` 包装重写 + `tools/gen_lut_tables.js`）：
+  1024 项 `const double` 预计算表经 `<math.h>` 先行 + 函数式宏劫持进上游 TU，
+  `#undef AC_MATH_USE_LUT` 阻断旧可变表。`.bss` 迁出收益 **−16 416 B**（对照组
+  实测 57 904 → 41 456），插值精度与运行时填充逐位一致（max |err| = 4.706e-6 ≈ h²/8）。
+  `AC_PRO_MATH_LUT_CONST` 开关默认开，=0 回退旧行为。
+
+### Added（JS 侧 · JS/128KB）
+
+- **`core_multivar.js` 转正 + 多变量符号求导**：多变量多项式模块（v1.3.5 期间
+  本地开发，175 条测试）正式入库；新增 `diff(a, varIndex, dst)`——与 C 侧
+  `ac_pro_diff_multi` 同逐项幂法则、同 exps 编码（高 4 bit = x，低 4 bit = y），
+  dst 可与 a 同槽。194 条测试。导出包装重构为三通道（require / 浏览器 `<script>`
+  顶层 var / 内核 ESM）。
+- **`core_matrix.js`**（新模块）：乘法 / 转置 / ≤3×3 行列式（Sarrus 闭式）/
+  逆矩阵（伴随矩阵法，|det| ≤ 1e-12 拒绝），A/B/R 三寄存器 Float64Array
+  （216 B），UI 契约与复数域 setComplexA → cXxx → getComplexTmp* 同构。
+  39 条测试。
+- **`core_special.js`**（新模块）：`erf`（A&S 26.2.17，|ε| ≤ 1.5e-7，实测节点
+  最大 1.385e-7）、`gamma` / `lgamma`（Lanczos g=7 手工展开，与 C 侧 ac_special
+  同表同条款，γ(7.5) 相对误差 4e-15）。**纯标量零分配**（模块内无数组字面量）。
+  33 条测试。
+- **内核 12 文件拼接**（`test/build-kernel.js`）：三模块进 FILES 与导出块
+  （`multivar` / `matrix` / `special` 命名空间），静态扫描 78 标识符，ESM 严格
+  模式冒烟扩到 43 项。`core_kernel.js` 175 142 B（越过 128 KiB 文件线为 v2.0.0
+  有意裁决，见 docs/js-128kb.md 内存账本节）。
+- **`test/test-browser.js`**：vm 沙箱模拟浏览器经典脚本环境（无 require/module），
+  验证三模块第四加载通道 + 功能探针，10 条测试。
+- **设计说明**：极限压缩与功能边界
+  调研（Q1 压缩空间 / Q2 功能可行性 / Q3 外部参考），v2.0.0 功能选型的依据。
+
+### 测试口径
+
+- C 侧：`pro_runner.exe` **281 checks, 0 failed**（基线 259 + 求导 12 + 积分 10），
+  `bss-check` 三门禁精确命中（41456 / 41488 / 39408），退化对拍 38672 B。
+- JS 侧：12 个测试文件 **602 pass, 0 fail**（含一致性 59 pass + 4 improve）；
+  `--expose-gc` 三模块联合探针 20 000 次混合调用 allocCount 恒 6/3/0，
+  堆增长 0.17 MB（JIT 噪声量级）。
+- Node 与浏览器（模拟经典脚本 + ESM import 双通道）全过。
+
 ## v1.3.5 (2026-10-25)
 
 Pro 层两个新方向落地：A5 实特征向量 + Hotelling 收缩 deflation、B2 符号积分。

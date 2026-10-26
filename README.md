@@ -9,14 +9,21 @@
 | 版本 | 堆限制 | 语言 | 状态 | 功能范围 |
 |---|---|---|---|---|
 | [JS/64KB](JS/64KB/) | 64KB | JavaScript | ✅ 已完成 | 解析求值、2-4 次方程、6 元线性方程组、精确形式 |
-| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ 已完成 | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组，见 [docs/js-128kb.md](docs/js-128kb.md) |
+| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ v2.0.0 | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + **多变量多项式与符号求导/矩阵基础运算/特殊函数**，见 [docs/js-128kb.md](docs/js-128kb.md) |
 | [C/64KB](C/64KB/) | 64KB | C99 | ✅ 已完成 | 对等 JS/64KB + 数论/进制分数/工具层三个 C 独有优势，见 [docs/c99-64kb.md](docs/c99-64kb.md) |
 | [C/128KB](C/128KB/) | 128KB | C99 | ✅ 已完成 | 对等 JS/128KB + 大整数/矩阵/特殊函数/符号求导四个 C 独有优势，见 [docs/c99-128kb.md](docs/c99-128kb.md) |
-| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ v1.3.5 | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分，`.bss` 41456 B，见设计说明 |
+| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ v2.0.0 | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分、**多变量符号求导/多变量积分/LUT 常量表化**，`.bss` 41456 B，见设计说明 |
 
-**当前版本：v1.3.5（2026-10-25）** — `C/128KB-ProTEXT` Pro 层落地 A5 实特征向量
-（Hotelling deflation）与 B2 符号积分，`.bss` 保持 **41456 B 零增长**；
-上游 `C/128KB/` 逐字节未动。JS 侧多变量扩展推迟到 v2.0.0。
+**当前版本：v2.0.0（2026-10-26）** — 双侧同步的多变量引擎升级：
+
+- **C 侧（C/128KB-ProTEXT）**：多变量符号求导（`ac_pro_diff_multi`）与多变量
+  多项式积分（`ac_pro_integrate_multi`，精确整除约束）以**零 `.bss` 增长**落地
+  （复用 mv 项池槽 0/1）；sin/cos LUT 经包装层迁为 `const` 预计算表（`.bss`
+  迁出收益 16 416 B，门禁 41456 B 不变）。281 项测试全绿，退化对拍 38672 B。
+- **JS 侧（JS/128KB）**：`core_multivar.js`（194 项测试）+ 新增 `core_matrix.js`
+  （39 项测试）与 `core_special.js`（33 项测试，erf/gamma/lgamma 零分配），
+  12 文件内核拼接 + 浏览器经典脚本通道验证；12 个测试文件 602 pass, 0 fail。
+
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 设计哲学
@@ -33,7 +40,7 @@
 | 版本 | `.bss` | 水位门禁 | 占用率 |
 |:---|---:|---:|---:|
 | JS 64KB | —（TypedArray 静态池 5.4 KB） | 64KB | — |
-| JS 128KB | —（TypedArray 静态池 11.5 KB） | 128KB | — |
+| JS 128KB | —（TypedArray 静态池 22.4 KB，含 multivar/matrix） | 128KB | — |
 | C 64KB | **10,576 B（10.33 KiB）** | 48 KB | 21.5% |
 | C 128KB | **39,408 B（38.48 KiB / 39.4 KB）** | 96 KB | **40.1%** |
 | C 128KB-ProTEXT | **41,456 B（40.48 KiB）** | 112 KiB | **36.15%** |
