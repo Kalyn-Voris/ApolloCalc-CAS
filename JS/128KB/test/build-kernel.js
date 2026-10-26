@@ -9,7 +9,7 @@
  *   4. node --check 语法校验（ESM export 语法按模块解析校验）
  *   5. eval() 拼接体（不含 export 块——export 仅 ESM 合法，eval 中会语法错误），
  *      复用 _test_evaluator.js(41 项) + _test_solvers.js(42 项) 断言逻辑，共 83 项
- *   6. 静态扫描 export 块引用的 75 个标识符是否在文件 1-9 中声明过 + eval 运行时存在性复核
+ *   6. 静态扫描 export 块引用的 78 个标识符是否在文件 1-12 中声明过 + eval 运行时存在性复核
  *   7. 动态 import() 生成的 core_kernel.js（ESM/严格模式），走一遍导出接口全链路冒烟
  *
  * 全部通过输出：BUILD OK, all tests passed；否则输出失败详情并退出码 1
@@ -33,14 +33,17 @@ var FILES = [
   "core_calculus.js",
   "core_base.js",
   "core_solvers.js",
-  "core_ratroot.js"
+  "core_ratroot.js",
+  "core_multivar.js",
+  "core_matrix.js",
+  "core_special.js"
 ];
 
 /* export 块：内容与交付约定逐字一致，禁止在此改动（改了会与 index.js 契约漂移） */
 var EXPORT_BLOCK = `/* ============================================================
  * ApolloCalc · core_kernel.js — 内核统一入口
- * 由 _build_kernel.js 自动拼接，禁止手动编辑
- * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot（9 文件）
+ * 由 build-kernel.js 自动拼接，禁止手动编辑
+ * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → multivar → matrix → special（12 文件）
  * ============================================================ */
 
 /* 供 index.js 引用的内核接口（UI 层唯一访问点） */
@@ -137,10 +140,15 @@ export default {
   getSiPrefixExp: function () { return _siPrefixExp; },
   getSiValid: function () { return _siValid; },
   getBaseLen: function () { return _baseLen; },
-  baseReset: function () { baseReset(); }
+  baseReset: function () { baseReset(); },
+
+  /* ---- v2.0.0 自包含三模块（IIFE 单命名空间，UI 层经 multivar.* / matrix.* / special.* 访问） ---- */
+  multivar: ApolloMultivar,
+  matrix: ApolloMatrix,
+  special: ApolloSpecial
 };`;
 
-/* export 块引用的全部内核标识符（75 个；函数形参 i/v/mode/re/im/w/n/x/a/b/side/order/x0 除外） */
+/* export 块引用的全部内核标识符（78 个；函数形参 i/v/mode/re/im/w/n/x/a/b/side/order/x0 除外） */
 var EXPORTED_NAMES = [
   "parseExpression", "dumpTokenStream",
   "applyFunction",
@@ -158,7 +166,8 @@ var EXPORTED_NAMES = [
   "calcTaylor", "taylorEval", "_taylorCoeffs", "_taylorOrder",
   "decToBase", "decToBin", "decToOct", "decToHex", "baseToString",
   "siPrefixCode", "siNormalize", "siToString", "baseReset",
-  "_baseBuf", "_baseLen", "_siMantissa", "_siPrefixCode", "_siPrefixExp", "_siValid"
+  "_baseBuf", "_baseLen", "_siMantissa", "_siPrefixCode", "_siPrefixExp", "_siValid",
+  "ApolloMultivar", "ApolloMatrix", "ApolloSpecial"
 ];
 
 function die(msg) {
@@ -674,10 +683,32 @@ import(url.pathToFileURL(OUT).href).then(function (mod) {
   ek("siNormalize 0 无效+空串", k.siNormalize(0) === 0 && k.getSiValid() === 0 && k.siToString() === "");
   ek("baseReset 经接口生效", (k.baseReset(), k.getSiValid() === 0 && k.getBaseLen() === 0));
 
+  /* ---- v2.0.0：自包含三模块接线（multivar / matrix / special） ---- */
+  k.multivar.parse("3x^2y + 2xy - 5", 0);
+  ek("multivar parse+evalSlot 2,3→43", k.multivar.evalSlot(0, 2, 3) === 43);
+  k.multivar.parse("x^2y + xy^2", 1);
+  k.multivar.diff(1, 0, 2);
+  ek("multivar diff d/dx = 2xy + y^2", k.multivar.polyToString(2) === "2xy + y^2");
+  ek("multivar toString 隐式乘契约", k.multivar.parse("3x^2y", 3) === 1 &&
+    k.multivar.polyToString(3) === "3x^2y");
+
+  k.matrix.setA(3, 3, 0, 6); k.matrix.setA(3, 3, 1, 1); k.matrix.setA(3, 3, 2, 1);
+  k.matrix.setA(3, 3, 3, 4); k.matrix.setA(3, 3, 4, -2); k.matrix.setA(3, 3, 5, 5);
+  k.matrix.setA(3, 3, 6, 2); k.matrix.setA(3, 3, 7, 8); k.matrix.setA(3, 3, 8, 7);
+  ek("matrix det 3x3 = -306", k.matrix.det() === -306);
+  k.matrix.setA(2, 2, 0, 4); k.matrix.setA(2, 2, 1, 7);
+  k.matrix.setA(2, 2, 2, 2); k.matrix.setA(2, 2, 3, 6);
+  ek("matrix inv 2x2 R[0][0]=0.6", k.matrix.inv() === 1 &&
+    Math.abs(k.matrix.getR(0, 0) - 0.6) < 1e-12);
+
+  ek("special erf(1) ≈ 0.8427007929", Math.abs(k.special.erf(1) - 0.8427007929497149) < 2e-7);
+  ek("special gamma(5) = 24", Math.abs(k.special.gamma(5) - 24) < 1e-9);
+  ek("special lgamma(5) = ln 24", Math.abs(k.special.lgamma(5) - 3.1780538303479458) < 1e-12);
+
   if (esmProblems.length > 0) {
     die("BUILD FAILED: ESM(严格模式)导出接口冒烟失败 " + esmProblems.length + " 项:\n  - " + esmProblems.join("\n  - "));
   }
-  console.log("[5/5] ESM 严格模式 import 冒烟: 导出接口链路 35/35 通过（含 getter/矩阵池写入/角度模式切换/复数域接线/微积分接线/泰勒接线/进制 SI 接线）");
+  console.log("[5/5] ESM 严格模式 import 冒烟: 导出接口链路 43/43 通过（含 getter/矩阵池写入/角度模式切换/复数域接线/微积分接线/泰勒接线/进制 SI 接线/多变量·矩阵·特殊函数三模块接线）");
   console.log("BUILD OK, all tests passed");
 }, function (err) {
   die("BUILD FAILED: core_kernel.js 无法以 ES Module 加载（严格模式兼容性问题）:\n" + (err && err.stack ? err.stack : String(err)));
