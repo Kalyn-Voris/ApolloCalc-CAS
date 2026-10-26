@@ -804,6 +804,8 @@ pro_multi_tally_t test_integrate_errors(void);
 
 /* v2.0.0：多变量符号求导（test/test_pro_diff_multi.c），同一跨 TU 约定。 */
 pro_multi_tally_t test_diff_multi(void);
+/* 多变量多项式积分：test/test_pro_integrate_multi.c（同「返回计数结构」约定） */
+pro_multi_tally_t test_integrate_multi(void);
 
 int main(void) {
     tally_t t;
@@ -907,6 +909,14 @@ int main(void) {
         t.checks += d1.checks;
         t.failed += d1.failed;
         printf("--- v2.0.0 multi-diff: %d/%d (checks/failed) ---\n", d1.checks, d1.failed);
+    }
+
+    /* 多变量多项式积分（test/test_pro_integrate_multi.c） */
+    {
+        pro_multi_tally_t m1 = test_integrate_multi();
+        t.checks += m1.checks;
+        t.failed += m1.failed;
+        printf("--- multi-var integrate: %d/%d (checks/failed) ---\n", m1.checks, m1.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
