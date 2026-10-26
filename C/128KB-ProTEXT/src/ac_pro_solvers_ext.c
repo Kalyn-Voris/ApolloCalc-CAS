@@ -38,8 +38,8 @@
  *
  * AC_STATIC_FOOTPRINT = 38672 是**内核口径**的 `size` 实测值（16 个上游
  * 模块 + trivial main）。它包含了 g_ac_scratch 与 g_sym_nodes，所以上游
- * 那两块漏算在这里被一次性补上。Pro 自己的 2784 B 单独加：
- *     AC_PRO_STATIC_FOOTPRINT = 38672 + 80 + 2688 + 16 = 41456
+ * 那两块漏算在这里被一次性补上。Pro 自己的 3936 B 单独加：
+ *     AC_PRO_STATIC_FOOTPRINT = 38672 + 80 + 3848 + 8 = 42608（v2.1.0，sparse 视图定峰）
  * 这两个常量都在 ac_pro_config.h 里，且被下面的编译期断言与 sizeof
  * 硬绑定 —— 不是手抄的数字。 */
 

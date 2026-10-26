@@ -123,7 +123,7 @@ double ac_pro_sym_eval_vars(int root);               /* 读 g_var_val[] */
  *
  * 为什么不是「bool + ac_pro_implicit_error()」：错误码若存 static，
  * 该 TU 会多出一个 16 B 的 .bss 段，叠加 16 B 链接对齐后 .bss 涨 32 B，
- * 直接破坏 41456 的账本。详见 ac_pro_symbolic_ext.c 的文件头。 */
+ * 直接破坏 42608 的账本。详见 ac_pro_symbolic_ext.c 的文件头。 */
 int ac_pro_implicit_derivative(const char *expr, double x, double y,
                                double *dydx);
 
@@ -255,7 +255,7 @@ int ac_pro_diff_multi(const char *src, int var_index, char *out, int out_len);
  *   为什么 -6 不走「专用 getter 查询」：那需要 static 保存「上一次
  *   错误」，实测（见下方 ac_pro_eig_all 的注释）一个 static 就让 TU
  *   多出 16 B .bss 段并叠加 16 B 链接对齐，全程序 .bss 净涨 32 B，
- *   直接破坏 41456 门禁。返回值通道零存储、不依赖调用顺序，更易测。
+ *   直接破坏 42608 门禁。返回值通道零存储、不依赖调用顺序，更易测。
  *
  * 【视图 / Slot】只占用 mv 视图的槽 0（解析输入）与槽 1（积分输出），
  *   不申请新视图；ac_pro_scratch.h 一行未改，.bss 增量为 0 —— 连
@@ -306,7 +306,7 @@ int ac_pro_integrate_multi(const char *src, int var_index, char *out, int out_le
  *   【为什么错误码走返回值而不是 ac_pro_eig_error() / Why no error getter】
  *   本仓库实测（gcc 8.1.0 / MinGW-w64 ld，见 ac_pro_symbolic_ext.c:97-111）：
  *   一个 `static int` 会让该 TU 产生 16 B 的 .bss 段，叠加 16 B 链接对齐，
- *   全程序 .bss 净涨 **32 B**（41456 → 41488），直接破坏任务书的门禁。
+ *   全程序 .bss 净涨 **32 B**（42608 → 42640），直接破坏任务书的门禁。
  *   错误码作为返回值不需要任何静态存储，且更易测（不依赖调用顺序）。
  *   这是判据 2 的直接推论：「不在 union 里的静态量按 32 B 计，不是 4 B」。 */
 int            ac_pro_eig_all(const double *a, int n);
@@ -360,23 +360,70 @@ int ac_pro_integrate(const char *expr, char *out, int out_len);
  * 只有本层独有的失败模式（非精确整除）才值得一个新码。 */
 #define AC_PRO_MVI_ENONEXACT (-6) /* 系数不能被 (指数+1) 整除：原函数非整系数 */
 
-/* ==================== v2.1.0 骨架探针（tools/scaffold_v2_1_0.py 生成）====================
+/* ==================== v2.1.0 方向④：稀疏线性方程组（方案 a）====================
+ *
+ * 【能力边界 / Envelope】
+ *   n ≤ 32（AC_PRO_SP_MAX_N）、非零元 nnz ≤ 320（AC_PRO_SP_MAX_NNZ）。
+ *   实现于 src/ac_pro_sparse.c；静态视图挂在 Pro union 的 sparse 成员
+ *   （3848 B，v2.1.0 起的峰值）。见
+ *   设计说明 §3 功能④ 方案 a。
+ *
+ * 【接口 / Interface】
+ *   调用方提供**三元组**（坐标格式的行号/列号/数值三个平行数组，顺序
+ *   任意，允许乱序与同坐标重复 —— 重复项求和合并，精确 0 丢弃）与右端
+ *   向量；求解器内部完成 CSR 压缩、阈值主元消元（τ = 0.1，候选中取行
+ *   非零元最少者，数值上主元 ≥ τ·列最大模 且 ≥ 主元下限）与回代。
+ *   全程显式循环：无递归、无 malloc、无 VLA、无静态对象（Zero-GC）。
+ *
+ * 【返回 / Return —— 错误码就是返回值（零存储通道）】
+ *   1  = 成功（AC_PRO_SP_OK，x/perm/rhs 视图可读）
+ *   -1 = AC_PRO_SP_EN      n 超限（n < 1 或 n > 32）
+ *   -2 = AC_PRO_SP_ENNZ    nnz 超限（nnz < 1 或 nnz > 320）
+ *   -3 = AC_PRO_SP_EPIVOT  主元低于下限（某步列最大模 ∈ (0, 1e-12)）
+ *   -4 = AC_PRO_SP_ESING   结构奇异（某步列在待消行中无非零元）
+ *   -5 = AC_PRO_SP_EFILL   消元填充溢出（总非零元将超过 320 —— 320 为
+ *                           输入与填充共享的总容量，绝不静默丢填充）
+ *   -6 = AC_PRO_SP_EINDEX  三元组非法（下标越界或指针为空）
+ *   为什么错误码走返回值而不是静态「上一次错误」：一个 static 就让 TU
+ *   净增 32 B .bss（见下方 eig 节的实测论证），直接破坏 42608/42640 门禁。
+ *   失败时视图内容未定义，调用方不得读取。
+ *
+ * 【结果读取 / Result accessors】
+ *   ac_pro_sparse_x()      解向量（n 项，按变量序 —— 行交换不换未知量）
+ *   ac_pro_sparse_perm()   行交换记录：perm[i] = 位置 i 上的原始行号
+ *                          （int16_t，与 A4 的 lu.piv 同语义）
+ *   ac_pro_sparse_rhs()    消元后的增广右端（上三角系统的 c 向量）
+ *   三者都返回 sparse 视图内部指针，跨 Pro 视图 API 调用后失效。
+ *   调用期间不得嵌套任何其它 Pro 视图 API（视图持有纪律）。 */
+#define AC_PRO_SP_OK       1
+#define AC_PRO_SP_EN       (-1)   /* n 超限 */
+#define AC_PRO_SP_ENNZ     (-2)   /* nnz 超限 */
+#define AC_PRO_SP_EPIVOT   (-3)   /* 主元低于下限 */
+#define AC_PRO_SP_ESING    (-4)   /* 结构奇异 */
+#define AC_PRO_SP_EFILL    (-5)   /* 消元填充溢出（nnz 总容量超限） */
+#define AC_PRO_SP_EINDEX   (-6)   /* 三元组下标/指针非法 */
+
+int ac_pro_sparse_solve(int n, int nnz,
+                        const int32_t *tri_r, const int32_t *tri_c,
+                        const double *tri_v, const double *rhs);
+const double  *ac_pro_sparse_x(void);
+const double  *ac_pro_sparse_rhs(void);
+const int16_t *ac_pro_sparse_perm(void);
+
+/* ==================== v2.1.0 骨架探针（方向⑤，tools/scaffold_v2_1_0.py 生成）====================
  *
  * 【状态 / Status】
- *   v2.1.0 两个新功能（④ 稀疏线性方程组、⑤ 任意精度小数）的**骨架
- *   占位**：函数体尚未实现，调用一律返回各自的 ENIMPL 错误码。这是
- *   冒烟测试（test/test_pro_sparse.c / test/test_pro_bigdec.c）的探针
- *   契约 —— 真实 API（CSR 求解入口 / dec 定点十进制入口）落地时，
- *   本节整体被真实 API 取代。见
+ *   方向④ 稀疏线性方程组的真实 API 已于本文件上方取代其骨架探针；
+ *   方向⑤ 任意精度小数（dec 定点十进制入口）仍是骨架占位，调用一律
+ *   返回 ENIMPL 错误码。这是冒烟测试（test/test_pro_bigdec.c）的探针
+ *   契约 —— 真实 API 落地时本节被真实 API 取代。见
  *   设计说明。
  *
  * 【为什么错误码走返回值 / Why return-value error codes】
  *   与本文件上方 eig 节的论证一致：任何静态对象都会让所在 TU 净增
- *   32 B .bss（16 B 段 + 16 B 链接对齐），直接破坏 41456/41488 门禁。 */
-#define AC_PRO_SPARSE_ENIMPL (-1001)  /* 稀疏求解：骨架未实现占位码 */
+ *   32 B .bss（16 B 段 + 16 B 链接对齐），直接破坏 42608/42640 门禁。 */
 #define AC_PRO_BIGDEC_ENIMPL (-1002)  /* 任意精度小数：骨架未实现占位码 */
 
-int ac_pro_sparse_probe(void);
 int ac_pro_bigdec_probe(void);
 
 #endif /* AC_PRO_H */

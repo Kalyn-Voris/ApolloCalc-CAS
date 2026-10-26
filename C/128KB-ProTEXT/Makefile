@@ -28,25 +28,33 @@
 #          mingw32-make OUTDIR=F:/ApolloCalc-CAS/.tmp-build/pro
 #      把 .exe 重定向到可写位置；源文件仍从本目录读取，目录结构不变。
 #
-# 【Pro v1.3.5 的 .bss 三层账本 / Three-tier .bss ledger】
+# 【Pro v2.1.0 的 .bss 三层账本 / Three-tier .bss ledger】
 #   内核口径（16 上游模块 + trivial main）      38672 B
 #     + g_var_val[10]                            80 B
-#     + g_ac_pro_scratch（Pro union，峰值 mv）  2688 B
-#     + 对齐填充                                  16 B
+#     + g_ac_pro_scratch（Pro union，峰值 sparse v2.1.0 ④）
+#                                              3848 B
+#     + 对齐填充（align_pad[1]）                  8 B
 #   ------------------------------------------------
-#   = 41456 B   <- 内核口径门禁值（KERNEL_BSS_EXPECT）
+#   = 42608 B   <- 内核口径门禁值（KERNEL_BSS_EXPECT）
+#
+#   v2.1.0 方向④ 稀疏线性方程组（方案 a：n ≤ 32 / nnz ≤ 320）落地了
+#   3848 B 的 sparse 视图，首次推高 Pro union 峰值（mv 2688 → sparse
+#   3848，+1160 B）；同时 3928 距 32 的倍数只差 8，对齐填充从 16 B 收窄
+#   到 8 B，内核口径净增 +1152 B（41456 → 42608，size 实测）。设计说明
+#   （§3 功能④）预估视图 ≈3.9 KB、
+#   .bss ≈42684 —— 实测 3848 B / 42608 B，同量级略优。
 #
 #   pro_runner.exe 额外带上 test/test_pro_runner.c 这个 TU：
 #     + 16 B（该 TU 的 .bss 段：s_kernel_live 等）
 #     + 16 B（链接期对齐填充）
-#   = 41488 B   <- runner 口径门禁值（PRO_BSS_EXPECT）
+#   = 42640 B   <- runner 口径门禁值（PRO_BSS_EXPECT）
 #
 #   两个数都对，只是口径不同 —— 与上游「38672 内核口径 / 39408 README
-#   口径」的区分方式完全一致。任务书要求「精确等于 41456」对应的是
-#   内核口径，由 `make kernel` + `make bss-check` 一起校验。
+#   口径」的区分方式完全一致。账本的 42608 对应内核口径，由
+#   `make kernel` + `make bss-check` 一起校验。
 #
-#   实测命令（本仓库 gcc 8.1.0 / MinGW-w64）：
-#     mingw32-make bss-check    -> kernel 41456 / runner 41488 / upstream 39408
+#   实测命令（本仓库 gcc 8.1.0 / MinGW-w64，size 第 3 列 = bss）：
+#     mingw32-make bss-check    -> kernel 42608 / runner 42640 / upstream 39408
 # ============================================================
 
 CC      = gcc
@@ -105,14 +113,15 @@ KEXE   := $(OUTDIR)/pro_kernel.exe
 DEXE   := $(OUTDIR)/degraded/pro_kernel.exe
 
 # ---- .bss 门禁常量 ----
-# v1.3.5：41456 = 38672（上游 16 模块内核口径）+ 80（g_var_val）+ 2688（Pro union）
-#                 + 16（AC_PRO_ALIGN_PAD_BYTES，对齐填充）
-# v1.2 是 41104（Pro union 峰值 lu 2352）；v1.3 引入 mv 视图（6 槽 × 28 项 × 16 B
-# = 2688）后峰值上移，.bss 相应 +352（2688-2352 = 336 的视图增量 + 16 对齐填充）。
-# v1.3.5 新增 eig 视图 2592 B，比 mv 小 96 B 被完全吸收，此三行数字不变。
-KERNEL_BSS_EXPECT := 41456
-# 41488 = 41456 + 32（test/test_pro_runner.c 的 .bss 段 16 + 链接对齐 16）
-PRO_BSS_EXPECT    := 41488
+# v2.1.0：42608 = 38672（上游 16 模块内核口径）+ 80（g_var_val）+ 3848（Pro union，
+#                 峰值视图 sparse，v2.1.0 方向④）
+#                 + 8（AC_PRO_ALIGN_PAD_BYTES，对齐填充）
+# v1.3.5 是 41456（Pro union 峰值 mv 2688 + pad 16）；v2.1.0 稀疏求解落地
+# sparse 视图 3848 B，峰值上移 +1160，对齐填充收窄 16→8，净增 +1152
+#（size 实测 42608，设计说明预估 ≈42684）。
+KERNEL_BSS_EXPECT := 42608
+# 42640 = 42608 + 32（test/test_pro_runner.c 的 .bss 段 16 + 链接对齐 16）
+PRO_BSS_EXPECT    := 42640
 # 退化构建：Pro 增量全关，等价于上游 16 模块内核口径
 DEGRADED_BSS_EXPECT := 38672
 # 上游基线对照（防上游漂移）
@@ -160,10 +169,10 @@ bss-check: $(EXE) $(KEXE)
 	$(if $(filter $(KERNEL_BSS_EXPECT),$(KERNEL_BSS_ACTUAL)),,$(error [bss-check] FAIL: kernel .bss is $(KERNEL_BSS_ACTUAL) B, expected $(KERNEL_BSS_EXPECT) B))
 	$(if $(filter $(UP_BSS_EXPECT),$(UP_BSS_ACTUAL)),,$(error [bss-check] FAIL: upstream baseline .bss is $(UP_BSS_ACTUAL) B, expected $(UP_BSS_EXPECT) B))
 	@echo "[bss-check] PASS. Ledger:"
-	@echo "    38672 (16 upstream modules) + 80 (g_var_val[10]) + 2688 (Pro union, peak view mv)"
-	@echo "     + 16 (align pad) = 41456  <- pro_kernel.exe  (kernel caliber, task-book target)"
-	@echo "    41456 + 32 (Pro test TU: 16 B statics + 16 B alignment)"
-	@echo "        = 41488  <- pro_runner.exe"
+	@echo "    38672 (16 upstream modules) + 80 (g_var_val[10]) + 3848 (Pro union, peak view sparse, v2.1.0)"
+	@echo "     + 8 (align pad) = 42608  <- pro_kernel.exe  (kernel caliber, ledger target)"
+	@echo "    42608 + 32 (Pro test TU: 16 B statics + 16 B alignment)"
+	@echo "        = 42640  <- pro_runner.exe"
 	@echo "    38672 (16 upstream modules) + 736 (upstream test/ side: 448 + 272 + 16)"
 	@echo "        = 39408  <- upstream test_runner.exe"
 

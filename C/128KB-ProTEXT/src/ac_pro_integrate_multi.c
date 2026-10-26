@@ -175,7 +175,7 @@ static int mvi_format(const ac_pro_term_t *t, int count, char *out, int out_len)
  *   为什么不用「专用 getter 查 -6」：那需要 static 保存「上一次错误」，
  *   实测（ac_pro.h 的 eig 注释、gcc 8.1.0 / MinGW-w64 ld）一个 static
  *   就让 TU 多出 16 B .bss 段并叠加 16 B 链接对齐，全程序 .bss 净涨
- *   32 B，直接破坏 41456 门禁。返回值通道零存储且更易测（不依赖调用
+ *   32 B，直接破坏 42608 门禁。返回值通道零存储且更易测（不依赖调用
  *   顺序）。
  *
  * 【检查顺序 / Why degree before exactness】

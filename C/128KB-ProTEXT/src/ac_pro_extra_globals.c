@@ -5,11 +5,11 @@
  *   Pro 层存储块的**唯一**定义处（设计说明 §2.3 判据 2 / 判据 3）：
  *
  *       ac_pro_storage_t g_ac_pro_storage;
- *         ├─ scratch  (ac_pro_scratch_t union)   2688 B
+ *         ├─ scratch  (ac_pro_scratch_t union)   3848 B  (峰值 sparse, v2.1.0)
  *         ├─ var_val  (double[10])                 80 B
- *         └─ align_pad (double[2])                 16 B
+ *         └─ align_pad (double[1])                  8 B
  *       ------------------------------------------------
- *       合计                                      2784 B
+ *       合计                                      3936 B
  *
  * 【为什么是一个 struct 而不是两个全局 / Why one object】
  *   PE/COFF 链接器把**每个**全局对象按 16 B 对齐起址：两个独立全局之间
@@ -21,8 +21,8 @@
  *   .bss 分配单元。
  *
  * 【为什么没有 `= {0}`】
- *   带初始化器的对象落 .data 而非 .bss。那会让 .bss 少 2784、.data 多
- *   2784，`size` 的 text+data+bss 总量纹丝不动 —— 最难发现的一类漂移。
+ *   带初始化器的对象落 .data 而非 .bss。那会让 .bss 少 3936、.data 多
+ *   3936，`size` 的 text+data+bss 总量纹丝不动 —— 最难发现的一类漂移。
  *   账本要求它必须落在 .bss，所以这里裸定义，靠 C 的零初始化保证。
  *
  * 【Zero-GC】
@@ -33,7 +33,7 @@
 
 #if AC_PRO_ACTIVE
 
-/* 单个存储对象：尺寸由 ac_pro_scratch.h 的 `== 2784` 校验钉死。 */
+/* 单个存储对象：尺寸由 ac_pro_scratch.h 的 `== 3936` 校验钉死。 */
 ac_pro_storage_t g_ac_pro_storage;
 
 #endif /* AC_PRO_ACTIVE */

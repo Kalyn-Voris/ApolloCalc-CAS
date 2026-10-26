@@ -1306,7 +1306,7 @@ static int mv_gcd_pass(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb,
  *
  * The clean fix: run the validation on STACK copies of the polynomials.
  * A polynomial is at most 28 terms x 16 B = 448 B, and the stack is not part
- * of .bss, so this costs zero bytes of the 41456 B budget and cannot collide
+ * of .bss, so this costs zero bytes of the 42608 B budget (v2.1.0) and cannot collide
  * with any union slot.
  *
  * Invariant: the two original inputs are snapshotted once at the top of
