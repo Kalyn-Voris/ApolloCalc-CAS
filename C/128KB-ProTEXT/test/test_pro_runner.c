@@ -807,6 +807,10 @@ pro_multi_tally_t test_diff_multi(void);
 /* 多变量多项式积分：test/test_pro_integrate_multi.c（同「返回计数结构」约定） */
 pro_multi_tally_t test_integrate_multi(void);
 
+/* v2.1.0 骨架冒烟（tools/scaffold_v2_1_0.py 生成）：同一跨 TU 约定。 */
+pro_multi_tally_t test_sparse_scaffold(void);   /* test/test_pro_sparse.c */
+pro_multi_tally_t test_bigdec_scaffold(void);   /* test/test_pro_bigdec.c */
+
 int main(void) {
     tally_t t;
 
@@ -917,6 +921,22 @@ int main(void) {
         t.checks += m1.checks;
         t.failed += m1.failed;
         printf("--- multi-var integrate: %d/%d (checks/failed) ---\n", m1.checks, m1.failed);
+    }
+
+    /* v2.1.0 骨架冒烟：稀疏线性方程组（test/test_pro_sparse.c，tools/scaffold_v2_1_0.py 生成） */
+    {
+        pro_multi_tally_t sp1 = test_sparse_scaffold();
+        t.checks += sp1.checks;
+        t.failed += sp1.failed;
+        printf("--- v2.1.0 scaffold sparse: %d/%d (checks/failed) ---\n", sp1.checks, sp1.failed);
+    }
+
+    /* v2.1.0 骨架冒烟：任意精度小数（test/test_pro_bigdec.c，tools/scaffold_v2_1_0.py 生成） */
+    {
+        pro_multi_tally_t bd1 = test_bigdec_scaffold();
+        t.checks += bd1.checks;
+        t.failed += bd1.failed;
+        printf("--- v2.1.0 scaffold bigdec: %d/%d (checks/failed) ---\n", bd1.checks, bd1.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */

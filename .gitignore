@@ -47,3 +47,6 @@ tools/comment-cleanup/
 # tracked baseline dataset -- the negation below keeps new runs committable.
 *.csv
 !tests/bench/*.csv
+
+# Workflow worktrees (created by tooling, not project content)
+.worktrees/

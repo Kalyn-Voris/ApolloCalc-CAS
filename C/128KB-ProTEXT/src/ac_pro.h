@@ -360,4 +360,23 @@ int ac_pro_integrate(const char *expr, char *out, int out_len);
  * 只有本层独有的失败模式（非精确整除）才值得一个新码。 */
 #define AC_PRO_MVI_ENONEXACT (-6) /* 系数不能被 (指数+1) 整除：原函数非整系数 */
 
+/* ==================== v2.1.0 骨架探针（tools/scaffold_v2_1_0.py 生成）====================
+ *
+ * 【状态 / Status】
+ *   v2.1.0 两个新功能（④ 稀疏线性方程组、⑤ 任意精度小数）的**骨架
+ *   占位**：函数体尚未实现，调用一律返回各自的 ENIMPL 错误码。这是
+ *   冒烟测试（test/test_pro_sparse.c / test/test_pro_bigdec.c）的探针
+ *   契约 —— 真实 API（CSR 求解入口 / dec 定点十进制入口）落地时，
+ *   本节整体被真实 API 取代。见
+ *   设计说明。
+ *
+ * 【为什么错误码走返回值 / Why return-value error codes】
+ *   与本文件上方 eig 节的论证一致：任何静态对象都会让所在 TU 净增
+ *   32 B .bss（16 B 段 + 16 B 链接对齐），直接破坏 41456/41488 门禁。 */
+#define AC_PRO_SPARSE_ENIMPL (-1001)  /* 稀疏求解：骨架未实现占位码 */
+#define AC_PRO_BIGDEC_ENIMPL (-1002)  /* 任意精度小数：骨架未实现占位码 */
+
+int ac_pro_sparse_probe(void);
+int ac_pro_bigdec_probe(void);
+
 #endif /* AC_PRO_H */
