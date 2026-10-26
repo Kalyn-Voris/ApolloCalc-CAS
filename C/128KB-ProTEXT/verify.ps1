@@ -59,7 +59,7 @@ function Get-Bss([string]$exe) {
 
 Write-Host ''
 Write-Host '============================================================'
-Write-Host ' ApolloCalc-CAS · ProTEXT v1.3.5 verification'
+Write-Host ' ApolloCalc-CAS · ProTEXT v2.1.0 verification'
 Write-Host '============================================================'
 
 # ---------- 1) 构建 ----------
