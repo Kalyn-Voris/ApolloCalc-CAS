@@ -802,6 +802,9 @@ pro_multi_tally_t test_integrate_table(void);
 pro_multi_tally_t test_integrate_budget(void);
 pro_multi_tally_t test_integrate_errors(void);
 
+/* v2.0.0：多变量符号求导（test/test_pro_diff_multi.c），同一跨 TU 约定。 */
+pro_multi_tally_t test_diff_multi(void);
+
 int main(void) {
     tally_t t;
 
@@ -896,6 +899,14 @@ int main(void) {
         printf("--- v1.3.5 B2 integrate: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
                i1.checks, i1.failed, i2.checks, i2.failed, i3.checks, i3.failed,
                i4.checks, i4.failed, i5.checks, i5.failed, i6.checks, i6.failed);
+    }
+
+    /* v2.0.0：多变量符号求导（test/test_pro_diff_multi.c） */
+    {
+        pro_multi_tally_t d1 = test_diff_multi();
+        t.checks += d1.checks;
+        t.failed += d1.failed;
+        printf("--- v2.0.0 multi-diff: %d/%d (checks/failed) ---\n", d1.checks, d1.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */

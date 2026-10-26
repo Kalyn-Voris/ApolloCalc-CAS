@@ -191,6 +191,29 @@ int                  ac_pro_multi_parse_into(const char *src, int slot);
 const ac_pro_term_t *ac_pro_multi_slot_terms(int slot);
 int                  ac_pro_multi_slot_degree(int slot);
 
+/* ---- v2.0.0：多变量符号求导（d/dx、d/dy）----
+ * 对 A1/A2/A3 的多项式字符串做逐项求导，输出同一套归一化格式。
+ * 实现在 src/ac_pro_diff_multi.c，复用 mv 视图的槽 0（输入）与
+ * 槽 1（输出），调用期间不得嵌套任何其它 Pro 视图 API。
+ *
+ * 【var_index 语义】0 = 对 x 求导，1 = 对 y 求导；其他值直接拒绝。
+ * 【项规则】exp_var == 0 的项丢弃；否则新系数 = c * exp_var（走上游
+ *   ac_safe_mul，溢出置 g_solve_error = 5 并失败，绝不返回错值），
+ *   exp_var 减 1。
+ * 【输出格式】与 A1 的归一化格式一致："2*x*y + y^2"、指数 1 省略、
+ *   零多项式写 "0"。
+ * 【返回约定】1 = 成功（含结果为 "0" 的情形）；-1 = 错误，且
+ *   g_solve_error 置因：2 = var_index 非法 / 语法错 / 输出缓冲不足，
+ *   5 = 系数溢出。
+ *
+ * 示例：
+ *     char buf[64];
+ *     ac_pro_diff_multi("x^2*y + x*y^2", 0, buf, (int)sizeof(buf));
+ *         -> 返回 1，buf == "2*x*y + y^2"
+ *     ac_pro_diff_multi("x^2*y + x*y^2", 1, buf, (int)sizeof(buf));
+ *         -> 返回 1，buf == "x^2 + 2*x*y" */
+int ac_pro_diff_multi(const char *src, int var_index, char *out, int out_len);
+
 /* ==================== v1.3.5 A5：实特征向量 + Hotelling 收缩 ====================
  *
  * 【算法 / Algorithm】
