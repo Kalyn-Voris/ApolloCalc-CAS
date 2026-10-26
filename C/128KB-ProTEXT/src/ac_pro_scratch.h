@@ -15,7 +15,7 @@
  *
  * 【判据 1 在 Pro union 内部依然成立】
  *   Pro 各视图互斥（一次调用只持有一个视图），故 union 尺寸 = max(视图)
- *   而不是 sum(视图)。v2.1.0 的七个视图：
+ *   而不是 sum(视图)。v2.1.0 的八个视图：
  *       nr     =  264 B  （B1 Durand-Kerner，n ≤ 8）
  *       lu     = 2352 B  （A4 LU 分解，n ≤ 12）
  *       sym    = 1792 B  （A6 隐函数求导工作区）
@@ -24,6 +24,7 @@
  *       eig    = 2592 B  （A5 实特征向量 + Hotelling 收缩，n ≤ 12）
  *       sparse = 3848 B  （v2.1.0 ④ 稀疏线性方程组，n ≤ 32 / nnz ≤ 320）
  *                        <-- 峰值（v2.1.0 起，首次推高 union 峰值）
+ *       dec    =  480 B  （v2.1.0 ⑤ 任意精度小数：5 × 96，低于峰值被吸收）
  *   引入更大视图时改尺寸即可，下面那行校验会把不一致炸出来。
  *
  *   【v1.3.5 关键判据（历史）：eig 2592 < mv 2688 —— 当时的 .bss 零增长】
@@ -57,6 +58,10 @@
 /* 取用 AC_STATIC_ASSERT（上游 ac_scratch.h:178 定义）与上游矩阵上限。 */
 #include "../../../C/128KB/src/ac_scratch.h"
 #include "../../../C/128KB/src/ac_matrix.h"
+/* ⑤ dec 视图的 ac_bigint_t（88 B：20 limb × uint32 + sign + top）。
+ * 只引入头文件（纯声明），不产生任何存储；上游 bigint 池 g_bi_* 仍归
+ * 上游模块，dec 视图与它物理分离（设计说明）。 */
+#include "../../../C/128KB/src/ac_bigint.h"
 
 /* ---- Pro 视图的尺寸常量 ---- */
 #define AC_PRO_MATRIX_MAX_DIM   12                        /* = AC_MATRIX_MAX_DIM  */
@@ -169,6 +174,46 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_sparse_view_t *)0)->val) +
                  sizeof(((ac_pro_sparse_view_t *)0)->perm) == 3842,
                  pro_sp_payload_is_3842);
 
+/* ==================== ⑤ 任意精度小数：dec 定点十进制记录（v2.1.0）====
+ *
+ * 【表示 / Representation】
+ *   value = m · 10^(−scale)，m 为上游 ac_bigint_t（基数 1e9、20 limb、
+ *   180 位十进制容量），scale 为 int32 十进制标度（容量 ±2^31）。
+ *   出自设计说明的估算：
+ *       dec 视图 = 5 × {bigint 88 B + scale 8 B} = 5 × 96 B = 480 B。
+ *   480 ≤ 2688（mv，当年的峰值）≤ 3848（sparse，现峰值）→ 被 union
+ *   完全吸收，.bss 零增长（对 mv 峰值口径是 41456，对 sparse 峰值口径
+ *   是 42608，两个口径下 dec 都不推高任何数字）。
+ *
+ * 【字段布局 / Layout】（88 + 4 + 4 = 96 B，由下面 == 校验钉死）
+ *   m     @ 0   (88 B) 尾数（ac_bigint_t：limbs[20] + sign + top）
+ *   scale @ 88  (4 B)  十进制标度
+ *   pad   @ 92  (4 B)  显式填充，恒 0 —— 让 sizeof 精确为 96（同
+ *                      ac_pro_term_t 的显式 pad 手法，可 memcmp 整记录）
+ *
+ * 【规范形 / Canonical form】（parse 与全部四则的输出都满足）
+ *   ① m == 0 ⟺ scale == 0；
+ *   ② scale > 0 时 m 的十进制末位非零（尾随零已剥，标度最小化）；
+ *   ③ scale < 0 仅由除法产生（商的整数放大），渲染时按 10^|scale| 补零。
+ *
+ * 【槽位 / Slots】5 槽：0 = 操作数 A，1 = 操作数 B，2 = 结果；
+ *   3/4 为研究文档 5 槽口径的预留槽（当前实现的工作量走栈上
+ *   ac_bigint_t 局部变量，不占 .bss；一个 static 对象就是 +32 B，
+ *   见 ac_pro.h eig 节的实测论证）。 */
+#define AC_PRO_DEC_SLOTS   5     /* 研究文档 §3 功能⑤ 的 5 槽口径 */
+#define AC_PRO_DEC_BYTES   96    /* sizeof(ac_pro_dec_t)，== 校验钉死 */
+
+typedef struct {
+    ac_bigint_t m;           /* 88 B: 尾数，value = m · 10^(−scale) */
+    int32_t     scale;       /* 4 B:  十进制标度（±2^31） */
+    int32_t     pad;         /* 4 B:  显式填充，恒 0，sizeof 钉死为 96 */
+} ac_pro_dec_t;
+
+AC_STATIC_ASSERT(sizeof(ac_pro_dec_t) == AC_PRO_DEC_BYTES, pro_dec_is_96_bytes);
+AC_STATIC_ASSERT(offsetof(ac_pro_dec_t, m)     == 0, pro_dec_m_at_0);
+AC_STATIC_ASSERT(offsetof(ac_pro_dec_t, scale) == 88, pro_dec_scale_at_88);
+AC_STATIC_ASSERT(sizeof(ac_bigint_t) == 88, pro_dec_bigint_is_88_bytes);
+
 /* ==================== Pro 独立 scratch union ==================== */
 typedef union {
     /* ---- B1：Durand-Kerner 数值求根，n ≤ 8 ----
@@ -279,6 +324,17 @@ typedef union {
      * 本视图是 v2.1.0 起的 union 峰值 —— .bss 由 41456 上移到 42608
      * （设计说明 §3 功能④ 预估 ≈42684，落地 42608，同量级）。 */
     ac_pro_sparse_view_t sparse;                          /* 合计 3848 B  <-- 峰值（v2.1.0 起） */
+
+    /* ---- ⑤ 任意精度小数：dec 定点十进制视图（v2.1.0 新增）----
+     *   5 槽 × 96 B = 480 B ≤ 3848（sparse 峰值，对 mv 2688 亦然）——
+     *   被峰值完全吸收，.bss 零增长（v1.3 的 lu、v1.3.5 的 eig、
+     *   v2.1.0 的 dec 之后，「union 吸收」判据的又一次兑现）。槽位语义
+     *   与规范形约束见上方 ac_pro_dec_t 定义；算法（divmod 余数扩标长除、
+     *   位数上限熔断、与上游 g_bi_* 池物理分离）见 src/ac_pro_bigdec.c
+     *   的文件头。 */
+    struct {
+        ac_pro_dec_t d[AC_PRO_DEC_SLOTS];                 /* 5 × 96 = 480 */
+    } dec;                                                /* 合计 480 B */
 } ac_pro_scratch_t;
 
 /* ==================== 编译期断言（从严，全部用 ==） ==================== */
@@ -287,7 +343,7 @@ typedef union {
    用 == 而不是 >=（设计说明 §8.3 对上游 >= 的批评），这样任何人悄悄
    加一个更大的视图都会在编译期被拦下，而不是让 .bss 静默增长。
    峰值自 v2.1.0 起是 sparse（3848），已高于 mv（2688）、eig（2592）、
-   lu（2352）。 */
+   lu（2352）；v2.1.0 ⑤ 的 dec（480）同样低于峰值。 */
 AC_STATIC_ASSERT(sizeof(ac_pro_scratch_t) == 3848, pro_scratch_is_exactly_peak);
 
 /* 逐视图尺寸：防止「总量没变但视图错位」这种更隐蔽的漂移。 */
@@ -298,6 +354,7 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->mv)     == 2688, pro_view_mv_is
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->res)    == 1152, pro_view_res_is_1152);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->eig)    == 2592, pro_view_eig_is_2592);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sparse) == 3848, pro_view_sparse_is_3848);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->dec)    ==  480, pro_view_dec_is_480);
 
 /* 判据 1 在 Pro union 内部：每个视图都必须 ≤ 峰值，
    否则「union 尺寸 = max(视图)」这条前提被破坏。
@@ -314,8 +371,13 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->mv)     <= sizeof(((ac_pro_scra
                  pro_view_mv_absorbed);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->eig)    <= sizeof(((ac_pro_scratch_t *)0)->sparse),
                  pro_view_eig_absorbed);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->dec)     <= sizeof(((ac_pro_scratch_t *)0)->sparse),
+                 pro_view_dec_absorbed);
 /* v1.3.5 的历史档案：mv 比 eig 恰好大 96 B（当年「.bss 零增长」的充要
-   条件）。v2.1.0 峰值上移后这条等式仍然为真，保留作回归锚点。 */
+   条件）。v2.1.0 峰值上移后这条等式仍然为真，保留作回归锚点。
+   v2.1.0 ⑤：dec 480 < mv 2688（当年的峰值）—— lu（v1.3）、eig（v1.3.5）
+   之后「union 吸收」判据的第三次兑现；在 sparse（3848）成为现峰值后，
+   上面挂 sparse 的 absorbed 校验依然对 dec 成立。 */
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->mv) -
                  sizeof(((ac_pro_scratch_t *)0)->eig) == 96,
                  pro_eig_is_96_bytes_under_mv);
@@ -335,6 +397,7 @@ AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, mv) == 0, pro_view_mv_starts_at_zero
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, res) == 0, pro_view_res_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, eig) == 0, pro_view_eig_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, sparse) == 0, pro_view_sparse_starts_at_zero);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, dec) == 0, pro_view_dec_starts_at_zero);
 
 /* g_var_val 的字节数必须与账本常量一致（80 = 10 × 8）。 */
 AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80_bytes);
@@ -349,7 +412,7 @@ AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80
  *   但整块只占一个分配单元，填充无从产生。
  *
  *   关键约束：g_var_val **不能**放进 union。判据 3 要求它是跨调用会话态，
- *   而 union 成员会被 lu/nr/mv/sparse 视图覆写。
+ *   而 union 成员会被 lu/nr/mv/sparse/dec 视图覆写。
  */
 typedef struct {
     ac_pro_scratch_t scratch;                    /* 3848 B: Pro standalone union (peak: sparse, since v2.1.0) */
@@ -409,11 +472,15 @@ extern ac_pro_storage_t g_ac_pro_storage;
 #define s_pro_sp_col     (g_ac_pro_scratch.sparse.col)
 #define s_pro_sp_rp      (g_ac_pro_scratch.sparse.rp)
 #define s_pro_sp_perm    (g_ac_pro_scratch.sparse.perm)
+/* ⑤：dec 定点十进制视图（v2.1.0）。slot[i] 是第 i 个 dec 记录（0..4）：
+   0 = 操作数 A，1 = 操作数 B，2 = 结果，3/4 预留。 */
+#define s_pro_dec_slot(i) (g_ac_pro_scratch.dec.d[(i)])
 
 /* ---- 视图持有纪律（写进头注，而不是靠调用方自觉） ----
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，
       ac_pro_multi_var_gcd 用 mv，ac_pro_resultant 用 res，
-      ac_pro_eig_all 用 eig，ac_pro_sparse_solve 用 sparse —— 任意两者都
+      ac_pro_eig_all 用 eig，ac_pro_sparse_solve 用 sparse，
+      ac_pro_dec_add/sub/mul/div 用 dec —— 任意两者都
       不得嵌套调用（它们共享同一块存储，后进者会整块覆写先前者）。
    ② g_var_val 不参与 overlay：它是跨调用的会话态，任何函数都不得把它
       当草稿写。

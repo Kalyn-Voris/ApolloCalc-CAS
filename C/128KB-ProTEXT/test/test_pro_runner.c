@@ -817,7 +817,11 @@ pro_multi_tally_t test_sparse_limits(void);
 pro_multi_tally_t test_sparse_robustness(void);
 pro_multi_tally_t test_sparse_threshold(void);
 
-pro_multi_tally_t test_bigdec_scaffold(void);   /* test/test_pro_bigdec.c */
+/* v2.1.0 方向⑤：任意精度定点十进制真实实现（test/test_pro_bigdec.c），
+ * 同一跨 TU 约定。双方的骨架探针 test_sparse_scaffold / test_bigdec_scaffold
+ * 已分别被真实 API 的 test_sparse_*（12 用例）与 test_bigdec（12 项测试）
+ * 整体取代。 */
+pro_multi_tally_t test_bigdec(void);
 
 int main(void) {
     tally_t t;
@@ -946,12 +950,12 @@ int main(void) {
                sp4.checks, sp4.failed, sp5.checks, sp5.failed, sp6.checks, sp6.failed);
     }
 
-    /* v2.1.0 骨架冒烟：任意精度小数（test/test_pro_bigdec.c，tools/scaffold_v2_1_0.py 生成） */
+    /* v2.1.0 方向⑤：任意精度定点十进制（test/test_pro_bigdec.c，12 项测试） */
     {
-        pro_multi_tally_t bd1 = test_bigdec_scaffold();
+        pro_multi_tally_t bd1 = test_bigdec();
         t.checks += bd1.checks;
         t.failed += bd1.failed;
-        printf("--- v2.1.0 scaffold bigdec: %d/%d (checks/failed) ---\n", bd1.checks, bd1.failed);
+        printf("--- v2.1.0 bigdec: %d/%d (checks/failed) ---\n", bd1.checks, bd1.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */

@@ -410,20 +410,89 @@ const double  *ac_pro_sparse_x(void);
 const double  *ac_pro_sparse_rhs(void);
 const int16_t *ac_pro_sparse_perm(void);
 
-/* ==================== v2.1.0 骨架探针（方向⑤，tools/scaffold_v2_1_0.py 生成）====================
+/* ==================== v2.1.0 骨架探针的归宿（方向④/⑤，tools/scaffold_v2_1_0.py 生成）====================
  *
  * 【状态 / Status】
- *   方向④ 稀疏线性方程组的真实 API 已于本文件上方取代其骨架探针；
- *   方向⑤ 任意精度小数（dec 定点十进制入口）仍是骨架占位，调用一律
- *   返回 ENIMPL 错误码。这是冒烟测试（test/test_pro_bigdec.c）的探针
- *   契约 —— 真实 API 落地时本节被真实 API 取代。见
- *   设计说明。
+ *   方向④「稀疏线性方程组」与方向⑤「任意精度定点十进制」的真实 API
+ *   均已落地，并按骨架文件的既定计划**整体取代**了各自的骨架探针：
+ *     - ac_pro_sparse_probe / AC_PRO_SPARSE_ENIMPL 已移除，由本文件
+ *       上方方向④ 的真实 API（ac_pro_sparse_solve 等）取代；
+ *     - ac_pro_bigdec_probe / AC_PRO_BIGDEC_ENIMPL 已移除，由下方
+ *       方向⑤ 的真实 API（ac_pro_dec_* 等）取代。
+ *   冒烟测试（test/test_pro_sparse.c、test/test_pro_bigdec.c）随之改为
+ *   对真实 API 的校验。见设计说明。
  *
  * 【为什么错误码走返回值 / Why return-value error codes】
  *   与本文件上方 eig 节的论证一致：任何静态对象都会让所在 TU 净增
  *   32 B .bss（16 B 段 + 16 B 链接对齐），直接破坏 42608/42640 门禁。 */
-#define AC_PRO_BIGDEC_ENIMPL (-1002)  /* 任意精度小数：骨架未实现占位码 */
 
-int ac_pro_bigdec_probe(void);
+/* ==================== v2.1.0 方向⑤：任意精度定点十进制（dec）====================
+ *
+ * 【表示 / Representation】
+ *   value = m · 10^(−scale)：m 是上游 ac_bigint_t（基数 1e9、20 limb、
+ *   180 位十进制容量），scale 是 int32 十进制标度（±2^31）。dec 视图
+ *   5 × 96 B = 480 B 挂在 ac_pro_scratch.h 的 Pro union 里，低于现峰值
+ *   sparse（3848 B，对 mv 2688 亦然）→ .bss 维持 42608 **零增长**
+ *   （设计说明的估算兑现）。
+ *
+ * 【四则算法 / Arithmetic】
+ *   加减先把两操作数对齐到 max(scale)（对齐溢出 = EOVER，绝不截断）；
+ *   乘法走上游 alias-safe ac_bi_mul（容量 = 尾数位数之和 ≤ 180）；
+ *   除法走「divmod 余数扩标长除」：N = m_a·10^e（e = 180 − 位数(m_a)，
+ *   N 恰好占满 180 位），Q/R = divmod(N, m_b)，结果 = Q·10^(−(e+s_a−s_b))，
+ *   R ≠ 0 为截断近似（返回 AC_PRO_DEC_INEXACT）；Q == 0 且 R ≠ 0 时
+ *   连 1 位有效数字都凑不出 → EOVER 熔断。乘法尾数位数之和 > 180、
+ *   解析超过 180 有效位同样熔断（AC_PRO_DEC_EDIGITS / EOVER）。
+ *
+ * 【复用与隔离 / Reuse & isolation】
+ *   只调用上游公开的 ac_bi_add/sub/mul/divmod/cmp/from_int64/to_string/
+ *   zero/copy；dec 的值全部存放在 Pro dec 视图与栈上 ac_bigint_t，
+ *   不触碰上游 g_bi_a/b/tmp/work1/work2 池，也不调 factorial/fibonacci，
+ *   与上游 g_bi_* 草稿契约（work1/work2 的遗留内容约定）物理无关。
+ *   零递归、零 malloc、零 VLA、零 static 对象（错误码走返回值）。
+ *
+ * 【语法 / Syntax】
+ *   解析接受 [+-]?digits[.digits]（".5"/"5." 也合法），无指数记法、
+ *   无空白、无千分位；多余字符一律 EPARSE。前导零不计有效位，
+ *   小数尾部零按标度剥离（"1.50" 解析为 15·10^−1）。输出一律规范形：
+ *   无尾随小数零、零无符号、整数无小数点、scale<0 时补整数百零。
+ *
+ * 【返回 / Return】
+ *   AC_PRO_DEC_OK(1)      = 成功且精确（结果已写入 out）
+ *   AC_PRO_DEC_INEXACT(2) = 成功但除法在位数上限处截断（结果已写入）
+ *   负值                  = 错误（out 不被改写）：
+ *     AC_PRO_DEC_EPARSE   语法错误
+ *     AC_PRO_DEC_EDIGITS  解析超 180 有效位（位数上限熔断）
+ *     AC_PRO_DEC_EDIV0    除数为零
+ *     AC_PRO_DEC_EOVER    对齐/乘积/标度超出容量（精确值无法在
+ *                         180 位尾数 + int32 标度内表示，绝不返回错值）
+ *     AC_PRO_DEC_EBUF     out/out_len 不足（需 = 渲染长度 + 1）
+ *     AC_PRO_DEC_ESLOT    槽号越界（仅 narrow 接口）
+ *   错误码走返回值而非静态变量：任何静态对象 = .bss +32 B（见上）。 */
+#define AC_PRO_DEC_MAX_DIGITS 180      /* 20 limb × 9 = 180 位十进制容量 */
+#define AC_PRO_DEC_SLOTS      5        /* dec 视图槽位（ac_pro_scratch.h） */
+
+#define AC_PRO_DEC_OK       1
+#define AC_PRO_DEC_INEXACT  2
+#define AC_PRO_DEC_EPARSE   (-1010)
+#define AC_PRO_DEC_EDIGITS  (-1011)
+#define AC_PRO_DEC_EDIV0    (-1012)
+#define AC_PRO_DEC_EOVER    (-1013)
+#define AC_PRO_DEC_EBUF     (-1014)
+#define AC_PRO_DEC_ESLOT    (-1015)
+
+/* ---- 窄接口：字符串 ↔ dec 槽（0..AC_PRO_DEC_SLOTS-1）----
+ * parse 把十进制字符串解析并规范化进指定槽；render 把槽内容渲染成
+ * 规范形十进制字符串。供字符串往返与单独检查使用；四则入口内部
+ * 走同一对函数（槽 0 = A、槽 1 = B、槽 2 = 结果）。 */
+int ac_pro_dec_parse(const char *src, int slot);
+int ac_pro_dec_render(int slot, char *out, int out_len);
+
+/* ---- 四则入口：解析 a/b → 运算 → 渲染规范形到 out ----
+ * out/out_len 由调用方提供；失败时 out 内容不被改写。 */
+int ac_pro_dec_add(const char *a, const char *b, char *out, int out_len);
+int ac_pro_dec_sub(const char *a, const char *b, char *out, int out_len);
+int ac_pro_dec_mul(const char *a, const char *b, char *out, int out_len);
+int ac_pro_dec_div(const char *a, const char *b, char *out, int out_len);
 
 #endif /* AC_PRO_H */

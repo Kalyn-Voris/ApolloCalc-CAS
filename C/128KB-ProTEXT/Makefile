@@ -43,6 +43,8 @@
 #   到 8 B，内核口径净增 +1152 B（41456 → 42608，size 实测）。设计说明
 #   （§3 功能④）预估视图 ≈3.9 KB、
 #   .bss ≈42684 —— 实测 3848 B / 42608 B，同量级略优。
+#   同为 v2.1.0 的方向⑤ 任意精度小数落地 dec 视图 480 B（5 × 96），低于
+#   sparse 峰值被 union 完全吸收（对 mv 2688 亦然），账本两值不变。
 #
 #   pro_runner.exe 额外带上 test/test_pro_runner.c 这个 TU：
 #     + 16 B（该 TU 的 .bss 段：s_kernel_live 等）
@@ -119,6 +121,8 @@ DEXE   := $(OUTDIR)/degraded/pro_kernel.exe
 # v1.3.5 是 41456（Pro union 峰值 mv 2688 + pad 16）；v2.1.0 稀疏求解落地
 # sparse 视图 3848 B，峰值上移 +1160，对齐填充收窄 16→8，净增 +1152
 #（size 实测 42608，设计说明预估 ≈42684）。
+# v2.1.0 方向⑤ dec 视图 480 B（5 × 96）低于 sparse 峰值，被 union 完全
+# 吸收（对 mv 2688 亦然），.bss 维持 42608/42640 不变（size 实测复核）。
 KERNEL_BSS_EXPECT := 42608
 # 42640 = 42608 + 32（test/test_pro_runner.c 的 .bss 段 16 + 链接对齐 16）
 PRO_BSS_EXPECT    := 42640
