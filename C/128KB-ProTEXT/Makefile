@@ -110,6 +110,8 @@ DEXE   := $(OUTDIR)/degraded/pro_kernel.exe
 # v1.2 是 41104（Pro union 峰值 lu 2352）；v1.3 引入 mv 视图（6 槽 × 28 项 × 16 B
 # = 2688）后峰值上移，.bss 相应 +352（2688-2352 = 336 的视图增量 + 16 对齐填充）。
 # v1.3.5 新增 eig 视图 2592 B，比 mv 小 96 B 被完全吸收，此三行数字不变。
+# v2.1.0 新增 dec 视图 480 B（⑤ 任意精度小数：5 × {bigint 88 + scale 8}），
+#   480 ≤ 2688 同样被 mv 峰值完全吸收，实测 .bss 仍为 41456/41488，数字不变。
 KERNEL_BSS_EXPECT := 41456
 # 41488 = 41456 + 32（test/test_pro_runner.c 的 .bss 段 16 + 链接对齐 16）
 PRO_BSS_EXPECT    := 41488
