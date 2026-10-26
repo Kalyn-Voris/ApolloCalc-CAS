@@ -802,6 +802,9 @@ pro_multi_tally_t test_integrate_table(void);
 pro_multi_tally_t test_integrate_budget(void);
 pro_multi_tally_t test_integrate_errors(void);
 
+/* 多变量多项式积分：test/test_pro_integrate_multi.c（同「返回计数结构」约定） */
+pro_multi_tally_t test_integrate_multi(void);
+
 int main(void) {
     tally_t t;
 
@@ -896,6 +899,14 @@ int main(void) {
         printf("--- v1.3.5 B2 integrate: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
                i1.checks, i1.failed, i2.checks, i2.failed, i3.checks, i3.failed,
                i4.checks, i4.failed, i5.checks, i5.failed, i6.checks, i6.failed);
+    }
+
+    /* 多变量多项式积分（test/test_pro_integrate_multi.c） */
+    {
+        pro_multi_tally_t m1 = test_integrate_multi();
+        t.checks += m1.checks;
+        t.failed += m1.failed;
+        printf("--- multi-var integrate: %d/%d (checks/failed) ---\n", m1.checks, m1.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */

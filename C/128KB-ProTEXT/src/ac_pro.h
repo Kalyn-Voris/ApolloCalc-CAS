@@ -191,6 +191,56 @@ int                  ac_pro_multi_parse_into(const char *src, int slot);
 const ac_pro_term_t *ac_pro_multi_slot_terms(int slot);
 int                  ac_pro_multi_slot_degree(int slot);
 
+/* ---- 多变量多项式积分（逐项、精确整除）----
+ * 对 f(x,y) = Σ c·x^a·y^b 按指定变量做形式积分：
+ *     ∫ c·x^a·y^b dx = (c/(a+1)) · x^(a+1) · y^b
+ *     ∫ c·x^a·y^b dy = (c/(b+1)) · x^a  · y^(b+1)
+ *
+ * 【var_index 语义】0 = 对 x 积分；1 = 对 y 积分；其它值 = 拒绝
+ * （返回 -1 且 g_solve_error = 2）。
+ *
+ * 【整除约束】ac_pro_term_t 无分母字段，系数必须能被 (指数+1) 精确
+ *   整除：c % (a+1) != 0（对 dy 则 c % (b+1) != 0）的项按
+ *   AC_PRO_MVI_ENONEXACT 拒绝 —— 绝不返回近似值、绝不截断。
+ *   INT64_MIN 系数按溢出处理拒绝（g_solve_error = 5）。
+ *
+ * 【次数约束】结果总次数 (指数+1)+另一变量指数 ≤ AC_PRO_MV_DEGREE(6)，
+ *   超限返回 -1 且 g_solve_error = 1（如 ∫x^6 dx、∫x^3*y^3 dx）。
+ *   该门禁同时蕴含 exps 4-bit 域必然可写（每指数 ≤ 6 < 15）。
+ *
+ * 【超越函数 = 解析期拒绝】本层复用纯多项式解析器
+ *   （见上方「多项式字符串语法」：不支持括号/除法/负指数），
+ *   sin/exp 等记号在解析期即语法错误。因此单变量 B2 的
+ *   AC_PRO_INT_ETABLE 语义在本层自然表现为：返回 -1 且
+ *   g_solve_error = 2。这是同一「不支持」语义在纯多项式层上的
+ *   诚实表现，没有伪造的 ETABLE 路径。
+ *
+ * 【缓冲】out/out_len 由调用方提供；out 为 NULL、out_len < 2 或
+ *   内容写不下时返回 -1 且 g_solve_error = 2。失败时 out 内容未定义。
+ *
+ * 【返回 / Error channel —— 二选一的取舍，在此写明】
+ *   1                        = 成功（out 已写入；∫0 的结果 "0" 也是成功）
+ *   -1                       = 一般错误，粗因看 g_solve_error（与
+ *                              ac_pro_multi_var_gcd 同表）：
+ *                                1 = 结果次数超限
+ *                                2 = 语法 / var_index / 非整除粗因 /
+ *                                    缓冲不足 / 超越函数解析期拒绝
+ *                                5 = 系数溢出（INT64_MIN）
+ *   AC_PRO_MVI_ENONEXACT(-6) = 非精确整除 —— 唯一的细粒度负码，
+ *                              **直接作为返回值**，同时 g_solve_error = 2。
+ *
+ *   为什么 -6 不走「专用 getter 查询」：那需要 static 保存「上一次
+ *   错误」，实测（见下方 ac_pro_eig_all 的注释）一个 static 就让 TU
+ *   多出 16 B .bss 段并叠加 16 B 链接对齐，全程序 .bss 净涨 32 B，
+ *   直接破坏 41456 门禁。返回值通道零存储、不依赖调用顺序，更易测。
+ *
+ * 【视图 / Slot】只占用 mv 视图的槽 0（解析输入）与槽 1（积分输出），
+ *   不申请新视图；ac_pro_scratch.h 一行未改，.bss 增量为 0 —— 连
+ *   任务卡预留的 frac 视图（480 B）都不需要（整除约束把分数挡在
+ *   门外，见 ac_pro_integrate_multi.c 文件头的「边界」小节）。 */
+int ac_pro_integrate_multi(const char *src, int var_index, char *out, int out_len);
+
+
 /* ==================== v1.3.5 A5：实特征向量 + Hotelling 收缩 ====================
  *
  * 【算法 / Algorithm】
@@ -279,5 +329,13 @@ int ac_pro_integrate(const char *expr, char *out, int out_len);
 
 /* 积分表规模（供测试核对表项数与设计说明一致）。 */
 #define AC_PRO_INT_TABLE_SIZE 64
+
+/* ---- 多变量多项式积分的错误码（续 AC_PRO_INT_* 编号区）----
+ * 通道选型：失败**直接以错误码为返回值**（细粒度通道），同时把粗因
+ * 写入 g_solve_error（多变量族通道，见 ac_pro_integrate_multi 的
+ * 注释）。刻意不设 AC_PRO_MVI_EPARSE/EOVER/...：那些语义与本文件
+ * 上方 AC_PRO_INT_* 一一对应，复用同值即可，避免两套平行码漂移；
+ * 只有本层独有的失败模式（非精确整除）才值得一个新码。 */
+#define AC_PRO_MVI_ENONEXACT (-6) /* 系数不能被 (指数+1) 整除：原函数非整系数 */
 
 #endif /* AC_PRO_H */

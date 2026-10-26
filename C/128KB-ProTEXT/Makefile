@@ -87,10 +87,12 @@ PRO_SRC      := $(patsubst ac_%.c,src/ac_pro_%.c,$(notdir $(UPSTREAM_SRC)))
 PRO_EXTRA    := src/ac_pro_extra_globals.c src/ac_pro_solvers_ext.c \
                 src/ac_pro_symbolic_ext.c \
                 src/ac_pro_multi.c src/ac_pro_resultant.c \
-                src/ac_pro_eigen.c src/ac_pro_integrate.c
+                src/ac_pro_eigen.c src/ac_pro_integrate.c \
+                src/ac_pro_integrate_multi.c
 SRC          := $(PRO_SRC) $(PRO_EXTRA) src/ac_pro_smoke.c
 TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
-                test/test_pro_eigen.c test/test_pro_integrate.c
+                test/test_pro_eigen.c test/test_pro_integrate.c \
+                test/test_pro_integrate_multi.c
 # 内核口径构建用的 trivial main（零静态存储，只为了让 .bss 口径可比）
 KERNEL_MAIN  := test/pro_kernel_main.c
 
