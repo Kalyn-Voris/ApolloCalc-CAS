@@ -76,6 +76,29 @@
 #define AC_PRO_ACTIVE 0
 #endif
 
+/* ---- sin/cos const LUT 开关（v1.3.6 / feat/lut-const）----
+ * 背景：上游 ac_math.c 的 sin/cos 查表（AC_MATH_USE_LUT）是 .bss
+ * 可选项——2×1024×8 B 表 + 4 B ready 标志 = 16388 B RAM，且需运行时
+ * ac_math_lut_init 填充。本开关开启时，src/ac_pro_math.c 在包装层用
+ * 宏劫持把查表改走 src/ac_pro_lut_tables.h 的 const 预计算表：
+ *     - LUT 存储从「+16388 B .bss 的可选项」变成零 RAM 成本项
+ *       （16392 B 进 .rdata 只读段，.bss 门禁 41456/41488 不动）；
+ *     - 无需 ac_math_lut_init（退化为空操作，ac_math_lut_ready 恒 1）；
+ *     - 旧开关 AC_MATH_USE_LUT 在 const 路径下被有意忽略（包装层
+ *       #undef）：命令行 -DAC_MATH_USE_LUT=1 不会带回 .bss 可变表；
+ *     - 精度：与上游可变表同式同序生成（t = 2*PI*i/1024，17 位有效
+ *       数字字面量），线性插值最坏误差同为 h^2/8 ~ 4.7e-6。
+ * 置 0 可关回原行为（上游 libm 直通；AC_MATH_USE_LUT 恢复话语权）。
+ * DEGRADED / AC_PRO=0 构建不受影响（AC_PRO_ACTIVE=0 时整个劫持段
+ * 编译为空）。 */
+#ifndef AC_PRO_MATH_LUT_CONST
+#define AC_PRO_MATH_LUT_CONST 1
+#endif
+
+#if (AC_PRO_MATH_LUT_CONST != 0) && (AC_PRO_MATH_LUT_CONST != 1)
+#error "AC_PRO_MATH_LUT_CONST must be exactly 0 or 1."
+#endif
+
 /* 引入上游 cfg：scratch 复用开关必须先于任何模块头文件（上游约定，
    见 ac_scratch_cfg.h 头注「开关必须最先引入」），随后是基础类型。 */
 #include "../../../C/128KB/src/ac_scratch_cfg.h"
