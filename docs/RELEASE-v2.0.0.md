@@ -1,4 +1,4 @@
-# ApolloCalc-CAS v2.0.0 Release Notes（草稿）
+# ApolloCalc-CAS v2.0.0 Release Notes
 
 > 发布日期：2026-10-26 · 分支 master（本地，暂缓 push）
 
