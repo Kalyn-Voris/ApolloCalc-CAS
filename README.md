@@ -22,7 +22,7 @@
   迁出收益 16 416 B，门禁 41456 B 不变）。281 项测试全绿，退化对拍 38672 B。
 - **JS 侧（JS/128KB）**：`core_multivar.js`（194 项测试）+ 新增 `core_matrix.js`
   （39 项测试）与 `core_special.js`（33 项测试，erf/gamma/lgamma 零分配），
-  12 文件内核拼接 + 浏览器经典脚本通道验证；12 个测试文件 602 pass, 0 fail。
+  12 文件内核拼接 + 浏览器经典脚本通道验证；12 个测试文件 603 pass, 0 fail。
 
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -59,14 +59,16 @@ ApolloCalc-CAS/
 ├── tests/               四版本共享的一致性测试用例（JSON）
 ├── JS/
 │   ├── 64KB/            已验证内核（src + test + 说明）
-│   └── 128KB/           功能增强版（已完成）
+│   └── 128KB/           功能增强版（v2.0.0：+ 多变量多项式/符号求导/矩阵/特殊函数，
+│                        12 文件内核，见 docs/js-128kb.md）
 └── C/
     ├── 64KB/            C99 对等实现（已完成 v1.0.0）
-    ├── 128KB/           C99 增强版（已完成 v1.0.0）
-    └── 128KB-ProTEXT/   C99 Pro 层（v1.3.5）：冻结上游内核，叠加多变量 GCD /
+    ├── 128KB/           C99 增强版（已完成 v1.0.0，冻结）
+    └── 128KB-ProTEXT/   C99 Pro 层（v2.0.0）：冻结上游内核，叠加多变量 GCD /
                          有理根因式分解 / Sylvester 结式 / LU 分解 / 实特征向量
                          (Hotelling deflation) / 隐函数求导 / 高次数值求根 /
-                         符号积分；`.bss` 41456 B，上游零改动
+                         符号积分 / 多变量符号求导 / 多变量积分 /
+                         LUT 常量表化；`.bss` 41456 B，上游零改动
 ```
 
 ## 快速开始
@@ -80,6 +82,16 @@ node test/test-solvers.js      # 求解层冒烟测试
 node test/build-kernel.js      # 重新拼接 core_kernel.js 并跑 80 项全量回归
 ```
 
+### JS 128KB（v2.0.0，含多变量引擎）
+
+```bash
+cd JS/128KB
+node test/test-multivar.js     # 多变量多项式 + 符号求导 + 高阶三角/复数（194 项）
+node test/test-matrix.js       # 矩阵基础运算（39 项）
+node test/test-special.js      # 特殊函数 erf/gamma/lgamma（33 项）
+node test/build-kernel.js      # 12 文件拼接 + 83 项回归 + ESM 43 项冒烟
+```
+
 ### C99（MinGW / GCC，零依赖）
 
 ```bash
@@ -90,6 +102,15 @@ mingw32-make LUT=1      # 三角查表构建（578 项测试）
 mingw32-make smoke_runner && ./smoke_runner.exe > ../../tests/bench/c-smoke.csv
 node ../../tests/bench/js-smoke.js  > ../../tests/bench/js-smoke.csv
 node ../../tests/bench/diff-smoke.js    # C vs JS 跨版本比对 → SMOKE-DIFF.md
+```
+
+### C99 Pro（v2.0.0，多变量引擎 + 零 `.bss` 增长）
+
+```bash
+cd C/128KB-ProTEXT
+mingw32-make            # 编译 pro_runner（cmd 直接可用；Git Bash 下加 SHELL=cmd.exe）
+./pro_runner.exe        # 281 项测试全绿（含多变量求导/积分）+ Zero-GC --wrap 验证
+mingw32-make bss-check  # .bss 三门禁精确命中：41456 / 41488 / 39408
 ```
 
 ## 测试
@@ -126,6 +147,11 @@ node ../../tests/bench/diff-smoke.js    # C vs JS 跨版本比对 → SMOKE-DIFF
 | **均值** | **0.8007 µs** | **0.7801 µs** | **−2.57%** | ✅ |
 
 四个 stage 全部落在 ±3% 噪声带内；solve/exact 有小幅提速（工作集收缩 → 缓存局部性改善）。
+
+> **口径注记（v2.0.0）**：本表描述四基础版本（JS/C99 × 64KB/128KB）。Pro 层与
+> JS v2.0.0 新增能力（多变量求导/积分、矩阵、特殊函数）尚未纳入 100 万次压测
+> 口径，无实测数据即不列数字；C 侧新增功能带零 `.bss` 增长门禁（41456 B，
+> 见 [ACCEPTANCE.md](docs/ACCEPTANCE.md)）。
 
 > 口径：每 stage 独立 100 万次，池大小按版本门控——64KB 两版过滤掉 30 条 128KB 专属双曲条目，
 > 故 parse/eval 为 220 条，128KB 两版为 250 条；solve 100 条、exact 50 条四版本相同。

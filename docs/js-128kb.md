@@ -197,7 +197,7 @@ node test/build-kernel.js        # 拼接 12 文件 core_kernel.js + 83 项回�
 
 零依赖，Node ≥ 14 即可（`test-browser.js` 的 vm 沙箱与 `--expose-gc` 探针
 在任意主流 Node 版本可用）。共享一致性用例在 [tests/](../tests/)。
-12 个测试文件合计 **602 pass, 0 fail**（49+46+63+28+23+33+26+59+194+39+33+10），
+12 个测试文件合计 **603 pass, 0 fail**（49+46+63+28+23+33+26+59+194+39+33+10），
 另有 build-kernel 内嵌 83 项 eval 回归 + 43 项 ESM 导出链路冒烟全过。
 
 ## 一致性测试判定规则

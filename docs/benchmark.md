@@ -91,7 +91,12 @@ v1.1.0 的 union overlay 把 20 个 scratch 池折叠到 `g_ac_scratch`（8224 B
 lhs/rhs 副本 2048 B（原地切片，移除）。
 
 `LUT=1` 构建另加 sin/cos 两表 16384 B，`.bss` → **55824（54.5 KiB）**，仍低于 96KB 门禁
-（v1.0.0 同口径为 75440 B）。
+（v1.0.0 同口径为 75440 B）。本行描述**上游** `C/128KB/` 的可选构建；Pro 层
+`C/128KB-ProTEXT` 自 v2.0.0 起 LUT 已迁 `const` `.rdata`，查表零 `.bss` 成本
+（实测迁出收益 16 416 B），见 [RELEASE-v2.0.0.md](RELEASE-v2.0.0.md)。
+
+> 本文档各节均为四基础版本口径。C 128KB-ProTEXT（v2.0.0，`.bss` 41 456 B、
+> 281 项测试）与 JS 128KB v2.0.0（603 项测试）的账本见 [ACCEPTANCE.md](ACCEPTANCE.md)。
 
 对比：C 64KB `.bss` 10576 B（10.3 KB）；C 128KB 是它的 **3.7×**（v1.0.0 为 5.6×），
 主要来自符号模块（C 独有，12.3 KB）与矩阵全局池（C 独有，4.6 KB）。

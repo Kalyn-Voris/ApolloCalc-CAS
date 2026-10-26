@@ -52,7 +52,7 @@ JS 侧多变量模块转正并补齐矩阵/特殊函数。上游 `C/128KB/` 逐�
 
 - C 侧：`pro_runner.exe` **281 checks, 0 failed**（基线 259 + 求导 12 + 积分 10），
   `bss-check` 三门禁精确命中（41456 / 41488 / 39408），退化对拍 38672 B。
-- JS 侧：12 个测试文件 **602 pass, 0 fail**（含一致性 59 pass + 4 improve）；
+- JS 侧：12 个测试文件 **603 pass, 0 fail**（含一致性 59 pass + 4 improve）；
   `--expose-gc` 三模块联合探针 20 000 次混合调用 allocCount 恒 6/3/0，
   堆增长 0.17 MB（JIT 噪声量级）。
 - Node 与浏览器（模拟经典脚本 + ESM import 双通道）全过。
