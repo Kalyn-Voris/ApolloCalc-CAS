@@ -15,15 +15,15 @@
  *   测试计数与失败数放在 main 的栈上，用 tally_t 传指针。
  *
  *   为什么这么较真 —— 下面这条规则是**实测钉死**的，不是猜的：
- *     - TU 完全不产生 .bss 段            -> 全程序 bss = 41456 B（内核口径）
+ *     - TU 完全不产生 .bss 段            -> 全程序 bss = 42608 B（内核口径）
  *     - TU 只要产生 .bss 段（哪怕只有
- *       一个 4 B 的 static int）          -> 全程序 bss = 41488 B（+32 B）
+ *       一个 4 B 的 static int）          -> 全程序 bss = 42640 B（+32 B）
  *   增量恒为 32 B = 16 B（该 TU 的 .bss 段本身）+ 16 B（链接期对齐填充），
  *   与静态对象的**个数**无关。
  *
  *   本文件的 s_kernel_live 是**必需的**（Zero-GC 硬性校验的状态位，不能挪到
  *   栈上——它要跨 main 的整个生命周期，且 __wrap_* 在其它栈帧里读写它）。
- *   因此 runner 口径的门禁值是 **41488**，而任务书要求的 41456 是
+ *   因此 runner 口径的门禁值是 **42640**，而账本的 42608 是
  *   **内核口径**（不链接本 TU），由 test/pro_kernel_main.c 单独构建校验。
  *   两个数都对，只是口径不同（详见 Makefile 的三层账本）。
  *
@@ -60,8 +60,8 @@ int ac_pro_smoke_run(void);
 
 /* ---------------- Zero-GC 开关与链接期包装 ----------------
  * s_kernel_live 是本文件唯一的静态对象（4 B），它使本 TU 产生一个
- * 16 B 的 .bss 段，叠加 16 B 链接对齐后把全程序 .bss 从 41456 推到
- * 41488（详见头注的受控实验与 Makefile 三层账本）。这是必需开销：
+ * 16 B 的 .bss 段，叠加 16 B 链接对齐后把全程序 .bss 从 42608 推到
+ * 42640（详见头注的受控实验与 Makefile 三层账本）。这是必需开销：
  * 状态位必须跨 main 生命周期存活，__wrap_* 在其它栈帧里读写它。 */
 
 static int s_kernel_live = 0;   /* 0 = 宿主 CRT 阶段，1 = kernel 阶段 */
@@ -258,13 +258,13 @@ static void test_pro_smoke(tally_t *t) {
 /* ==================== 阶段一：尺寸与门禁 ==================== */
 
 static void test_sizes(tally_t *t) {
-    printf("[case] compile-time sizes (task book: scratch 2688, storage 2784)\n");
-    check(t, sizeof(ac_pro_scratch_t) == 2688, "sizeof(ac_pro_scratch_t) == 2688", "scratch size mismatch");
-    check(t, sizeof(g_ac_pro_storage) == 2784, "sizeof(g_ac_pro_storage) == 2784", "storage size mismatch");
+    printf("[case] compile-time sizes (v2.1.0: scratch 3848, peak view sparse)\n");
+    check(t, sizeof(ac_pro_scratch_t) == AC_PRO_SCRATCH_BYTES, "sizeof(ac_pro_scratch_t) == AC_PRO_SCRATCH_BYTES (3848)", "scratch size mismatch");
+    check(t, sizeof(g_ac_pro_storage) == AC_PRO_STATIC_EXTRA, "sizeof(g_ac_pro_storage) == AC_PRO_STATIC_EXTRA (3936)", "storage size mismatch");
     check(t, sizeof(g_var_val) == 80, "sizeof(g_var_val) == 80", "var_val size mismatch");
     check(t, sizeof(ac_sym_node_t) == 24, "sizeof(ac_sym_node_t) == 24 (hole reused, no growth)", "sym node grew");
     check(t, offsetof(ac_sym_node_t, value) == 16, "offsetof(value) == 16 (hole at 12..15)", "layout drifted");
-    check(t, AC_PRO_STATIC_FOOTPRINT == 41456, "ledger 38672+80+2688+16 == 41456", "ledger mismatch");
+    check(t, AC_PRO_STATIC_FOOTPRINT == AC_PRO_TARGET_BSS, "ledger 38672+80+3848+8 == AC_PRO_TARGET_BSS (42608)", "ledger mismatch");
     printf("         scratch=%u storage=%u var_val=%u node=%u footprint=%d\n",
            (unsigned)sizeof(ac_pro_scratch_t), (unsigned)sizeof(g_ac_pro_storage),
            (unsigned)sizeof(g_var_val), (unsigned)sizeof(ac_sym_node_t),
@@ -274,17 +274,17 @@ static void test_sizes(tally_t *t) {
 /* 阶段一①：内存水位门禁。
  * 设计说明 §9.5 的四条校验 + 门禁边界。
  *
- * 【为什么满池值是 47600 而不是设计说明的 44816】
+ * 【满池值随账本走 / The full-pool figure follows the ledger】
  *   设计说明 §6.3 的算式是 `38672 + 6144 = 44816`，那是**上游口径**的
  *   静态基数。Pro 的门禁必须按 Pro 的真实静态足迹算（否则又回到
- *   「低估」的老毛病），所以：
- *       idle = 38672 + 80 + 2688 + 16 = 41456
- *       full = 41456 + 512×8 + 256×8 = 41456 + 6144 = 47600
- *   两者差 2784（var_val 80 + mv 视图 2688 + align_pad 16），正是 Pro 增量本身。
- *   门禁边界随之下移 2784：
- *       触发阈值 extra > 114688 - 47600 = 67088
- *   测试用 68000（触发）与 67000（不触发）把边界钉在 ±560 内，
- *   比设计说明原来的 ±1000 更紧。 */
+ *   「低估」的老毛病），所以（v2.1.0，sparse 视图 3848 定峰）：
+ *       idle = 38672 + 80 + 3848 + 8 = 42608  = AC_PRO_TARGET_BSS
+ *       full = 42608 + 512×8 + 256×8 = 42608 + 6144 = 48752
+ *   两者差 3936（var_val 80 + sparse 视图 3848 + align_pad 8），正是
+ *   Pro 增量本身。门禁边界随之下移 3936：
+ *       触发阈值 extra > 114688 - 48752 = 65936
+ *   测试把边界钉在 ±1000 内（boundary 由 used 动态推出，账本改动时
+ *   校验自动跟随，不需要再手抄数字）。 */
 static void test_memory_watermark(tally_t *t) {
     double base;
     double used;
@@ -301,13 +301,13 @@ static void test_memory_watermark(tally_t *t) {
     base = ac_pro_memory_used(0.0);
     /* 检查 1：used 必须 >= 38672（不再低估 g_ac_scratch + g_sym_nodes） */
     check(t, base >= 38672.0, "used >= 38672 (covers g_ac_scratch + g_sym_nodes)", "gate under-estimates");
-    /* 检查 1b：Pro 的静态足迹精确等于 41456 */
-    check(t, base == 41456.0, "used == 41456 at idle (38672 + 80 + 2688 + 16)", "idle used != 41456");
-    /* 检查 2：满池时 used = 41456 + 6144 = 47600 < 114688 */
+    /* 检查 1b：Pro 的静态足迹精确等于 AC_PRO_TARGET_BSS（v2.1.0: 42608） */
+    check(t, base == (double)AC_PRO_TARGET_BSS, "used == AC_PRO_TARGET_BSS at idle (38672 + 80 + 3848 + 8)", "idle used != target");
+    /* 检查 2：满池时 used = 42608 + 6144 = 48752 < 114688 */
     g_token_count = TOKEN_POOL_SIZE;
     g_number_count = NUMBER_POOL_SIZE;
     used = ac_pro_memory_used(0.0);
-    check(t, used == 47600.0, "full pools -> used == 47600 (41456 + 6144)", "full-pool used != 47600");
+    check(t, used == (double)(AC_PRO_TARGET_BSS + 6144), "full pools -> used == AC_PRO_TARGET_BSS + 6144 (48752)", "full-pool used != expected");
     check(t, ac_pro_check_memory_watermark() == 0, "full pools still pass the gate", "full pools rejected");
     check(t, g_solve_error == 0, "g_solve_error == 0 after pass", "error code set on pass");
 
@@ -807,8 +807,16 @@ pro_multi_tally_t test_diff_multi(void);
 /* 多变量多项式积分：test/test_pro_integrate_multi.c（同「返回计数结构」约定） */
 pro_multi_tally_t test_integrate_multi(void);
 
-/* v2.1.0 骨架冒烟（tools/scaffold_v2_1_0.py 生成）：同一跨 TU 约定。 */
-pro_multi_tally_t test_sparse_scaffold(void);   /* test/test_pro_sparse.c */
+/* v2.1.0 方向④：稀疏线性方程组（test/test_pro_sparse.c），同一跨 TU 约定。
+ * 6 个入口覆盖 12 个用例：主干（压缩/合并/交换）、稠密退化 CSR 对照、
+ * n=32 带状系统、n/nnz/index 熔断、填充溢出/奇异/主元下限、阈值主元。 */
+pro_multi_tally_t test_sparse_basic(void);
+pro_multi_tally_t test_sparse_dense_control(void);
+pro_multi_tally_t test_sparse_banded32(void);
+pro_multi_tally_t test_sparse_limits(void);
+pro_multi_tally_t test_sparse_robustness(void);
+pro_multi_tally_t test_sparse_threshold(void);
+
 pro_multi_tally_t test_bigdec_scaffold(void);   /* test/test_pro_bigdec.c */
 
 int main(void) {
@@ -923,12 +931,19 @@ int main(void) {
         printf("--- multi-var integrate: %d/%d (checks/failed) ---\n", m1.checks, m1.failed);
     }
 
-    /* v2.1.0 骨架冒烟：稀疏线性方程组（test/test_pro_sparse.c，tools/scaffold_v2_1_0.py 生成） */
+    /* v2.1.0 方向④：稀疏线性方程组（test/test_pro_sparse.c，12 用例 35 项测试） */
     {
-        pro_multi_tally_t sp1 = test_sparse_scaffold();
-        t.checks += sp1.checks;
-        t.failed += sp1.failed;
-        printf("--- v2.1.0 scaffold sparse: %d/%d (checks/failed) ---\n", sp1.checks, sp1.failed);
+        pro_multi_tally_t sp1 = test_sparse_basic();
+        pro_multi_tally_t sp2 = test_sparse_dense_control();
+        pro_multi_tally_t sp3 = test_sparse_banded32();
+        pro_multi_tally_t sp4 = test_sparse_limits();
+        pro_multi_tally_t sp5 = test_sparse_robustness();
+        pro_multi_tally_t sp6 = test_sparse_threshold();
+        t.checks += sp1.checks + sp2.checks + sp3.checks + sp4.checks + sp5.checks + sp6.checks;
+        t.failed += sp1.failed + sp2.failed + sp3.failed + sp4.failed + sp5.failed + sp6.failed;
+        printf("--- v2.1.0 sparse linsolve: basic %d/%d, dense %d/%d, banded %d/%d, limits %d/%d, robust %d/%d, threshold %d/%d (checks/failed) ---\n",
+               sp1.checks, sp1.failed, sp2.checks, sp2.failed, sp3.checks, sp3.failed,
+               sp4.checks, sp4.failed, sp5.checks, sp5.failed, sp6.checks, sp6.failed);
     }
 
     /* v2.1.0 骨架冒烟：任意精度小数（test/test_pro_bigdec.c，tools/scaffold_v2_1_0.py 生成） */

@@ -2,12 +2,12 @@
 # ApolloCalc-CAS · C/128KB-ProTEXT/verify.ps1
 # ------------------------------------------------------------
 # 【职责 / Responsibility】
-#   Pro v1.3.5 的**可重复验收脚本**。一条命令跑完全部硬指标：
+#   Pro v2.1.0 的**可重复验收脚本**。一条命令跑完全部硬指标：
 #
 #       1) 三份产物构建（pro_runner / pro_kernel / degraded）
-#       2) .bss 三层账本精确比对（41456 / 41488 / 39408 / 38672）
-#       3) 测试套件执行（259 项测试，0 失败）
-#       4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 覆盖度
+#       2) .bss 三层账本精确比对（42608 / 42640 / 39408 / 38672）
+#       3) 测试套件执行（317 项测试，0 失败）
+#       4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 / SP 覆盖度
 #       5) 上游 C/128KB 零改动（git status + git diff 双证）
 #       6) 负向编译检查（AC_PRO=2 / AC_PRO=0 无 DEGRADED 必须编译失败）
 #       7) 关键符号唯一性（拦截层没有制造重复定义）
@@ -80,11 +80,11 @@ $bssRunner = Get-Bss $runner
 $bssKernel = Get-Bss $kernel
 $upExe     = Join-Path $repoRoot 'C\128KB\test_runner.exe'
 $bssUp     = if (Test-Path $upExe) { Get-Bss $upExe } else { -1 }
-Write-Host "  kernel caliber (pro_kernel.exe) : $bssKernel B   (target 41456)"
-Write-Host "  runner caliber (pro_runner.exe) : $bssRunner B   (target 41488)"
+Write-Host "  kernel caliber (pro_kernel.exe) : $bssKernel B   (target 42608)"
+Write-Host "  runner caliber (pro_runner.exe) : $bssRunner B   (target 42640)"
 Write-Host "  upstream control                : $bssUp B   (target 39408)"
-Verdict ($bssKernel -eq 41456) 'kernel .bss == 41456 (38672 + 80 + 2688 + 16)' "got $bssKernel"
-Verdict ($bssRunner -eq 41488) 'runner .bss == 41488 (+32 for the test TU)' "got $bssRunner"
+Verdict ($bssKernel -eq 42608) 'kernel .bss == 42608 (38672 + 80 + 3848 + 8, peak view sparse)' "got $bssKernel"
+Verdict ($bssRunner -eq 42640) 'runner .bss == 42640 (+32 for the test TU)' "got $bssRunner"
 Verdict ($bssUp -eq 39408)     'upstream .bss == 39408 (no drift)' "got $bssUp"
 Verdict ($bssKernel -le 114688) 'under the 112 KiB gate' "got $bssKernel"
 
@@ -109,16 +109,19 @@ $a4 = ([regex]::Matches($runOut, '\[case A4-\d+\]')).Count
 $a6 = ([regex]::Matches($runOut, '\[case A6-\d+\]')).Count
 $a5 = ([regex]::Matches($runOut, '\[case A5-\d+\]')).Count
 $b2 = ([regex]::Matches($runOut, '\[case B2-\d+\]')).Count
+$sp = ([regex]::Matches($runOut, '\[case SP-\d+\]')).Count
 Write-Host "  B1 numeric roots  : $b1 cases"
 Write-Host "  A4 LU             : $a4 cases"
 Write-Host "  A6 implicit deriv : $a6 cases"
 Write-Host "  A5 eigen/deflation: $a5 cases"
 Write-Host "  B2 integrate      : $b2 cases"
+Write-Host "  SP sparse linsolve: $sp cases"
 Verdict ($b1 -ge 5) 'B1 has >= 5 cases' "$b1"
 Verdict ($a4 -ge 5) 'A4 has >= 5 cases' "$a4"
 Verdict ($a6 -ge 5) 'A6 has >= 5 cases' "$a6"
 Verdict ($a5 -ge 5) 'A5 has >= 5 cases' "$a5"
 Verdict ($b2 -ge 6) 'B2 has >= 6 cases' "$b2"
+Verdict ($sp -ge 8) 'SP has >= 8 cases (v2.1.0 direction 4)' "$sp"
 
 # ---------- 5) 上游零改动 ----------
 Write-Host ''

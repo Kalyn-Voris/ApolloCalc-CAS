@@ -82,7 +82,7 @@
  * ac_math_lut_init 填充。本开关开启时，src/ac_pro_math.c 在包装层用
  * 宏劫持把查表改走 src/ac_pro_lut_tables.h 的 const 预计算表：
  *     - LUT 存储从「+16388 B .bss 的可选项」变成零 RAM 成本项
- *       （16392 B 进 .rdata 只读段，.bss 门禁 41456/41488 不动）；
+ *       （16392 B 进 .rdata 只读段，.bss 门禁 42608/42640 不动）；
  *     - 无需 ac_math_lut_init（退化为空操作，ac_math_lut_ready 恒 1）；
  *     - 旧开关 AC_MATH_USE_LUT 在 const 路径下被有意忽略（包装层
  *       #undef）：命令行 -DAC_MATH_USE_LUT=1 不会带回 .bss 可变表；
@@ -128,7 +128,7 @@
 #define AC_PRO_MV_DEGREE       6    /* 总次数上限 */
 #define AC_PRO_MV_TERMS       28    /* N(6) = C(8,2) = 28 */
 
-/* ---- .bss 三层账本常量（设计说明 §2.3 / §7.2） ----
+/* ---- .bss 三层账本常量（设计说明 §2.3 / §7.2，v2.1.0 起由 sparse 视图定峰） ----
  *   AC_STATIC_FOOTPRINT  上游 16 模块的内核口径基线，`size` 实测值。
  *   AC_PRO_STATIC_EXTRA  Pro 增量：g_var_val[10] 80 + g_ac_pro_scratch。
  *   AC_PRO_STATIC_FOOTPRINT = 两者之和 = Pro 构建的真实静态足迹。
@@ -137,12 +137,12 @@
  * 编译期立刻失败。 */
 #define AC_STATIC_FOOTPRINT          38672   /* 16 上游模块 + trivial main，size 实测 */
 #define AC_PRO_VAR_VAL_BYTES         80      /* double g_var_val[10] */
-#define AC_PRO_ALIGN_PAD_BYTES       16      /* double align_pad[2]: pad to a 32-byte multiple */
-#define AC_PRO_SCRATCH_BYTES         2688    /* sizeof(ac_pro_scratch_t)，峰值仍是 mv（v1.3 起） */
+#define AC_PRO_ALIGN_PAD_BYTES       8       /* double align_pad[1]: pad to a 32-byte multiple */
+#define AC_PRO_SCRATCH_BYTES         3848    /* sizeof(ac_pro_scratch_t)，峰值 sparse（v2.1.0 ④） */
 #define AC_PRO_STATIC_EXTRA          (AC_PRO_VAR_VAL_BYTES + AC_PRO_SCRATCH_BYTES + AC_PRO_ALIGN_PAD_BYTES)
 #define AC_PRO_STATIC_FOOTPRINT      (AC_STATIC_FOOTPRINT + AC_PRO_STATIC_EXTRA)
 #define AC_PRO_UPSTREAM_BASELINE_BSS AC_STATIC_FOOTPRINT
-#define AC_PRO_TARGET_BSS            41456   /* 38672 + 80 + 2688 + 16，v1.3.5 */
+#define AC_PRO_TARGET_BSS            42608   /* 38672 + 80 + 3848 + 8，v2.1.0（sparse 峰值落地） */
 #define AC_PRO_GATE_BSS              114688  /* 112 KiB = 128 KiB × 87.5% */
 
 #endif /* AC_PRO_CONFIG_H */

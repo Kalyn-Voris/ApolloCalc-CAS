@@ -24,8 +24,8 @@
  *
  * 【Zero-GC / Zero-.bss】
  *   无 malloc、无 VLA、无递归；本文件**没有任何静态存储对象**
- *   （static 函数不占 .bss），所以 kernel 口径 .bss 仍是 41456、
- *   runner 口径仍是 41488（实测见 make bss-check）。
+ *   （static 函数不占 .bss），所以 kernel 口径 .bss 仍是 42608、
+ *   runner 口径仍是 42640（实测见 make bss-check）。
  *
  * 【溢出防护 / Overflow discipline】
  *   与 A1/A2/A3 同一条设计说明 §3.1.3 硬要求：新系数 = c × exp 一律走
