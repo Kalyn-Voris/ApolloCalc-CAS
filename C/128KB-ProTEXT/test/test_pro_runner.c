@@ -9,6 +9,7 @@
  *     ④ 阶段二 A4：LU 分解（6 例）
  *     ⑤ 阶段二 A6：隐函数求导（9 例，含 3 个负向）
  *     ⑥ 次数路由三态（1..4 精确 / 5..8 数值 / >8 拒绝）
+ *     ⑦ v2.2.0 ⑥：2 变量 Groebner 基（test_pro_groebner.c，12 例）
  *
  * 【零静态存储纪律 / Zero static storage】
  *   除 Zero-GC 开关 s_kernel_live 外，本文件**不声明任何静态对象**；
@@ -823,6 +824,15 @@ pro_multi_tally_t test_sparse_threshold(void);
  * 整体取代。 */
 pro_multi_tally_t test_bigdec(void);
 
+/* v2.2.0 方向⑥：2 变量 Groebner 基（M4GB 逐对归约，test/test_pro_groebner.c），
+ * 同一跨 TU 约定。4 个入口覆盖 12 个用例：经典主干（含任务书钦定的
+ * <x²+y²−1, x²−y>）、退化与消融、访问器结构（reduced-GB 性质）、
+ * 熔断与幂等。期望基全部经 node 有理数独立核算（见测试文件头）。 */
+pro_multi_tally_t test_gb_textbook(void);
+pro_multi_tally_t test_gb_degenerate(void);
+pro_multi_tally_t test_gb_accessors(void);
+pro_multi_tally_t test_gb_fuses(void);
+
 int main(void) {
     tally_t t;
 
@@ -956,6 +966,19 @@ int main(void) {
         t.checks += bd1.checks;
         t.failed += bd1.failed;
         printf("--- v2.1.0 bigdec: %d/%d (checks/failed) ---\n", bd1.checks, bd1.failed);
+    }
+
+    /* v2.2.0 方向⑥：2 变量 Groebner 基（test/test_pro_groebner.c，12 用例） */
+    {
+        pro_multi_tally_t g1 = test_gb_textbook();
+        pro_multi_tally_t g2 = test_gb_degenerate();
+        pro_multi_tally_t g3 = test_gb_accessors();
+        pro_multi_tally_t g4 = test_gb_fuses();
+        t.checks += g1.checks + g2.checks + g3.checks + g4.checks;
+        t.failed += g1.failed + g2.failed + g3.failed + g4.failed;
+        printf("--- v2.2.0 groebner: textbook %d/%d, degenerate %d/%d, accessors %d/%d, fuses %d/%d (checks/failed) ---\n",
+               g1.checks, g1.failed, g2.checks, g2.failed,
+               g3.checks, g3.failed, g4.checks, g4.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */

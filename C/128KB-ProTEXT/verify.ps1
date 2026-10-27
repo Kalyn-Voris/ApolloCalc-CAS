@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # ApolloCalc-CAS · C/128KB-ProTEXT/verify.ps1
 # ------------------------------------------------------------
 # 【职责 / Responsibility】
@@ -37,6 +37,18 @@ $ErrorActionPreference = 'Continue'
 $proDir  = $PSScriptRoot
 $repoRoot = (Resolve-Path (Join-Path $proDir '..\..')).Path
 if ($OutDir -eq '') { $OutDir = Join-Path $repoRoot '.verify-out' }
+# 【相对 -OutDir 必须立即锚定为绝对路径】本脚本后半段多处 Push-Location
+# （第 5/7 节 push $repoRoot、第 1/6 节 push $proDir）；若调用方传入相对
+# -OutDir（文档允许），相对目标会在不同 CWD 下解析到**不同**目录：
+# New-Item 在调用方 CWD 建目录，而第 7 节的 gcc -o <OutDir>\neg3.o 在
+# $repoRoot 下找目录 —— 不存在则 gcc 无法创建输出，exit 1，且 neg1/neg2
+# 的「非零 = 预期拒绝」判定会把这个环境性失败**掩盖成通过**（实测：
+# harness 以相对 -OutDir 调用时第 7 节第 3 项 FAILED，30/1）。
+# 在任何 Push-Location 之前把相对路径锚定到调用方 CWD，全部后续使用
+# （make OUTDIR / & $runner / gcc -o）都拿到同一绝对目录，CWD 漂移无关。
+if (-not [System.IO.Path]::IsPathRooted($OutDir)) {
+    $OutDir = Join-Path (Get-Location -PSProvider FileSystem).ProviderPath $OutDir
+}
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 $script:pass = 0
@@ -111,6 +123,7 @@ $a5 = ([regex]::Matches($runOut, '\[case A5-\d+\]')).Count
 $b2 = ([regex]::Matches($runOut, '\[case B2-\d+\]')).Count
 $sp = ([regex]::Matches($runOut, '\[case SP-\d+\]')).Count
 $bd = ([regex]::Matches($runOut, '\[case BD-\d+\]')).Count
+$gb = ([regex]::Matches($runOut, '\[case GB-\d+\]')).Count
 Write-Host "  B1 numeric roots  : $b1 cases"
 Write-Host "  A4 LU             : $a4 cases"
 Write-Host "  A6 implicit deriv : $a6 cases"
@@ -118,6 +131,7 @@ Write-Host "  A5 eigen/deflation: $a5 cases"
 Write-Host "  B2 integrate      : $b2 cases"
 Write-Host "  SP sparse linsolve: $sp cases"
 Write-Host "  BD bigdec (v2.1.0): $bd cases"
+Write-Host "  GB groebner (v2.2.0): $gb cases"
 Verdict ($b1 -ge 5) 'B1 has >= 5 cases' "$b1"
 Verdict ($a4 -ge 5) 'A4 has >= 5 cases' "$a4"
 Verdict ($a6 -ge 5) 'A6 has >= 5 cases' "$a6"
@@ -125,6 +139,7 @@ Verdict ($a5 -ge 5) 'A5 has >= 5 cases' "$a5"
 Verdict ($b2 -ge 6) 'B2 has >= 6 cases' "$b2"
 Verdict ($sp -ge 8) 'SP has >= 8 cases (v2.1.0 direction 4)' "$sp"
 Verdict ($bd -ge 8) 'BD has >= 8 cases (v2.1.0 direction 5)' "$bd"
+Verdict ($gb -ge 10) 'GB has >= 10 cases (v2.2.0 direction 6)' "$gb"
 
 # ---------- 5) 上游零改动 ----------
 Write-Host ''
@@ -153,16 +168,23 @@ if (Test-Path $deg) {
 Pop-Location
 
 # ---------- 7) 负向编译 ----------
+# 每项都把 gcc 的实际退出码与 stderr 摘要写进 verdict detail：像「目录
+# 解析错位导致 cannot create output file」这类环境性失败会**自述原因**，
+# 而不是一句裸的 failed —— neg1/neg2 尤其重要，它们的判定是「非零 =
+# 通过」，任何非编译语义的非零（如输出路径不可写）都会被误判为拒绝。
 Write-Host ''
 Write-Host '--- 7) negative compile checks ---'
 Push-Location $repoRoot
 $parser = Join-Path $proDir 'src\ac_pro_parser.c'
-& gcc -std=c99 -DAC_PRO=2 -c $parser -o (Join-Path $OutDir 'neg1.o') 2>&1 | Out-Null
-Verdict ($LASTEXITCODE -ne 0) 'AC_PRO=2 rejected at compile time' 'compiled unexpectedly'
-& gcc -std=c99 -DAC_PRO=0 -c $parser -o (Join-Path $OutDir 'neg2.o') 2>&1 | Out-Null
-Verdict ($LASTEXITCODE -ne 0) 'AC_PRO=0 without DEGRADED rejected' 'compiled unexpectedly'
-& gcc -std=c99 -Wall -Wextra -Werror -DAC_PRO=0 -DAC_PRO_DEGRADED=1 -c $parser -o (Join-Path $OutDir 'neg3.o') 2>&1 | Out-Null
-Verdict ($LASTEXITCODE -eq 0) 'AC_PRO=0 + DEGRADED compiles clean' 'failed'
+$negOut = (& gcc -std=c99 -DAC_PRO=2 -c $parser -o (Join-Path $OutDir 'neg1.o') 2>&1 | Out-String).Trim()
+$negRc  = $LASTEXITCODE
+Verdict ($negRc -ne 0) 'AC_PRO=2 rejected at compile time' "exit $negRc unexpectedly compiled; output: $negOut"
+$negOut = (& gcc -std=c99 -DAC_PRO=0 -c $parser -o (Join-Path $OutDir 'neg2.o') 2>&1 | Out-String).Trim()
+$negRc  = $LASTEXITCODE
+Verdict ($negRc -ne 0) 'AC_PRO=0 without DEGRADED rejected' "exit $negRc unexpectedly compiled; output: $negOut"
+$negOut = (& gcc -std=c99 -Wall -Wextra -Werror -DAC_PRO=0 -DAC_PRO_DEGRADED=1 -c $parser -o (Join-Path $OutDir 'neg3.o') 2>&1 | Out-String).Trim()
+$negRc  = $LASTEXITCODE
+Verdict ($negRc -eq 0) 'AC_PRO=0 + DEGRADED compiles clean' "exit $negRc; output: $negOut"
 Pop-Location
 
 # ---------- 8) 符号唯一性 ----------

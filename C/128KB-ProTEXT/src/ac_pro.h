@@ -495,4 +495,82 @@ int ac_pro_dec_sub(const char *a, const char *b, char *out, int out_len);
 int ac_pro_dec_mul(const char *a, const char *b, char *out, int out_len);
 int ac_pro_dec_div(const char *a, const char *b, char *out, int out_len);
 
+/* ==================== v2.2.0 方向⑥：2 变量 Groebner 基（M4GB 逐对归约）====================
+ *
+ * 【能力边界 / Envelope】
+ *   变量 = 2（x > y）、单项式序 = lex、**输入**多项式总次数 ≤ 4
+ *   （AC_PRO_GB_IN_DEG）、基 ≤ 8 槽、基元素 ≤ 16 项、视图内一切多项式
+ *   总次数 ≤ 8（AC_PRO_GB_MAX_DEG）。整系数（int64），全部系数 + − ×
+ *   走上游 ac_safe_add/sub/mul，溢出熔断，绝不返回错值。
+ *   实现于 src/ac_pro_groebner.c；静态视图挂在 Pro union 的 gb 成员
+ *   （1888 B ≤ 任务书预算 1960 B，< sparse 峰值 3848 → union 完全吸收，
+ *   .bss 维持 42608/42640 **零增长**）。
+ *
+ * 【算法 / Algorithm】（Makarim & Stevens, M4GB, ISSAC 2017 —— 设计说明
+ *   文献 P5 的「逐对处理
+ *   critical pair、避免 F4 大矩阵」路线，全部显式循环）
+ *   ① 解析两生成元进 gb 视图的槽 0/1（自备解析器，语法与 A1/A2 多变量层
+ *      完全一致；不借道 mv 视图 —— 一次调用只持有一个视图）。
+ *   ② critical pair 队列 = 当前活跃基的全对（每次基变更后整体重建，
+ *      保证「终结集的每一对都在终结版本上处理过」）。逐对弹出：
+ *      S-多项式 = lc_j·(lcm/lt_i)·f_i − lc_i·(lcm/lt_j)·f_j 在稠密工作区
+ *      合成，随后做**稠密伪除归约**：lex 降序扫 81 格，最大可除单项式
+ *      m 被 lc_g·(−)·(m/lt_g)·g 消去（每步后提整数 content 控制膨胀，
+ *      与 A1 prem 的 primitive 归一同一纪律），扫完即余式。
+ *   ③ 余式非零 → 规范化（primitive + 首项系数为正）→ 入基；余式为
+ *      非零常数 → 理想 = 全环，基坍缩为 {1}。
+ *   ④ 每次入基后跑一遍 interreduce：每个活跃元素用「被其余元素归约的
+ *      余式」**替换**（该替换无条件保理想，合法性不依赖 G 已是 GB ——
+ *      运行中途删除冗余元素则不然，实测 node 对照锚定了这一点），
+ *      余式为零的元素判死、槽位回收。
+ *   ⑤ 队列空 → 终结 interreduce 已在 ④ 中完成，按首项 lex 降序输出。
+ *      终结集是 reduced GB（首项互不整除 + 尾项互不整除 + primitive
+ *      正首项系数），由 reduced GB 在固定单项式序下的唯一性保证与
+ *      任何正确实现逐字一致。
+ *
+ * 【输出格式 / Output】
+ *   基元素按首项 lex 降序排列，元素间用 " | " 连接；每元素与 A1 的
+ *   归一化格式一致（"x^2 - y"：系数 1 省略、指数 1 省略、零多项式 "0"）。
+ *   例：<x^2+y^2-1, x^2-y> → "x^2 - y | y^2 + y - 1"。
+ *   空基（两输入皆 0）输出 "0"；理想 = 全环输出 "1"。
+ *
+ * 【返回 / Return —— 错误码就是返回值（零存储通道）】
+ *   1  = AC_PRO_GB_OK        成功（out 已写入，视图可读）
+ *   -1 = AC_PRO_GB_EARG      空指针 / 语法错 / out_len < 2
+ *   -2 = AC_PRO_GB_EDEG      输入总次数 > 4，或中间单项式总次数 > 8
+ *   -3 = AC_PRO_GB_ETERM     基元素项数超 16（膨胀熔断）
+ *   -4 = AC_PRO_GB_ESLOT     基槽位超 8（膨胀熔断）
+ *   -5 = AC_PRO_GB_EPAIR     pair 队列超 32（膨胀熔断）
+ *   -6 = AC_PRO_GB_EOVER     系数溢出（ac_safe_* 失败）
+ *   -7 = AC_PRO_GB_EBUF      out 缓冲不足以容纳完整基
+ *   -8 = AC_PRO_GB_EINTERNAL 内部不变式被破坏（防御性，不应出现）
+ *   任何失败都**不写 out**、视图内容视为未定义 —— 超限一律熔断，
+ *   绝不静默输出不完整基。为什么错误码走返回值而不是静态「上一次
+ *   错误」：一个 static 就让 TU 净增 32 B .bss（见上方 eig 节的实测
+ *   论证），直接破坏 42608/42640 门禁。
+ *
+ * 【结果读取 / Result accessors】
+ *   ac_pro_gb_count()          基元素个数（0 = 空基）
+ *   ac_pro_gb_terms(k)         第 k 个元素的项数
+ *   ac_pro_gb_coef(k, t)       第 k 个元素第 t 项的系数（项按首项 lex 降序）
+ *   ac_pro_gb_exps(k, t)       第 k 个元素第 t 项的打包指数 (ex<<4)|ey，
+ *                              即 x 指数 × 16 + y 指数；越界返回 -1
+ *   全部返回 gb 视图数据：成功调用后、下一次任何 Pro 视图 API 之前
+ *   有效；调用期间不得嵌套任何其它 Pro 视图 API。 */
+#define AC_PRO_GB_OK        1
+#define AC_PRO_GB_EARG   (-1)
+#define AC_PRO_GB_EDEG   (-2)
+#define AC_PRO_GB_ETERM  (-3)
+#define AC_PRO_GB_ESLOT  (-4)
+#define AC_PRO_GB_EPAIR  (-5)
+#define AC_PRO_GB_EOVER  (-6)
+#define AC_PRO_GB_EBUF   (-7)
+#define AC_PRO_GB_EINTERNAL (-8)
+
+int      ac_pro_groebner(const char *fsrc, const char *gsrc, char *out, int out_len);
+int      ac_pro_gb_count(void);
+int      ac_pro_gb_terms(int k);
+ac_int_t ac_pro_gb_coef(int k, int t);
+int      ac_pro_gb_exps(int k, int t);
+
 #endif /* AC_PRO_H */
