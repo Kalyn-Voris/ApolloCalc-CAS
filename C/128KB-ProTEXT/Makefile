@@ -45,6 +45,10 @@
 #   .bss ≈42684 —— 实测 3848 B / 42608 B，同量级略优。
 #   同为 v2.1.0 的方向⑤ 任意精度小数落地 dec 视图 480 B（5 × 96），低于
 #   sparse 峰值被 union 完全吸收（对 mv 2688 亦然），账本两值不变。
+#   v2.2.0 方向⑥ 2 变量 Groebner 基（M4GB 逐对归约）落地 gb 视图 1888 B
+#   （基 8 槽 × 16 项紧凑项表 1152 + 稠密归约工作区 648 + pair 队列 64
+#   + 计数/填充 24），≤ 任务书预算 1960 B，低于 sparse 峰值 3848 被 union
+#   完全吸收 —— .bss 维持 42608/42640 零增长（size 实测复核）。
 #
 #   pro_runner.exe 额外带上 test/test_pro_runner.c 这个 TU：
 #     + 16 B（该 TU 的 .bss 段：s_kernel_live 等）
@@ -99,12 +103,14 @@ PRO_EXTRA    := src/ac_pro_extra_globals.c src/ac_pro_solvers_ext.c \
                 src/ac_pro_multi.c src/ac_pro_resultant.c \
                 src/ac_pro_eigen.c src/ac_pro_integrate.c \
                 src/ac_pro_diff_multi.c src/ac_pro_integrate_multi.c \
-                src/ac_pro_sparse.c src/ac_pro_bigdec.c
+                src/ac_pro_sparse.c src/ac_pro_bigdec.c \
+                src/ac_pro_groebner.c
 SRC          := $(PRO_SRC) $(PRO_EXTRA) src/ac_pro_smoke.c
 TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
                 test/test_pro_eigen.c test/test_pro_integrate.c \
                 test/test_pro_diff_multi.c test/test_pro_integrate_multi.c \
-                test/test_pro_sparse.c test/test_pro_bigdec.c
+                test/test_pro_sparse.c test/test_pro_bigdec.c \
+                test/test_pro_groebner.c
 # 内核口径构建用的 trivial main（零静态存储，只为了让 .bss 口径可比）
 KERNEL_MAIN  := test/pro_kernel_main.c
 

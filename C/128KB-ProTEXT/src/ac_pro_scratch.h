@@ -25,6 +25,9 @@
  *       sparse = 3848 B  （v2.1.0 ④ 稀疏线性方程组，n ≤ 32 / nnz ≤ 320）
  *                        <-- 峰值（v2.1.0 起，首次推高 union 峰值）
  *       dec    =  480 B  （v2.1.0 ⑤ 任意精度小数：5 × 96，低于峰值被吸收）
+ *       gb     = 1888 B  （v2.2.0 ⑥ 2 变量 Groebner 基：基 8 槽 × 16 项紧凑
+ *                          项表 + 81 格稠密归约工作区 + 32 对 critical pair
+ *                          队列，低于峰值被吸收）
  *   引入更大视图时改尺寸即可，下面那行校验会把不一致炸出来。
  *
  *   【v1.3.5 关键判据（历史）：eig 2592 < mv 2688 —— 当时的 .bss 零增长】
@@ -214,6 +217,81 @@ AC_STATIC_ASSERT(offsetof(ac_pro_dec_t, m)     == 0, pro_dec_m_at_0);
 AC_STATIC_ASSERT(offsetof(ac_pro_dec_t, scale) == 88, pro_dec_scale_at_88);
 AC_STATIC_ASSERT(sizeof(ac_bigint_t) == 88, pro_dec_bigint_is_88_bytes);
 
+/* ==================== v2.2.0 ⑥：2 变量 Groebner 基视图（M4GB 逐对归约）====
+ *
+ * 【能力边界 / Envelope】（任务书划定）
+ *   变量 = 2（x > y）、单项式序 = lex、输入多项式总次数 ≤ 4。算法走
+ *   Makarim & Stevens, M4GB, ISSAC 2017（设计说明
+ *   文献 P5）的「逐对处理 critical pair、不做 F4 大矩阵」路线。
+ *
+ * 【单项式编码 / Monomial packing】
+ *   视图内一切多项式的**总次数 ≤ 8**（输入 ≤ 4；S-多项式的单项式
+ *   = lcm(首项)/首项 × 项，2 变量下逐变量指数 ≤ 8，见 ac_pro_groebner.c
+ *   文件头的推导）。指数各占一个 4-bit 半字节：
+ *       ep = (ex << 4) | ey，ex/ey ∈ [0,8]，最大 0x88 = 136 < 256
+ *   与 mv 层的 exps 打包同一思想：**一次无符号字节比较即完成 lex 序
+ *   比较**（ex 是高半字节，lex x>y 先比 ex），排序与整除判断都不解包。
+ *
+ * 【基槽 / Basis slots】基元素 = 紧凑稀疏项表（系数 int64 + 打包指数
+ *   uint8，各 AC_PRO_GB_TERMS = 16 项），按 ep **降序**存储 —— terms[0]
+ *   就是首项。8 槽容量取设计说明 §3 功能③ 的 basis ≤ 8 口径。
+ *   死槽（b_dead，被更小首项的新基元素吸收的冗余元素）可被后续新元素
+ *   复用；死槽不带任何 pair（入死时 pair 队列整体重建）。
+ *
+ * 【稠密归约工作区 / Dense reduction workspace】w_dense[81] 以
+ *   idx = ex*9 + ey 直接寻址（ex,ey ∈ [0,8]），一次只装**一个**多项式：
+ *   S-多项式合成、逐对归约（M4GB 的 per-pair reduction）、终结 interreduce
+ *   共用。81 格 = 9 × 9，总次数 > 8 的格子恒为 0（总次数熔断保证），
+ *   lex 降序扫描就是两重循环 ex 降序 × ey 降序，无需任何查找表。
+ *   单项式空间 15 个（输入 ≤ 4）装进 81 格的稠密区，比「45 格三角索引
+ *   + lex 扫描表」少一层间接 —— 用 288 B 换掉一整类查表错位 bug。
+ *
+ * 【预算 / Budget】
+ *   b_coef 8×16×8 = 1024 + b_ep 128 + b_cnt/dead 16 + w_dense 648
+ *   + cp_a/cp_b 64 + 计数 2 + 尾填充 6 = **1888 B ≤ 1960 B**（任务书
+ *   预算线），≤ 3848（sparse 峰值）→ 被 union 完全吸收，.bss 零增长
+ *   （42608/42640 账本不动）。「union 吸收」判据在 lu/eig/dec 之后的
+ *   又一次兑现。
+ *
+ * 【熔断语义 / Fuse semantics】任何超限（输入/中间总次数 > 8、基元素
+ *   项数 > 16、基槽 > 8、pair 队列 > 32、系数溢出）都返回错误码中止，
+ *   绝不静默输出不完整基 —— 错误码见 ac_pro.h 的 AC_PRO_GB_*。 */
+#define AC_PRO_GB_MAX_DEG   8     /* 视图内一切多项式的总次数上限 */
+#define AC_PRO_GB_IN_DEG    4     /* 输入多项式总次数上限（任务书） */
+#define AC_PRO_GB_DENSE     ((AC_PRO_GB_MAX_DEG + 1) * (AC_PRO_GB_MAX_DEG + 1))  /* 81 */
+#define AC_PRO_GB_BASIS     8     /* 基槽位上限（设计说明 §3 功能③） */
+#define AC_PRO_GB_TERMS     16    /* 单个基元素项数上限 */
+#define AC_PRO_GB_PAIRS     32    /* critical pair 队列容量（≥ C(8,2)=28） */
+
+typedef struct {
+    int64_t b_coef[AC_PRO_GB_BASIS * AC_PRO_GB_TERMS];   /*   0 .. 1024 : 基系数（槽 s 项 t = b_coef[s*16+t]） */
+    uint8_t b_ep  [AC_PRO_GB_BASIS * AC_PRO_GB_TERMS];   /* 1024 .. 1152 : 基打包指数 (ex<<4)|ey，降序 */
+    uint8_t b_cnt [AC_PRO_GB_BASIS];                     /* 1152 .. 1160 : 每槽项数（0 = 空槽） */
+    uint8_t b_dead[AC_PRO_GB_BASIS];                     /* 1160 .. 1168 : 死槽标志（冗余吸收后可复用） */
+    int64_t w_dense[AC_PRO_GB_DENSE];                    /* 1168 .. 1816 : 稠密归约工作区（idx = ex*9+ey） */
+    uint8_t cp_a[AC_PRO_GB_PAIRS];                       /* 1816 .. 1848 : pair 左端槽号 */
+    uint8_t cp_b[AC_PRO_GB_PAIRS];                       /* 1848 .. 1880 : pair 右端槽号 */
+    uint8_t cp_n;                                        /* 1880         : 队列长度 */
+    uint8_t b_n;                                         /* 1881         : 已占用最高槽 + 1 */
+    uint8_t w_pad[6];                                    /* 1882 .. 1888 : 显式尾填充，恒 0 */
+} ac_pro_gb_view_t;                                      /* sizeof = 1888 */
+
+AC_STATIC_ASSERT(AC_PRO_GB_MAX_DEG <= 15, pro_gb_exp_fits_nibble);
+AC_STATIC_ASSERT(sizeof(ac_pro_gb_view_t) == 1888, pro_view_gb_is_1888);
+AC_STATIC_ASSERT(AC_PRO_GB_BASIS * AC_PRO_GB_TERMS == 128, pro_gb_basis_is_128_terms);
+AC_STATIC_ASSERT(AC_PRO_GB_DENSE == 81, pro_gb_dense_is_81);
+AC_STATIC_ASSERT(AC_PRO_GB_PAIRS >= AC_PRO_GB_BASIS * (AC_PRO_GB_BASIS - 1) / 2,
+                 pro_gb_pairs_fits_full_antichain);
+AC_STATIC_ASSERT(sizeof(((ac_pro_gb_view_t *)0)->b_coef) +
+                 sizeof(((ac_pro_gb_view_t *)0)->b_ep) +
+                 sizeof(((ac_pro_gb_view_t *)0)->b_cnt) +
+                 sizeof(((ac_pro_gb_view_t *)0)->b_dead) +
+                 sizeof(((ac_pro_gb_view_t *)0)->w_dense) +
+                 sizeof(((ac_pro_gb_view_t *)0)->cp_a) +
+                 sizeof(((ac_pro_gb_view_t *)0)->cp_b) + 2 +
+                 sizeof(((ac_pro_gb_view_t *)0)->w_pad) == 1888,
+                 pro_gb_payload_is_1888);
+
 /* ==================== Pro 独立 scratch union ==================== */
 typedef union {
     /* ---- B1：Durand-Kerner 数值求根，n ≤ 8 ----
@@ -335,6 +413,15 @@ typedef union {
     struct {
         ac_pro_dec_t d[AC_PRO_DEC_SLOTS];                 /* 5 × 96 = 480 */
     } dec;                                                /* 合计 480 B */
+
+    /* ---- v2.2.0 ⑥：2 变量 Groebner 基（M4GB 逐对归约，新峰值之下）----
+     *   基 8 槽紧凑项表 + 81 格稠密归约工作区 + 32 对 critical pair 队列，
+     *   合计 1888 B ≤ 1960（任务书预算线）< 3848（sparse 峰值）——被 union
+     *   完全吸收，.bss 零增长（lu/eig/dec 之后「union 吸收」判据的第四次
+     *   兑现）。布局、单项式打包与熔断语义见上方 ac_pro_gb_view_t 的头注；
+     *   算法（逐对 S-多项式、稠密伪除归约、终结 interreduce）见
+     *   src/ac_pro_groebner.c 的文件头。 */
+    ac_pro_gb_view_t gb;                                  /* 合计 1888 B */
 } ac_pro_scratch_t;
 
 /* ==================== 编译期断言（从严，全部用 ==） ==================== */
@@ -355,6 +442,7 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->res)    == 1152, pro_view_res_i
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->eig)    == 2592, pro_view_eig_is_2592);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sparse) == 3848, pro_view_sparse_is_3848);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->dec)    ==  480, pro_view_dec_is_480);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->gb)     == 1888, pro_view_gb_is_1888);
 
 /* 判据 1 在 Pro union 内部：每个视图都必须 ≤ 峰值，
    否则「union 尺寸 = max(视图)」这条前提被破坏。
@@ -373,6 +461,8 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->eig)    <= sizeof(((ac_pro_scra
                  pro_view_eig_absorbed);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->dec)     <= sizeof(((ac_pro_scratch_t *)0)->sparse),
                  pro_view_dec_absorbed);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->gb)      <= sizeof(((ac_pro_scratch_t *)0)->sparse),
+                 pro_view_gb_absorbed);
 /* v1.3.5 的历史档案：mv 比 eig 恰好大 96 B（当年「.bss 零增长」的充要
    条件）。v2.1.0 峰值上移后这条等式仍然为真，保留作回归锚点。
    v2.1.0 ⑤：dec 480 < mv 2688（当年的峰值）—— lu（v1.3）、eig（v1.3.5）
@@ -398,6 +488,7 @@ AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, res) == 0, pro_view_res_starts_at_ze
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, eig) == 0, pro_view_eig_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, sparse) == 0, pro_view_sparse_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, dec) == 0, pro_view_dec_starts_at_zero);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, gb) == 0, pro_view_gb_starts_at_zero);
 
 /* g_var_val 的字节数必须与账本常量一致（80 = 10 × 8）。 */
 AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80_bytes);
@@ -475,13 +566,30 @@ extern ac_pro_storage_t g_ac_pro_storage;
 /* ⑤：dec 定点十进制视图（v2.1.0）。slot[i] 是第 i 个 dec 记录（0..4）：
    0 = 操作数 A，1 = 操作数 B，2 = 结果，3/4 预留。 */
 #define s_pro_dec_slot(i) (g_ac_pro_scratch.dec.d[(i)])
+/* v2.2.0 ⑥：Groebner 基视图。b_coef/b_ep 以「槽 s 的项 t」 = 下标
+   s * AC_PRO_GB_TERMS + t 寻址（项按 ep 降序，[s*16] 即首项）；b_cnt[s]
+   是槽 s 的项数，b_dead[s] != 0 表示该槽已被更小首项的新元素吸收（可
+   复用）；w_dense 是稠密归约工作区（idx = ex*9+ey）；cp_a/cp_b[0..cp_n)
+   是 critical pair 队列。 */
+#define s_pro_gb_coef(s, t) (g_ac_pro_scratch.gb.b_coef[(s) * AC_PRO_GB_TERMS + (t)])
+#define s_pro_gb_ep(s, t)   (g_ac_pro_scratch.gb.b_ep  [(s) * AC_PRO_GB_TERMS + (t)])
+#define s_pro_gb_cnt(s)     (g_ac_pro_scratch.gb.b_cnt[(s)])
+#define s_pro_gb_dead(s)    (g_ac_pro_scratch.gb.b_dead[(s)])
+#define s_pro_gb_dense      (g_ac_pro_scratch.gb.w_dense)
+#define s_pro_gb_cp_a       (g_ac_pro_scratch.gb.cp_a)
+#define s_pro_gb_cp_b       (g_ac_pro_scratch.gb.cp_b)
+#define s_pro_gb_cp_n       (g_ac_pro_scratch.gb.cp_n)
+#define s_pro_gb_n          (g_ac_pro_scratch.gb.b_n)
 
 /* ---- 视图持有纪律（写进头注，而不是靠调用方自觉） ----
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，
       ac_pro_multi_var_gcd 用 mv，ac_pro_resultant 用 res，
       ac_pro_eig_all 用 eig，ac_pro_sparse_solve 用 sparse，
-      ac_pro_dec_add/sub/mul/div 用 dec —— 任意两者都
-      不得嵌套调用（它们共享同一块存储，后进者会整块覆写先前者）。
+      ac_pro_dec_add/sub/mul/div 用 dec，ac_pro_groebner 用 gb —— 任意两者
+      都不得嵌套调用（它们共享同一块存储，后进者会整块覆写先前者）。
+      gb 视图刻意**自带解析器**（ac_pro_groebner.c 内部，与 mv 层同一语法），
+      不借道 mv 视图解析输入 —— 那会在同一次调用内先后持有 mv 与 gb，
+      违反本条纪律。
    ② g_var_val 不参与 overlay：它是跨调用的会话态，任何函数都不得把它
       当草稿写。
    ③ 视图里的数据在**跨 API 调用后即失效**；需要跨调用保留的结果必须

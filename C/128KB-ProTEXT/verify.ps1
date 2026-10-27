@@ -111,6 +111,7 @@ $a5 = ([regex]::Matches($runOut, '\[case A5-\d+\]')).Count
 $b2 = ([regex]::Matches($runOut, '\[case B2-\d+\]')).Count
 $sp = ([regex]::Matches($runOut, '\[case SP-\d+\]')).Count
 $bd = ([regex]::Matches($runOut, '\[case BD-\d+\]')).Count
+$gb = ([regex]::Matches($runOut, '\[case GB-\d+\]')).Count
 Write-Host "  B1 numeric roots  : $b1 cases"
 Write-Host "  A4 LU             : $a4 cases"
 Write-Host "  A6 implicit deriv : $a6 cases"
@@ -118,6 +119,7 @@ Write-Host "  A5 eigen/deflation: $a5 cases"
 Write-Host "  B2 integrate      : $b2 cases"
 Write-Host "  SP sparse linsolve: $sp cases"
 Write-Host "  BD bigdec (v2.1.0): $bd cases"
+Write-Host "  GB groebner (v2.2.0): $gb cases"
 Verdict ($b1 -ge 5) 'B1 has >= 5 cases' "$b1"
 Verdict ($a4 -ge 5) 'A4 has >= 5 cases' "$a4"
 Verdict ($a6 -ge 5) 'A6 has >= 5 cases' "$a6"
@@ -125,6 +127,7 @@ Verdict ($a5 -ge 5) 'A5 has >= 5 cases' "$a5"
 Verdict ($b2 -ge 6) 'B2 has >= 6 cases' "$b2"
 Verdict ($sp -ge 8) 'SP has >= 8 cases (v2.1.0 direction 4)' "$sp"
 Verdict ($bd -ge 8) 'BD has >= 8 cases (v2.1.0 direction 5)' "$bd"
+Verdict ($gb -ge 10) 'GB has >= 10 cases (v2.2.0 direction 6)' "$gb"
 
 # ---------- 5) 上游零改动 ----------
 Write-Host ''
