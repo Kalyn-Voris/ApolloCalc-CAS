@@ -6,29 +6,48 @@
 
 ## 版本对照
 
-| 版本 | 堆限制 | 语言 | 状态 | 功能范围 |
-|---|---|---|---|---|
-| [JS/64KB](JS/64KB/) | 64KB | JavaScript | ✅ 已完成 | 解析求值、2-4 次方程、6 元线性方程组、精确形式 |
-| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ v2.0.0 | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + **多变量多项式与符号求导/矩阵基础运算/特殊函数**，见 [docs/js-128kb.md](docs/js-128kb.md) |
-| [C/64KB](C/64KB/) | 64KB | C99 | ✅ 已完成 | 对等 JS/64KB + 数论/进制分数/工具层三个 C 独有优势，见 [docs/c99-64kb.md](docs/c99-64kb.md) |
-| [C/128KB](C/128KB/) | 128KB | C99 | ✅ 已完成 | 对等 JS/128KB + 大整数/矩阵/特殊函数/符号求导四个 C 独有优势，见 [docs/c99-128kb.md](docs/c99-128kb.md) |
-| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ v2.1.0 | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分、多变量符号求导/多变量积分/LUT 常量表化、**稀疏线性方程组 (n≤32)/任意精度定点小数 (180 位)**，`.bss` 42608 B，见设计说明 |
+| 组件 | 堆限制 | 语言 | 状态 | 全局版本节点 (Global Tag) | 组件版本 (Component Version) | 功能范围 |
+|:---|:---|:---|:---|:---|:---|:---|
+| [JS/64KB](JS/64KB/) | 64KB | JavaScript | ✅ 已完成 | v1.0.0 | —（未建轨道） | 解析求值、2-4 次方程、6 元线性方程组、精确形式 |
+| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ 活跃 | **v2.2.0** | **v2.2.0**（首个组件版本记录） | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + 多变量多项式与符号求导/矩阵基础运算/特殊函数 + **深度压缩管线（`build-kernel.js --minify`：core_kernel.js 175 142 → 57 523 B，−67.2%）**，见 [docs/js-128kb.md](docs/js-128kb.md) |
+| [C/64KB](C/64KB/) | 64KB | C99 | ✅ 已完成 | v1.0.0 | —（未建轨道） | 对等 JS/64KB + 数论/进制分数/工具层三个 C 独有优势，见 [docs/c99-64kb.md](docs/c99-64kb.md) |
+| [C/128KB](C/128KB/) | 128KB | C99 | ✅ 已完成（冻结） | v1.0.0 | —（未建轨道） | 对等 JS/128KB + 大整数/矩阵/特殊函数/符号求导四个 C 独有优势，见 [docs/c99-128kb.md](docs/c99-128kb.md) |
+| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ 活跃 | **v2.2.0** | **v1.4.0** | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分、多变量符号求导/多变量积分/LUT 常量表化、稀疏线性方程组 (n≤32)/任意精度定点小数 (180 位)、**2 变量 Groebner 基（M4GB 逐对归约，lex，deg≤4，膨胀熔断）**；gb 视图 1888 B 被 sparse 峰值完全吸收，`.bss` 零增长（内核 42608 B / runner 42640 B / 上游对照 39408 B，pro_runner 396 checks），见设计说明 |
 
-**当前版本：v2.1.0（2026-10-27）** — C 侧 Pro 层两大高价值能力落地（基于
-设计说明 ④⑤ 项，双 Git worktree 并行开发）：
+> **双轨制口径（v2.2.0 起）**：「全局版本节点 (Global Tag)」是仓库级发布标签，对应根
+> [CHANGELOG.md](CHANGELOG.md) 的条目，一次发布可只覆盖部分组件；「组件版本
+> (Component Version)」记录在各组件目录的 `VERSION` 文件，按该组件自身变更独立
+> 递进 semver（C 侧 Pro 层新特性按 minor 递进）。**两者是两个口径，不必相等**——
+> 本版 C/128KB-ProTEXT 即为全局 v2.2.0 / 组件 v1.4.0。未建轨道的组件标「—」，
+> 沿革见根 CHANGELOG；组件级细分记录见各组件 `CHANGELOG.md`。
 
-- **稀疏线性方程组（n ≤ 32）**：`ac_pro_sparse_solve` 三元组输入 → CSR 压缩 →
-  阈值主元消元（τ = 0.1）→ 回代；填充与输入共享 nnz ≤ 320 总容量，绝不静默
-  丢弃；错误码走返回值，结果经 `ac_pro_sparse_x/rhs/perm` 访问器读取。35 项测试。
-- **任意精度定点小数（180 位）**：`ac_pro_dec_add/sub/mul/div`（value = m·10^(−scale)，
-  m 为 20 limb 大整数、标度 ±2^31），复用上游 alias-safe 大整数四则；dec 视图
-  480 B 完全吸收进 Pro union——**`.bss` 零增长**。12 项测试。
-- **账本**：`pro_runner` 328 checks, 0 failed；`.bss` 41 456 → **42 608 B**
-  （sparse 视图 3 848 B 成为 Pro union 新峰值，涨幅远小于研究估算 42 684 B）；
-  退化对拍 38672 B 不变，上游 `C/128KB/` 零改动。JS 侧 12 文件 603 pass 不变
-  （本迭代纯 C 侧）。
+**当前版本：v2.2.0（2026-10-27，全局 Tag）** — 本轮全局版本节点同时覆盖 C、JS 两侧
+与版本管理双轨制（双 Git worktree 并行：`feat/groebner` / `feat/js-minify`）：
 
-详见 [CHANGELOG.md](CHANGELOG.md)。
+- **C 侧（C/128KB-ProTEXT，组件 v1.3.5 → v1.4.0）**：新增 **2 变量 Groebner 基**——
+  M4GB 逐对归约、lex 序、deg ≤ 4、膨胀熔断；gb 视图 1888 B（≤ 1960 预算线）被
+  sparse 峰值 3 848 B 完全吸收，**`.bss` 零增长**：内核口径 42 608 B / runner 口径
+  42 640 B / 上游对照 39 408 B（`bss-check` 实测逐字命中）；pro_runner
+  **396 checks, 0 failed**（新增 68 项测试）。验收脚本 `verify.ps1` 修复三处——相对
+  -OutDir 在任何 Push-Location 之前锚定为绝对路径（消除第 7 节 neg*.o 解析到不存在
+  目录、且被 neg1/neg2「非零 = 预期拒绝」判定掩盖的环境性失败）、负向编译 verdict
+  携带 gcc 退出码与 stderr 摘要、文件存为 UTF-8 with BOM（根治 BOM-less 中文注释
+  在 CP936 解码下吞字节的存量隐患）；三种调用模式全部 **31 passed, 0 failed**，
+  两道门禁复跑 exit 0。
+- **JS 侧（JS/128KB，首个组件版本记录）**：**深度压缩管线**并入
+  `build-kernel.js --minify` 唯一重建入口——`core_kernel.js` **175 142 → 57 523 B**
+  （压缩率 67.2%，越过 > 50% 目标且低于 ~87.6 KB 冲刺线）。terser 两段式：内核体
+  按经典 script 压缩（`mangle.toplevel: false`，顶层名全保留）+ EXPORT_BLOCK 单独
+  按 module 压缩，拼接后 `export default` 契约不变、压缩体全量 eval 回归通过；
+  terser 不可用/无网络时自动回退内置词法级剥离器（同入口、同全量校验，16 项词法
+  边界单测，实测 79 435 B / 54.6%，同样达标）。12 测试文件 **603 pass, 0 fail**。
+- **版本管理（双轨制落地）**：根 README 版本对照表改为「全局版本节点 / 组件版本」
+  两列分立；`C/128KB-ProTEXT/VERSION` v1.4.0、`JS/128KB/VERSION` v2.2.0（新建）；
+  新建两份组件 CHANGELOG，自组件视角细分记录。
+
+详见 [CHANGELOG.md](CHANGELOG.md)（全局口径）与
+[C/128KB-ProTEXT/CHANGELOG.md](C/128KB-ProTEXT/CHANGELOG.md) /
+[JS/128KB/CHANGELOG.md](JS/128KB/CHANGELOG.md)（组件口径）。
 
 ## 设计哲学
 

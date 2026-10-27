@@ -3,6 +3,77 @@
 本项目的所有重要变更记录于此。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循 [语义化版本](https://semver.org/)。
 
+## v2.2.0 (2026-10-27)
+
+本全局版本节点同时更新 C、JS 两侧，并落地「全局 Tag + 组件独立 VERSION」双轨制版本
+管理。开发方式：双 Git worktree 并行（`feat/groebner` / `feat/js-minify`）。
+自本版起口径分层：根 README / 根 CHANGELOG 记**全局版本节点**（仓库级 Tag，一次发布
+可只覆盖部分组件）；各组件目录以独立 `VERSION` + `CHANGELOG.md` 记**组件版本**
+（按该组件自身变更递进 semver，C 侧 Pro 层新特性按 minor 递进）。
+
+### Added（C 侧 · C/128KB-ProTEXT · 组件 v1.3.5 → v1.4.0）
+
+- **2 变量 Groebner 基**：M4GB 逐对归约、lex 序、deg ≤ 4、膨胀熔断。gb 视图
+  1888 B（≤ 1960 预算线）被 sparse 峰值 3 848 B 完全吸收，**`.bss` 零增长**——
+  账本闭合：内核口径 **42 608 B** / runner 口径 **42 640 B** / 上游对照 39 408 B
+  （`bss-check` 实测逐字命中）。新增 68 项测试，pro_runner **396 checks, 0 failed**
+  （RESULT: PASS）。
+
+### Fixed（C 侧 · verify.ps1 全量验收脚本）
+
+- **相对 `-OutDir` 在任何 `Push-Location` 之前锚定为绝对路径**：修复第 7 节
+  `Push-Location $repoRoot` 后 `neg*.o` 输出路径解析到不存在目录、gcc 无法创建
+  输出而失败的环境性问题——该失败此前被 neg1/neg2「非零 = 预期拒绝」判定掩盖
+  成通过。
+- **三条负向编译 verdict 携带 gcc 退出码与 stderr 摘要**：失败自述原因，不再静默。
+- **文件存为 UTF-8 with BOM**：BOM-less 时 PowerShell 5.1 在 zh-CN 系统按 CP936
+  解码，新增中文注释行的多字节标点会吞掉后续字节（含换行）破坏解析结构（实测
+  解析错误「意外的标记 }」，二分定位到 5 行）；加 BOM 后按 UTF-8 正确解码，与
+  注释内容无关——根治存量隐患。
+- 复验：三种调用模式（默认绝对 OutDir / 仓库根相对 OutDir / ProTEXT 目录相对
+  OutDir）verify.ps1 全部 **31 passed, 0 failed**；两道门禁复跑 exit 0。
+
+### Added（JS 侧 · JS/128KB · 组件 v2.2.0，首个组件版本记录）
+
+- **深度压缩管线**并入 `test/build-kernel.js --minify` 唯一重建入口：
+  `core_kernel.js` **175 142 → 57 523 B**（压缩率 **67.2%**，越过 > 50% 目标，
+  低于 ~87.6 KB 冲刺线；预算 131 072 B）。
+- **terser 两段式压缩**（实测依据：terser 以 `module: true` 解析整文件时顶层符号
+  按 ESM 语义非 global，即使 `mangle.toplevel: false` 也会改写顶层名——实测
+  36 747 B 但压缩体 eval 回归无法按名运行）：(a) 内核体按经典 script 压缩且
+  `mangle.toplevel: false`，顶层名全保留；(b) EXPORT_BLOCK 单独按 module 压缩
+  （其自由引用为 undeclared 符号不会改写，`mangle.properties` 默认关闭 → 对象
+  属性名原样）。两段拼接后 `export default` 契约不变，压缩体可做全量 eval 回归。
+- **回退路径**：terser require 失败或压缩异常时自动改用内置词法级剥离器（同入口、
+  同全量校验）：单遍逐态扫描字符串/模板串（状态栈处理 `${}` 插值内回到代码态）/
+  正则字面量（经典 prev-token 启发式：return/typeof/new 等关键字后允许，标识符/
+  数字/字符串/)/]/++/-- 后视为除号）/注释边界，绝不盲目正则去注释；token 文本
+  逐字零改写、原换行位置一律保留换行符（ASI/restricted production 零改动）、
+  行内空白仅在相邻 token 可能粘连成词或合字成运算符（++/--/=>/<=）时保留一个
+  空格、未闭合一律 throw fail-fast；已通过 16 项词法边界单测。回退实测
+  175 142 → 79 435 B（**54.6%**），同样达标——无 terser/无网络环境用同一命令
+  仍可复现（已做 node_modules 移走演练验证）。
+
+### Added（版本管理 · 双轨制落地）
+
+- **全局 Tag + 组件独立 VERSION 双轨制**：`C/128KB-ProTEXT/VERSION` v1.3.5 →
+  **v1.4.0**（Pro 层新增特性按 semver minor 递进）；`JS/128KB/VERSION` 新建为
+  **v2.2.0**（JS 侧首个组件版本记录，与本次全局版本节点对齐）。
+- **组件细分 CHANGELOG**：新建 `C/128KB-ProTEXT/CHANGELOG.md` 与
+  `JS/128KB/CHANGELOG.md`，自组件视角记录；C 侧写明组件 v1.4.0 与全局 v2.2.0
+  的对应关系。
+- **根 README 版本对照表改造为双轨制**：新增「全局版本节点 (Global Tag)」与
+  「组件版本 (Component Version)」两列，一眼分清全局 Tag 与组件版本是两个口径。
+
+### 测试口径
+
+- C 侧：verify.ps1 三种调用模式 **31 passed, 0 failed**；`bss-check` 三门禁
+  42640 / 42608 / 39408 逐字命中；pro_runner **396 checks, 0 failed**（基线 328
+  + Groebner 68）。
+- JS 侧：12 测试文件 **TOTAL: 603 pass, 0 fail**；重建命令
+  `node test/build-kernel.js --minify`（JS/128KB 目录下）实跑输出末行
+  **BUILD OK, all tests passed**，57 523 B / 预算 131 072 B。
+
 ## v2.1.0 (2026-10-27)
 
 C 侧 Pro 层按设计说明的高价值项（④⑤）落地两大能力。

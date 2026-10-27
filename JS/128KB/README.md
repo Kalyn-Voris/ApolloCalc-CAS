@@ -2,6 +2,10 @@
 
 JS 64KB 的扩展版本，堆限制 128KB，在保持 Zero-GC 铁律的前提下支持更多功能。设计文档见 [docs/js-128kb.md](../../docs/js-128kb.md)。
 
+组件版本：**v2.2.0**（见 [VERSION](VERSION) 与 [CHANGELOG.md](CHANGELOG.md)；
+双轨制自 v2.2.0 起——全局版本节点是仓库级 Tag，见根 [CHANGELOG.md](../../CHANGELOG.md)，
+两者是不同口径）。
+
 ## 相对 64KB 的新增功能（Tier 2）
 
 - 五分量精确形式（(rat + radNum·√rad)/den × 10^exp，替代三分量，支持科学计数法）
@@ -55,8 +59,24 @@ JS/128KB/
 ## 构建方式
 
 ```bash
-node test/build-kernel.js     # 生成 src/core_kernel.js 并跑 83 项回归
+node test/build-kernel.js --minify   # 唯一重建入口：生成压缩版 src/core_kernel.js 并跑全量回归
 ```
+
+### 压缩管线（v2.2.0）
+
+- `--minify` 是 `core_kernel.js` 的唯一重建入口：**175 142 → 57 523 B**（压缩率
+  67.2%，越过 > 50% 目标；预算 131 072 B）。
+- 主路径 **terser 两段式**：(a) 内核体按经典 script 压缩、`mangle.toplevel: false`
+  （顶层名全保留）；(b) EXPORT_BLOCK 单独按 module 压缩（`mangle.properties` 默认
+  关闭，对象属性名原样）。两段拼接后 `export default` 契约不变，压缩体可做全量
+  eval 回归。
+- **回退路径**：terser 不可用（未安装/无网络）时自动改用内置词法级剥离器——同
+  入口、同全量校验：逐态扫描字符串/模板串（状态栈处理 `${}` 插值）/正则字面量
+  （prev-token 启发式）/注释边界，绝不盲目正则去注释；token 文本逐字零改写、
+  原换行位置一律保留（ASI/restricted production 零改动）、未闭合一律 fail-fast，
+  16 项词法边界单测。实测 175 142 → 79 435 B（54.6%），同样达标。
+- 测试口径：12 测试文件 **603 pass, 0 fail**。组件细分记录见
+  [CHANGELOG.md](CHANGELOG.md)。
 
 ## 测试
 
