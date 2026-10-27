@@ -1,4 +1,4 @@
-# C/128KB-ProTEXT · Pro v1.3.5 落地说明
+# C/128KB-ProTEXT · Pro v1.4.0 落地说明
 
 > **基线**：ApolloCalc-CAS v1.1.0（`C/128KB/`，C99 / Zero-GC / 全静态分配）
 > **上游状态**：`C/128KB/` **零改动**（`git status --porcelain -- C/128KB` 输出为空）
@@ -6,6 +6,9 @@
 > **v1.2 范围**：阶段一（修上游门禁缺陷）+ 阶段二（Pro union + 起手三件套 B1/A4/A6）+ 阶段三（验证与对拍）
 > **v1.3 增量**：方向 A 多变量层（A1 GCD / A2 因式分解 / A3 结式），复用同一块 union
 > **v1.3.5 增量**：A5 实特征向量 + Hotelling 收缩 deflation、B2 符号积分（64 项表 + 一层分部积分）
+> **v1.4.0 增量**（组件版本，对应全局版本节点 v2.2.0）：2 变量 Groebner 基（M4GB 逐对归约，
+> lex，deg ≤ 4，膨胀熔断）+ `verify.ps1` 三处修复；gb 视图 1888 B 被 sparse 峰值完全吸收，
+> `.bss` 零增长（内核口径 42 608 B），详见 [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -458,6 +461,31 @@ mv − eig                 = 96        ← eig 完全被吸收
 
 ---
 
+## 3B. v1.4.0：2 变量 Groebner 基
+
+组件版本 v1.3.5 → **v1.4.0**（Pro 层新特性按 semver minor 递进），对应全局版本节点
+v2.2.0——全局 Tag 与组件版本是两个口径，不必同号。组件细分记录见
+[CHANGELOG.md](CHANGELOG.md)。
+
+- **算法**：M4GB 逐对归约，lex 序，deg ≤ 4，膨胀熔断。
+- **内存**：gb 视图 1888 B（≤ 1960 预算线），被 sparse 峰值 3 848 B 完全吸收，
+  **`.bss` 零增长**——「union 吸收」判据的又一次兑现。
+- **账本**：内核口径 42 608 B / runner 口径 42 640 B / 上游对照 39 408 B
+  （`bss-check` 实测逐字命中）。
+- **校验**：pro_runner **396 checks, 0 failed**（新增 68 项测试）+ RESULT: PASS。
+- **验收脚本 `verify.ps1` 三处修复**：① 相对 `-OutDir` 在任何 `Push-Location`
+  之前锚定为绝对路径（第 7 节 `neg*.o` 曾解析到不存在目录，且被 neg1/neg2 的
+  「非零 = 预期拒绝」判定掩盖成通过）；② 负向编译 verdict 携带 gcc 退出码与
+  stderr 摘要；③ 文件存为 UTF-8 with BOM（BOM-less 时 PowerShell 5.1 在 zh-CN
+  按 CP936 解码，中文注释多字节标点吞字节破坏解析结构）。三种调用模式全部
+  **31 passed, 0 failed**，两道门禁复跑 exit 0。
+
+> 本节为 v1.4.0 增量；第 0–4 节的 41 456 B / 259 checks 等数字是 v1.3.5 时点快照
+> （v2.1.0 稀疏求解/定点小数与当前账本见 [CHANGELOG.md](CHANGELOG.md) 与根
+> CHANGELOG 的 v2.1.0 / v2.2.0 条目）。
+
+---
+
 ## 4. 阶段三：验证与对拍
 
 ### 4.1 `.bss` 三层账本
@@ -587,4 +615,4 @@ $ git diff --stat -- C/128KB
 
 ---
 
-*文档版本：v1.3.5 · 基线 ApolloCalc-CAS v1.1.0 · Pro v1.3.5 · 实测 `.bss` 41456 B / 36.15%*
+*文档版本：v1.4.0 · 基线 ApolloCalc-CAS v1.1.0 · Pro v1.4.0（全局 v2.2.0）· 实测 `.bss` 42608 B / 37.15%*
