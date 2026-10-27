@@ -3,6 +3,50 @@
 本项目的所有重要变更记录于此。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循 [语义化版本](https://semver.org/)。
 
+## v2.1.0 (2026-10-27)
+
+C 侧 Pro 层按设计说明的高价值项（④⑤）落地两大能力。
+开发方式：双 Git worktree 并行（`feat/sparse-linsolve` / `feat/precision-decimal`），
+骨架由幂等生成器 `tools/scaffold_v2_1_0.py` 产出，多代理工作流自动执行分支门禁、
+合并与全量回归；合并冲突面收敛在 Makefile / ac_pro.h / ac_pro_scratch.h /
+test_pro_runner.c / verify.ps1 五文件并集解决。上游 `C/128KB/` 逐字节未动，
+JS 侧零改动。
+
+### Added（C 侧 · C/128KB-ProTEXT）
+
+- **稀疏线性方程组**（`src/ac_pro_sparse.c`）：`ac_pro_sparse_solve(n, nnz, tri_r,
+  tri_c, tri_v, rhs)` 接受**三元组**输入（顺序任意、重复坐标求和合并、精确 0 丢弃），
+  内部完成 CSR 压缩（计数排序 + 行内排序 + 同列合并）、阈值主元消元（τ = 0.1，
+  候选中取行非零元最少者，主元 ≥ max(τ·pmax, 1e-12)）与回代；32 格稠密散射行
+  迭代更新，无递归/无 malloc/无 VLA。能力边界 n ≤ 32、nnz ≤ 320，**填充与输入
+  共享 320 总容量，绝不静默丢填充**。错误码走返回值（零静态存储通道——任何
+  static 对象都会让 TU 净增 32 B `.bss`，直接破坏门禁）：OK 1 / EN −1 / ENNZ −2 /
+  EPIVOT −3 / ESING −4 / EFILL −5 / EINDEX −6；结果经 `ac_pro_sparse_x/rhs/perm`
+  访问器读取。sparse 视图 3 848 B 成为 Pro union 新峰值。12 用例 35 项测试
+  （[case SP-1..12]，期望值 node 离线核算后以常量写入，随机稠密对照组与 C 逐位一致）。
+- **任意精度定点十进制**（`src/ac_pro_bigdec.c`）：value = m·10^(−scale)，m 为上游
+  `ac_bigint_t`（基数 1e9、20 limb、180 位十进制容量），标度 int32 ±2^31。
+  窄接口 `ac_pro_dec_parse` / `ac_pro_dec_render`（5 槽）+ 宽接口
+  `ac_pro_dec_add/sub/mul/div`（字符串出入、规范形输出）。加减带 NINES(10^180−1)
+  进位预检——上游 `bi_mag_add` 收尾进位是静默截弃契约，|ta|+|tb| == 10^180 的
+  精确特例落 (1, s−180)；除法走 divmod 余数扩标长除（R ≠ 0 返 INEXACT 截断近似，
+  Q = 0 且 R ≠ 0 返 EOVER 熔断）；解析超 180 有效位（EDIGITS）与乘积尾数超容量
+  （EOVER）均熔断——**绝不返回错值**。只调用上游公开 `ac_bi_*` 纯函数 API，
+  不触碰 `g_bi_*` 草稿池。dec 视图 5 × 96 B = 480 B 完全吸收进 Pro union，
+  **`.bss` 零增长**。12 项测试（[case BD-1..12]，期望值 node BigInt 离线核算；
+  开发中自抓并修复解析 span 公式与 limb 分块右对齐两处缺陷，均被用例钉住）。
+- **骨架生成器**（`tools/scaffold_v2_1_0.py`）：幂等 Python 生成器，产出两特性
+  的 TU/测试骨架与 Makefile 接线（真实 API 落地后骨架探针按既定计划整体取代）。
+
+### 测试口径
+
+- C 侧：`pro_runner.exe` **328 checks, 0 failed**（基线 281 + 稀疏 35 + 定点小数 12）；
+  `bss-check` 三门禁精确命中（kernel **42608** / runner **42640** / upstream 39408），
+  账本 38 672 + 80 + 3 848（sparse 峰值）+ 8 = 42 608（研究估算 42 684，实际更省）；
+  退化对拍 38 672 B 不变；`verify.ps1` 全量验收通过（v2.1.0 banner，含 SP/BD 覆盖段）。
+- JS 侧：12 个测试文件 **603 pass, 0 fail** 不变（本迭代纯 C 侧）；
+  `build-kernel.js` 83 项回归 + 78 标识符扫描 + 43 项 ESM 冒烟复核通过。
+
 ## v2.0.0 (2026-10-26)
 
 双侧同步的多变量引擎升级：C 侧 Pro 层三项能力以零 `.bss` 增长落地，

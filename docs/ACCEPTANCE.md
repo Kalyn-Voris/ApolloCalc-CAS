@@ -11,7 +11,7 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 | JS 128KB | ✅ 已完成（v2.0.0） | 603（各套件合计，见下）+ 83 回归 + 43 ESM 接线 | [js-128kb.md](js-128kb.md) |
 | C 64KB | ✅ 已完成（v1.0.0） | 565（默认）/ 578（`LUT=1`） | [c99-64kb.md](c99-64kb.md) |
 | C 128KB | ✅ 已完成（v1.1.0，冻结） | 1171（默认）/ 1184（`LUT=1`） | [c99-128kb.md](c99-128kb.md) |
-| C 128KB-ProTEXT | ✅ 已完成（v2.0.0） | 281（`pro_runner.exe`，含上游回归） | 设计说明 |
+| C 128KB-ProTEXT | ✅ 已完成（v2.1.0） | 328（`pro_runner.exe`，含上游回归） | 设计说明 |
 
 **JS 128KB 测试明细**（实测，`node test/<suite>.js`）：
 
@@ -34,9 +34,10 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 另：`build-kernel.js` 拼接 12 文件后跑 83 项回归（evaluator 41 + solvers 42）+
 静态声明扫描 78/78 + ESM 导出链路 43/43。
 
-**C 128KB-ProTEXT 校验口径**（v2.0.0）：基线 259（上游回归 + B1/A4/A6/A1-A3/A5/B2）
-+ 多变量符号求导 12 + 多变量积分 10 = **281 checks, 0 failed**；
-`bss-check` 三门禁精确命中（kernel 41456 / runner 41488 / upstream 39408），
+**C 128KB-ProTEXT 校验口径**（v2.1.0）：基线 281（v2.0.0：上游回归 + B1/A4/A6/A1-A3/A5/B2
+259 + 多变量符号求导 12 + 多变量积分 10）+ 稀疏线性求解 35（[case SP-1..12]）
++ 任意精度定点小数 12（[case BD-1..12]）= **328 checks, 0 failed**；
+`bss-check` 三门禁精确命中（kernel 42608 / runner 42640 / upstream 39408），
 退化对拍 38672 B。
 
 **JS 64KB 测试明细**：`test-evaluator.js` 41 + `test-solvers.js` 40（单跑）/ 39（build-kernel 口径）
@@ -112,7 +113,7 @@ cd C/128KB && nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wr
 | JS 128KB（v2.0.0） | 22 416 B ≈ **21.9 KiB**（11 992 + multivar 10 208 + matrix 216 + special 0） | 96 KB | `byteLength` 加总（见 js-128kb.md） |
 | C 64KB | 10576 B ≈ 10.3 KB | 48 KB | `size` 的 `.bss` |
 | C 128KB（v1.1.0） | 39408 B ≈ **38.48 KiB / 39.4 KB** | 96 KB | `size` 的 `.bss` |
-| C 128KB-ProTEXT（v2.0.0） | 41456 B ≈ **40.48 KiB** | 112 KiB | `size pro_kernel.exe` 的 `.bss`（38 672 上游内核 + 80 + 2 688 + 16；sin/cos LUT 已迁 `.rdata`，迁出收益 16 416 B） |
+| C 128KB-ProTEXT（v2.1.0） | 42608 B ≈ **41.61 KiB** | 112 KiB | `size pro_kernel.exe` 的 `.bss`（38 672 上游内核 + 80 + 3 848 sparse 峰值 + 8；sin/cos LUT 已迁 `.rdata`，dec 视图 480 B 完全吸收） |
 
 C 128KB 分段（`size test_runner.exe`）：
 
@@ -148,13 +149,13 @@ C 128KB 的主要占用（v1.1.0 实测 `nm --size-sort`）：符号节点池 `g
 - **C 64KB**：MCU 入门版（Cortex-M4 级），含数论 / 进制分数 / CRC/SHA/Base64 工具
 - **C 128KB**：嵌入式 CAS 完整形态（Cortex-M7 / ESP32-S3 级），含大整数 / 矩阵 /
   特殊函数 / 符号求导
-- **C 128KB-ProTEXT（v2.0.0）**：冻结上游之上的 Pro 层——多变量 GCD/因式分解/结式、
+- **C 128KB-ProTEXT（v2.1.0）**：冻结上游之上的 Pro 层——多变量 GCD/因式分解/结式、
   LU、实特征向量、隐函数求导、高次数值求根、符号积分、多变量符号求导/积分、
-  LUT 常量表化，`.bss` 41 456 B
+  LUT 常量表化、稀疏线性方程组（n≤32）、任意精度定点小数（180 位），`.bss` 42 608 B
 
 ## 验收结论
 
 四版本 + Pro 层均达到各自的验收标准：编译零警告、测试全绿、`nm` 无堆符号
 （JS 侧 `allocCount`/`--expose-gc` 探针等价验证）、跨版本数值 100% < 1e-9。
-C 64KB 与 C 128KB 具备 v1.0.0/v1.1.0 发布条件；C 128KB-ProTEXT 与 JS 128KB
-具备 **v2.0.0** 发布条件。
+C 64KB 与 C 128KB 具备 v1.0.0/v1.1.0 发布条件；JS 128KB 具备 v2.0.0 发布条件；
+C 128KB-ProTEXT 具备 **v2.1.0** 发布条件。

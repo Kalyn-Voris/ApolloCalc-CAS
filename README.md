@@ -12,17 +12,21 @@
 | [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ v2.0.0 | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + **多变量多项式与符号求导/矩阵基础运算/特殊函数**，见 [docs/js-128kb.md](docs/js-128kb.md) |
 | [C/64KB](C/64KB/) | 64KB | C99 | ✅ 已完成 | 对等 JS/64KB + 数论/进制分数/工具层三个 C 独有优势，见 [docs/c99-64kb.md](docs/c99-64kb.md) |
 | [C/128KB](C/128KB/) | 128KB | C99 | ✅ 已完成 | 对等 JS/128KB + 大整数/矩阵/特殊函数/符号求导四个 C 独有优势，见 [docs/c99-128kb.md](docs/c99-128kb.md) |
-| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ v2.0.0 | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分、**多变量符号求导/多变量积分/LUT 常量表化**，`.bss` 41456 B，见设计说明 |
+| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ v2.1.0 | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分、多变量符号求导/多变量积分/LUT 常量表化、**稀疏线性方程组 (n≤32)/任意精度定点小数 (180 位)**，`.bss` 42608 B，见设计说明 |
 
-**当前版本：v2.0.0（2026-10-26）** — 双侧同步的多变量引擎升级：
+**当前版本：v2.1.0（2026-10-27）** — C 侧 Pro 层两大高价值能力落地（基于
+设计说明 ④⑤ 项，双 Git worktree 并行开发）：
 
-- **C 侧（C/128KB-ProTEXT）**：多变量符号求导（`ac_pro_diff_multi`）与多变量
-  多项式积分（`ac_pro_integrate_multi`，精确整除约束）以**零 `.bss` 增长**落地
-  （复用 mv 项池槽 0/1）；sin/cos LUT 经包装层迁为 `const` 预计算表（`.bss`
-  迁出收益 16 416 B，门禁 41456 B 不变）。281 项测试全绿，退化对拍 38672 B。
-- **JS 侧（JS/128KB）**：`core_multivar.js`（194 项测试）+ 新增 `core_matrix.js`
-  （39 项测试）与 `core_special.js`（33 项测试，erf/gamma/lgamma 零分配），
-  12 文件内核拼接 + 浏览器经典脚本通道验证；12 个测试文件 603 pass, 0 fail。
+- **稀疏线性方程组（n ≤ 32）**：`ac_pro_sparse_solve` 三元组输入 → CSR 压缩 →
+  阈值主元消元（τ = 0.1）→ 回代；填充与输入共享 nnz ≤ 320 总容量，绝不静默
+  丢弃；错误码走返回值，结果经 `ac_pro_sparse_x/rhs/perm` 访问器读取。35 项测试。
+- **任意精度定点小数（180 位）**：`ac_pro_dec_add/sub/mul/div`（value = m·10^(−scale)，
+  m 为 20 limb 大整数、标度 ±2^31），复用上游 alias-safe 大整数四则；dec 视图
+  480 B 完全吸收进 Pro union——**`.bss` 零增长**。12 项测试。
+- **账本**：`pro_runner` 328 checks, 0 failed；`.bss` 41 456 → **42 608 B**
+  （sparse 视图 3 848 B 成为 Pro union 新峰值，涨幅远小于研究估算 42 684 B）；
+  退化对拍 38672 B 不变，上游 `C/128KB/` 零改动。JS 侧 12 文件 603 pass 不变
+  （本迭代纯 C 侧）。
 
 详见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -43,7 +47,7 @@
 | JS 128KB | —（TypedArray 静态池 22.4 KB，含 multivar/matrix） | 128KB | — |
 | C 64KB | **10,576 B（10.33 KiB）** | 48 KB | 21.5% |
 | C 128KB | **39,408 B（38.48 KiB / 39.4 KB）** | 96 KB | **40.1%** |
-| C 128KB-ProTEXT | **41,456 B（40.48 KiB）** | 112 KiB | **36.15%** |
+| C 128KB-ProTEXT | **42,608 B（41.61 KiB）** | 112 KiB | **37.15%** |
 
 > C 128KB 的 v1.1.0 极简内存数据：**39.4 KB `.bss`，比 v1.0.0 的 57.64 KB 少 19,616 B（−33.24%）**，
 > `.data + .bss` 合计 39,680 B（38.75 KiB）。详见 [C/128KB/README.md](C/128KB/README.md) 与
@@ -64,11 +68,12 @@ ApolloCalc-CAS/
 └── C/
     ├── 64KB/            C99 对等实现（已完成 v1.0.0）
     ├── 128KB/           C99 增强版（已完成 v1.0.0，冻结）
-    └── 128KB-ProTEXT/   C99 Pro 层（v2.0.0）：冻结上游内核，叠加多变量 GCD /
+    └── 128KB-ProTEXT/   C99 Pro 层（v2.1.0）：冻结上游内核，叠加多变量 GCD /
                          有理根因式分解 / Sylvester 结式 / LU 分解 / 实特征向量
                          (Hotelling deflation) / 隐函数求导 / 高次数值求根 /
                          符号积分 / 多变量符号求导 / 多变量积分 /
-                         LUT 常量表化；`.bss` 41456 B，上游零改动
+                         LUT 常量表化 / 稀疏线性方程组 (n≤32) /
+                         任意精度定点小数 (180 位)；`.bss` 42608 B，上游零改动
 ```
 
 ## 快速开始
@@ -104,13 +109,13 @@ node ../../tests/bench/js-smoke.js  > ../../tests/bench/js-smoke.csv
 node ../../tests/bench/diff-smoke.js    # C vs JS 跨版本比对 → SMOKE-DIFF.md
 ```
 
-### C99 Pro（v2.0.0，多变量引擎 + 零 `.bss` 增长）
+### C99 Pro（v2.1.0，稀疏求解 + 任意精度小数）
 
 ```bash
 cd C/128KB-ProTEXT
 mingw32-make            # 编译 pro_runner（cmd 直接可用；Git Bash 下加 SHELL=cmd.exe）
-./pro_runner.exe        # 281 项测试全绿（含多变量求导/积分）+ Zero-GC --wrap 验证
-mingw32-make bss-check  # .bss 三门禁精确命中：41456 / 41488 / 39408
+./pro_runner.exe        # 328 项测试全绿（含稀疏线性求解/任意精度小数）+ Zero-GC --wrap 验证
+mingw32-make bss-check  # .bss 三门禁精确命中：42608 / 42640 / 39408
 ```
 
 ## 测试
@@ -148,10 +153,10 @@ mingw32-make bss-check  # .bss 三门禁精确命中：41456 / 41488 / 39408
 
 四个 stage 全部落在 ±3% 噪声带内；solve/exact 有小幅提速（工作集收缩 → 缓存局部性改善）。
 
-> **口径注记（v2.0.0）**：本表描述四基础版本（JS/C99 × 64KB/128KB）。Pro 层与
-> JS v2.0.0 新增能力（多变量求导/积分、矩阵、特殊函数）尚未纳入 100 万次压测
-> 口径，无实测数据即不列数字；C 侧新增功能带零 `.bss` 增长门禁（41456 B，
-> 见 [ACCEPTANCE.md](docs/ACCEPTANCE.md)）。
+> **口径注记（v2.1.0）**：本表描述四基础版本（JS/C99 × 64KB/128KB）。Pro 层与
+> JS v2.0.0 起新增能力（多变量求导/积分、矩阵、特殊函数、稀疏求解、定点小数）
+> 尚未纳入 100 万次压测口径，无实测数据即不列数字；C 侧 Pro 层带 `.bss` 精确
+> 相等门禁（当前 42 608 B，见 [ACCEPTANCE.md](docs/ACCEPTANCE.md)）。
 
 > 口径：每 stage 独立 100 万次，池大小按版本门控——64KB 两版过滤掉 30 条 128KB 专属双曲条目，
 > 故 parse/eval 为 220 条，128KB 两版为 250 条；solve 100 条、exact 50 条四版本相同。
