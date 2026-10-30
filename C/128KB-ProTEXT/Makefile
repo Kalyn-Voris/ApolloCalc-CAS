@@ -194,8 +194,13 @@ all: pro_runner
 
 # 对外目标名：pro_runner（产物文件名带 .exe）。phony 入口以 -j$(JOBS) 递归自呼实现
 # 对象编译并行；`+` 前缀标记递归 make。
+# E9：两入口共享同一递归配方，一次 make 内对象编译与 EXE/KEXE 两条链接全部并行
+# （KEXE 链接不再等 EXE 串行完成）。语义注记：`make pro_runner` 也会构建
+# pro_kernel.exe（对象与链接本就共享，单独造一半没有意义）；验收链路
+# （verify.ps1 / measure）恒以 `pro_runner kernel` 双目标调用，配方第二次
+# 执行为全量 up-to-date 的 no-op。
 pro_runner:
-	+$(MAKE) -j$(JOBS) $(EXE)
+	+$(MAKE) -j$(JOBS) $(EXE) $(KEXE)
 	@echo "[build] $(EXE) ready"
 
 $(EXE): $(OBJS_SRC) $(OBJS_TEST)
@@ -203,7 +208,7 @@ $(EXE): $(OBJS_SRC) $(OBJS_TEST)
 
 # 内核口径构建：16 上游包装 TU + Pro 增量 + trivial main（零静态）
 kernel:
-	+$(MAKE) -j$(JOBS) $(KEXE)
+	+$(MAKE) -j$(JOBS) $(EXE) $(KEXE)
 	@echo "[build] $(KEXE) ready"
 
 $(KEXE): $(OBJS_SRC) $(OBJS_KMAIN)
