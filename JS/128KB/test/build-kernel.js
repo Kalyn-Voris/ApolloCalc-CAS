@@ -254,7 +254,7 @@ function startTerser() {
   return terser.minify(kernelBody + "\n" + EXPORT_BLOCK, {
     ecma: 2015,
     module: true,
-    compress: { passes: 2, toplevel: true, unsafe_arrows: true },
+    compress: { passes: 2, toplevel: true, unsafe_arrows: true, pure_getters: true, keep_fargs: false },
     mangle: { toplevel: true },
     format: { comments: false }
   }).then(function (r1) {
