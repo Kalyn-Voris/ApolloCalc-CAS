@@ -125,15 +125,17 @@ DEXE   := $(OUTDIR)/degraded/pro_kernel.exe
 # degraded 三个链接里各编译一遍（~90 次 TU 编译/全量验收）。拆 .o 后：
 #   · SRC 对象在 runner 与 kernel 口径间共享（同 CFLAGS，逐 TU 只编译一次）；
 #   · degraded 因 -DAC_PRO_DEGRADED=1 代码生成不同，独立对象集 objdeg；
-#   · 对外 phony 目标以 -j8 递归自呼实现对象编译并行（见下）。
+#   · 对外 phony 目标以 -j$(JOBS) 递归自呼实现对象编译并行（见下）。
 # CFLAGS 变量逐字未动（.bss 账本与编译开关绑定）；配方额外追加 -MMD -MP 只产出
 # 依赖文件、不影响代码生成——.o 缓存引入的陈旧风险由 depfile 对冲（头文件变更
 # 会触发重编）。链接命令的 $^ 顺序与原规则一致，产物内容等价。
 #
 # 并行化说明：GNU make 不认可 makefile 内 MAKEFLAGS 赋值携带的 -j（实测对当前
-# 实例无效、只传子 make），故在 pro_runner / kernel 入口配方里 -j8 递归自呼。
+# 实例无效、只传子 make），故在 pro_runner / kernel 入口配方里 -j$(JOBS) 递归自呼。
 # `make pro_runner kernel` 两个递归顺序执行，obj 缓存使第二个仅剩链接；命令行
 # 变量（OUTDIR/SHELL）经 MAKEFLAGS 自动透传给子 make，无需重述。
+# 并行度取逻辑核数（Windows 环境变量自带；异常缺失时回退 8 档）。
+JOBS := $(if $(NUMBER_OF_PROCESSORS),$(NUMBER_OF_PROCESSORS),8)
 OBJDIR    := $(OUTDIR)/obj
 DEGOBJDIR := $(OUTDIR)/objdeg
 
@@ -147,16 +149,16 @@ $(OBJDIR)/src $(OBJDIR)/test $(DEGOBJDIR)/src $(DEGOBJDIR)/test:
 	@if not exist "$@" mkdir "$@"
 
 $(OBJDIR)/src/%.o: src/%.c | $(OBJDIR)/src
-	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) -pipe -MMD -MP -c $< -o $@
 
 $(OBJDIR)/test/%.o: test/%.c | $(OBJDIR)/test
-	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) -pipe -MMD -MP -c $< -o $@
 
 $(DEGOBJDIR)/src/%.o: src/%.c | $(DEGOBJDIR)/src
-	$(CC) $(CFLAGS) -DAC_PRO_DEGRADED=1 -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) -DAC_PRO_DEGRADED=1 -pipe -MMD -MP -c $< -o $@
 
 $(DEGOBJDIR)/test/%.o: test/%.c | $(DEGOBJDIR)/test
-	$(CC) $(CFLAGS) -DAC_PRO_DEGRADED=1 -MMD -MP -c $< -o $@
+	$(CC) $(CFLAGS) -DAC_PRO_DEGRADED=1 -pipe -MMD -MP -c $< -o $@
 
 -include $(OBJS_SRC:.o=.d) $(OBJS_TEST:.o=.d) $(OBJS_KMAIN:.o=.d) \
          $(DEGOBJS_SRC:.o=.d) $(DEGOBJS_KMAIN:.o=.d)
@@ -190,10 +192,10 @@ UP_BSS_ACTUAL     = $(word 9,$(shell size $(UP_EXE)))
 
 all: pro_runner
 
-# 对外目标名：pro_runner（产物文件名带 .exe）。phony 入口以 -j8 递归自呼实现
+# 对外目标名：pro_runner（产物文件名带 .exe）。phony 入口以 -j$(JOBS) 递归自呼实现
 # 对象编译并行；`+` 前缀标记递归 make。
 pro_runner:
-	+$(MAKE) -j8 $(EXE)
+	+$(MAKE) -j$(JOBS) $(EXE)
 	@echo "[build] $(EXE) ready"
 
 $(EXE): $(OBJS_SRC) $(OBJS_TEST)
@@ -201,7 +203,7 @@ $(EXE): $(OBJS_SRC) $(OBJS_TEST)
 
 # 内核口径构建：16 上游包装 TU + Pro 增量 + trivial main（零静态）
 kernel:
-	+$(MAKE) -j8 $(KEXE)
+	+$(MAKE) -j$(JOBS) $(KEXE)
 	@echo "[build] $(KEXE) ready"
 
 $(KEXE): $(OBJS_SRC) $(OBJS_KMAIN)
