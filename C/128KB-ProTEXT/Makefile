@@ -120,6 +120,47 @@ EXE    := $(OUTDIR)/pro_runner.exe
 KEXE   := $(OUTDIR)/pro_kernel.exe
 DEXE   := $(OUTDIR)/degraded/pro_kernel.exe
 
+# ---- 构建调度：编译一次、链接两次 + 对象级并行 ----
+# 原规则每个目标一次性 gcc -o $@ $^，同一批 TU 在 pro_runner / pro_kernel /
+# degraded 三个链接里各编译一遍（~90 次 TU 编译/全量验收）。拆 .o 后：
+#   · SRC 对象在 runner 与 kernel 口径间共享（同 CFLAGS，逐 TU 只编译一次）；
+#   · degraded 因 -DAC_PRO_DEGRADED=1 代码生成不同，独立对象集 objdeg；
+#   · 对外 phony 目标以 -j8 递归自呼实现对象编译并行（见下）。
+# CFLAGS 变量逐字未动（.bss 账本与编译开关绑定）；配方额外追加 -MMD -MP 只产出
+# 依赖文件、不影响代码生成——.o 缓存引入的陈旧风险由 depfile 对冲（头文件变更
+# 会触发重编）。链接命令的 $^ 顺序与原规则一致，产物内容等价。
+#
+# 并行化说明：GNU make 不认可 makefile 内 MAKEFLAGS 赋值携带的 -j（实测对当前
+# 实例无效、只传子 make），故在 pro_runner / kernel 入口配方里 -j8 递归自呼。
+# `make pro_runner kernel` 两个递归顺序执行，obj 缓存使第二个仅剩链接；命令行
+# 变量（OUTDIR/SHELL）经 MAKEFLAGS 自动透传给子 make，无需重述。
+OBJDIR    := $(OUTDIR)/obj
+DEGOBJDIR := $(OUTDIR)/objdeg
+
+OBJS_SRC      := $(patsubst src/%.c,$(OBJDIR)/src/%.o,$(SRC))
+OBJS_TEST     := $(patsubst test/%.c,$(OBJDIR)/test/%.o,$(TEST_SRC))
+OBJS_KMAIN    := $(patsubst test/%.c,$(OBJDIR)/test/%.o,$(KERNEL_MAIN))
+DEGOBJS_SRC   := $(patsubst src/%.c,$(DEGOBJDIR)/src/%.o,$(SRC))
+DEGOBJS_KMAIN := $(patsubst test/%.c,$(DEGOBJDIR)/test/%.o,$(KERNEL_MAIN))
+
+$(OBJDIR)/src $(OBJDIR)/test $(DEGOBJDIR)/src $(DEGOBJDIR)/test:
+	@if not exist "$@" mkdir "$@"
+
+$(OBJDIR)/src/%.o: src/%.c | $(OBJDIR)/src
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(OBJDIR)/test/%.o: test/%.c | $(OBJDIR)/test
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(DEGOBJDIR)/src/%.o: src/%.c | $(DEGOBJDIR)/src
+	$(CC) $(CFLAGS) -DAC_PRO_DEGRADED=1 -MMD -MP -c $< -o $@
+
+$(DEGOBJDIR)/test/%.o: test/%.c | $(DEGOBJDIR)/test
+	$(CC) $(CFLAGS) -DAC_PRO_DEGRADED=1 -MMD -MP -c $< -o $@
+
+-include $(OBJS_SRC:.o=.d) $(OBJS_TEST:.o=.d) $(OBJS_KMAIN:.o=.d) \
+         $(DEGOBJS_SRC:.o=.d) $(DEGOBJS_KMAIN:.o=.d)
+
 # ---- .bss 门禁常量 ----
 # v2.1.0：42608 = 38672（上游 16 模块内核口径）+ 80（g_var_val）+ 3848（Pro union，
 #                 峰值视图 sparse，v2.1.0 方向④）
@@ -149,20 +190,21 @@ UP_BSS_ACTUAL     = $(word 9,$(shell size $(UP_EXE)))
 
 all: pro_runner
 
-# 对外目标名：pro_runner（产物文件名带 .exe）
-pro_runner: $(EXE)
+# 对外目标名：pro_runner（产物文件名带 .exe）。phony 入口以 -j8 递归自呼实现
+# 对象编译并行；`+` 前缀标记递归 make。
+pro_runner:
+	+$(MAKE) -j8 $(EXE)
 	@echo "[build] $(EXE) ready"
 
-$(EXE): $(SRC) $(TEST_SRC)
-	@if not exist "$(OUTDIR)" mkdir "$(OUTDIR)"
+$(EXE): $(OBJS_SRC) $(OBJS_TEST)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lm
 
 # 内核口径构建：16 上游包装 TU + Pro 增量 + trivial main（零静态）
-kernel: $(KEXE)
+kernel:
+	+$(MAKE) -j8 $(KEXE)
 	@echo "[build] $(KEXE) ready"
 
-$(KEXE): $(SRC) $(KERNEL_MAIN)
-	@if not exist "$(OUTDIR)" mkdir "$(OUTDIR)"
+$(KEXE): $(OBJS_SRC) $(OBJS_KMAIN)
 	$(CC) $(CFLAGS) $(KERNEL_LDFLAGS) -o $@ $^ -lm
 
 # ---- .bss 门禁 ----
@@ -192,21 +234,27 @@ degraded-check: $(DEXE)
 	$(if $(filter $(DEGRADED_BSS_EXPECT),$(DEGRADED_BSS_ACTUAL)),,$(error [degraded] FAIL: degraded .bss is $(DEGRADED_BSS_ACTUAL) B, expected $(DEGRADED_BSS_EXPECT) B))
 	@echo "[degraded] PASS: Pro increment is fully compiled out (no g_ac_pro_scratch, no g_var_val)."
 
-$(DEXE): $(SRC) $(KERNEL_MAIN)
-	@if not exist "$(OUTDIR)/degraded" mkdir "$(OUTDIR)/degraded"
+$(DEXE): $(DEGOBJS_SRC) $(DEGOBJS_KMAIN) | $(OUTDIR)/degraded
 	$(CC) $(CFLAGS) -DAC_PRO_DEGRADED=1 $(KERNEL_LDFLAGS) -o $@ $^ -lm
+
+$(OUTDIR)/degraded:
+	@if not exist "$@" mkdir "$@"
 
 # 删除工具：Windows 上 rm 通常不在 PATH（MinGW 未提供 sh/rm），改用 cmd 内建 del。
 # 配方统一加 `-` 前缀忽略「文件不存在」的失败（与上游 C/128KB/Makefile 同风格）。
 ifeq ($(OS),Windows_NT)
-RM = del /Q
+RM    = del /Q
+RMDIR = rmdir /S /Q
 else
-RM = rm -f
+RM    = rm -f
+RMDIR = rm -rf
 endif
 
 clean:
 	-$(RM) $(EXE)
 	-$(RM) $(KEXE)
 	-$(RM) $(DEXE)
+	-$(RMDIR) $(OBJDIR)
+	-$(RMDIR) $(DEGOBJDIR)
 
 .PHONY: all pro_runner kernel bss-check degraded-check clean
