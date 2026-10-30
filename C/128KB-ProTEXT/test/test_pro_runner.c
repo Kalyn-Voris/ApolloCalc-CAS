@@ -802,6 +802,10 @@ pro_multi_tally_t test_integrate_by_parts(void);
 pro_multi_tally_t test_integrate_table(void);
 pro_multi_tally_t test_integrate_budget(void);
 pro_multi_tally_t test_integrate_errors(void);
+pro_multi_tally_t test_integrate_quad_kernels(void);
+pro_multi_tally_t test_integrate_recip_funcs(void);
+pro_multi_tally_t test_integrate_func_powers(void);
+pro_multi_tally_t test_integrate_two_layer(void);
 
 /* v2.0.0：多变量符号求导（test/test_pro_diff_multi.c），同一跨 TU 约定。 */
 pro_multi_tally_t test_diff_multi(void);
@@ -922,11 +926,19 @@ int main(void) {
         pro_multi_tally_t i4 = test_integrate_table();
         pro_multi_tally_t i5 = test_integrate_budget();
         pro_multi_tally_t i6 = test_integrate_errors();
-        t.checks += i1.checks + i2.checks + i3.checks + i4.checks + i5.checks + i6.checks;
-        t.failed += i1.failed + i2.failed + i3.failed + i4.failed + i5.failed + i6.failed;
-        printf("--- v1.3.5 B2 integrate: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
+        pro_multi_tally_t i7 = test_integrate_quad_kernels();
+        pro_multi_tally_t i8 = test_integrate_recip_funcs();
+        pro_multi_tally_t i9 = test_integrate_func_powers();
+        pro_multi_tally_t i10 = test_integrate_two_layer();
+        t.checks += i1.checks + i2.checks + i3.checks + i4.checks + i5.checks + i6.checks
+                  + i7.checks + i8.checks + i9.checks + i10.checks;
+        t.failed += i1.failed + i2.failed + i3.failed + i4.failed + i5.failed + i6.failed
+                  + i7.failed + i8.failed + i9.failed + i10.failed;
+        printf("--- v1.3.5 B2 integrate: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
                i1.checks, i1.failed, i2.checks, i2.failed, i3.checks, i3.failed,
-               i4.checks, i4.failed, i5.checks, i5.failed, i6.checks, i6.failed);
+               i4.checks, i4.failed, i5.checks, i5.failed, i6.checks, i6.failed,
+               i7.checks, i7.failed, i8.checks, i8.failed, i9.checks, i9.failed,
+               i10.checks, i10.failed);
     }
 
     /* v2.0.0：多变量符号求导（test/test_pro_diff_multi.c） */

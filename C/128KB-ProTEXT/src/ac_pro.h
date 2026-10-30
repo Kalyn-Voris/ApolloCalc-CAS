@@ -314,21 +314,24 @@ double         ac_pro_eig_value(int k);
 const double  *ac_pro_eig_vector(int k);
 int            ac_pro_eig_count(void);
 
-/* ==================== v1.3.5 B2：符号积分（表匹配 + 一层分部积分）====================
+/* ==================== v1.3.5 B2：符号积分（表匹配 + 分部积分）====================
+ * v2.3.0 功能 4 修订：表 64 → 128 项（二次核族 / 倒数函数族 / 函数幂与
+ * x^n·f(x) 扩充）；分部积分从「只做一层」改为「固定两层」。
  *
  * 【算法 / Algorithm】
- *   ① 表匹配：64 项标准积分表（static const，落 .rdata，**不占 .bss**）。
+ *   ① 表匹配：128 项标准积分表（static const，落 .rdata，**不占 .bss**）。
  *      输入表达式先做线性替换归一化，再按「函数头 + 线性内层」的模式
  *      逐项匹配，命中即返回原函数。
- *   ② 分部积分：∫u dv = u·v − ∫v du，**只做一层**。当表匹配失败时，
- *      把被积函数拆成 u · dv 两部分，对 ∫v du 再试一次表匹配；仍失败
- *      则直接返回错误码（绝不递归、绝不无限展开）。
+ *   ② 分部积分：∫u dv = u·v − ∫v du，**固定两层**（v2.3.0 功能 4）。
+ *      层数是硬编码上界 2 的递减参数：外层把被积函数拆成 u·dv，对
+ *      ∫v du 允许再做一次分部，之后只查表/多项式，到 0 关死——无同形
+ *      自调用、无层数随输入增长的通路，绝不无限展开。
  *
  * 【节点预算 / Node budget —— 硬约束】
  *   复用上游 g_sym_nodes arena（AC_SYM_MAX_NODES = 512，全局共享）。
  *   进入前必须检查剩余预算：
- *       表匹配路径   ≤ 256 节点
- *       分部积分路径 ≤  96 节点（额外）
+ *       表匹配路径     ≤ 256 节点
+ *       分部积分路径   ≤ 2×96 节点（每层额外，合计 448 ≤ 512）
  *   预算不足时返回 AC_PRO_INT_EBUDGET，**绝不越界写 arena**。
  *   这条检查不是防御性编程的客套 —— g_sym_nodes 是上游 6 个 TU 共享的
  *   单一 arena，越界写会静默破坏其它模块的表达式树。
@@ -344,13 +347,13 @@ int ac_pro_integrate(const char *expr, char *out, int out_len);
 
 #define AC_PRO_INT_OK        0    /* 成功 */
 #define AC_PRO_INT_EPARSE   (-1)  /* 语法错误 / 空输入 / 非法字符 */
-#define AC_PRO_INT_ETABLE   (-2)  /* 64 项积分表未命中（且分部积分也未命中） */
-#define AC_PRO_INT_EBUDGET  (-3)  /* g_sym_nodes 预算不足（表 256 / 分部 96） */
+#define AC_PRO_INT_ETABLE   (-2)  /* 128 项积分表未命中（且两层分部也未命中） */
+#define AC_PRO_INT_EBUDGET  (-3)  /* g_sym_nodes 预算不足（表 256 / 分部 2×96） */
 #define AC_PRO_INT_EOVER    (-4)  /* 输出缓冲不足 */
 #define AC_PRO_INT_EDEGREE  (-5)  /* 次数/指数超限（如 x^1000） */
 
-/* 积分表规模（供测试核对表项数与设计说明一致）。 */
-#define AC_PRO_INT_TABLE_SIZE 64
+/* 积分表规模（供测试核对表项数与设计说明一致；v2.3.0 功能 4 起 128）。 */
+#define AC_PRO_INT_TABLE_SIZE 128
 
 /* ---- 多变量多项式积分的错误码（续 AC_PRO_INT_* 编号区）----
  * 通道选型：失败**直接以错误码为返回值**（细粒度通道），同时把粗因
