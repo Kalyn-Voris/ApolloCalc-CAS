@@ -193,7 +193,9 @@ var EXPORTED_NAMES = [
 var MIN_TEST_ONLY_NAMES = ["_coeffs", "_rpnLen", "_evalSp", "_evalResult"];
 
 var MINIFY = process.argv.indexOf("--minify") >= 0;
-var MIN_HEADER = "/* ApolloCalc core_kernel.js v2.2.0 — MINIFIED BUILD（node test/build-kernel.js --minify 生成，禁止手动编辑） */\n";
+/* MIN_HEADER 精简版：必须保留 "MINIFIED BUILD" 字样（无参构建靠它识别压缩产物防误覆盖），
+ * 生成方式与禁改说明并入同一短句，压缩产物里每字节都算钱 */
+var MIN_HEADER = "/* ApolloCalc core_kernel.js v2.2.0 MINIFIED BUILD by build-kernel.js --minify,禁止手动编辑 */\n";
 var BYTE_BUDGET = 131072; /* 128KiB 物理文件线 */
 
 function die(msg) {
