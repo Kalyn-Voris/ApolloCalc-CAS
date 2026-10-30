@@ -252,8 +252,9 @@ function startTerser() {
   var ver = "";
   try { ver = " " + require("terser/package.json").version; } catch (eVer) { /* 版本号仅展示用 */ }
   return terser.minify(kernelBody + "\n" + EXPORT_BLOCK, {
+    ecma: 2015,
     module: true,
-    compress: { passes: 2 },
+    compress: { passes: 2, toplevel: true, unsafe_arrows: true },
     mangle: { toplevel: true },
     format: { comments: false }
   }).then(function (r1) {
