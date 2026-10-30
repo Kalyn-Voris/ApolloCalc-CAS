@@ -52,7 +52,9 @@ tools/comment-cleanup/
 .worktrees/
 
 # Autoresearch session state + verification benches (tooling, not project content)
-.auto/
+# NOTE: .auto/ must NOT be gitignored — the autoresearch plugin's auto-commit uses
+# `git add -A -- . :(exclude).auto`, and an explicit exclude pathspec naming an
+# ignored dir makes git error out. The plugin excludes .auto itself.
 autoresearch-dashboard.html
 .verify-out/
 .verify-out-bench/
