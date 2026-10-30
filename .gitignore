@@ -50,3 +50,9 @@ tools/comment-cleanup/
 
 # Workflow worktrees (created by tooling, not project content)
 .worktrees/
+
+# Autoresearch session state + verification benches (tooling, not project content)
+.auto/
+autoresearch-dashboard.html
+.verify-out/
+.verify-out-bench/
