@@ -9,10 +9,12 @@
  *   3. 写出 ../src/core_kernel.js
  *      · 默认（无参）：可读产物，行为与历史版本完全一致
  *      · --minify：先压缩再写。压缩引擎二选一（运行时探测）：
- *          a) terser 两段式（首选）：内核体按经典 script 压缩且保留顶层名
- *             （mangle.toplevel=false；terser 以 module 模式解析时顶层符号非 global，
- *             即使 toplevel=false 也会改名，故 export 块单独按 module 压缩——其自由引用
- *             是 undeclared 符号不会被改写，mangle.properties 默认关闭，属性名原样）；
+ *          a) terser 单遍全模块（首选）：内核体与 export 块拼成完整 ES Module 一次压缩，
+ *             mangle.toplevel=true 把全部顶层名压成 1-2 字符；export 对象的属性名是
+ *             UI 层契约（mangle.properties 默认关闭），原样保留。回归策略随之调整：
+ *             83 项 eval 回归跑在可读体上（顶层名可读，覆盖内部名直引），43 项 ESM
+ *             冒烟跑在最终压缩产物上（覆盖导出链路）；603 门禁中 test-complex 亦经
+ *             导出接口 import 产物，压缩产物行为被三重夹住。
  *          b) 内置词法剥离器（terser require 失败或压缩异常时回退）：单遍逐态扫描
  *             字符串/模板串（含 ${} 嵌套代码态）/正则字面量（prev-token 启发式）/注释，
  *             绝不盲目正则去注释；token 文本零改写，原换行位置保留 \n（ASI 语义不变）。
@@ -224,12 +226,13 @@ function runMinify() {
     startTerser().then(function (r) {
       if (r) { return r; }
       return {
-        body: stripMinify(kernelBody),
-        exp: stripMinify(EXPORT_BLOCK),
+        code: stripMinify(kernelBody) + "\n" + stripMinify(EXPORT_BLOCK),
         engine: "内置词法剥离器（terser 不可用回退：逐态扫描字符串/模板/正则/注释，token 文本零改写，保留全部换行保 ASI）"
       };
     }).then(function (r) {
-      proceed(r.body, MIN_HEADER + r.body + "\n" + r.exp + "\n", true, r.engine);
+      /* isMin 路径：kernelBody 形参仍传可读体（eval 回归依赖可读顶层名），
+       * kernelFull 为 MIN_HEADER + 压缩全模块（body+export 已在压缩阶段合一）。 */
+      proceed(kernelBody, MIN_HEADER + r.code + "\n", true, r.engine);
     }).catch(function (eMin) {
       die("BUILD FAILED: 压缩阶段异常:\n" + (eMin && eMin.stack ? eMin.stack : String(eMin)));
     });
@@ -238,32 +241,27 @@ function runMinify() {
   }
 }
 
-/* terser 两段式；不可用/失败返回 Promise<null>（调用方回退剥离器） */
+/* terser 单遍全模块压缩；不可用/失败返回 Promise<null>（调用方回退剥离器）。
+ * body 与 export 块拼成完整 ES Module 一次压缩：mangle.toplevel=true 改写全部顶层
+ * 声明名与 export 块内的自由引用（两侧同映射，一致性由单遍保证）；export 对象的
+ * 属性名不走 mangle.properties，UI 层契约原样。 */
 function startTerser() {
   var terser = null;
   try { terser = require("terser"); } catch (eTerser) { terser = null; }
   if (!terser) { return Promise.resolve(null); }
   var ver = "";
   try { ver = " " + require("terser/package.json").version; } catch (eVer) { /* 版本号仅展示用 */ }
-  return terser.minify(kernelBody, {
+  return terser.minify(kernelBody + "\n" + EXPORT_BLOCK, {
+    module: true,
     compress: { passes: 2 },
-    mangle: { toplevel: false },
+    mangle: { toplevel: true },
     format: { comments: false }
   }).then(function (r1) {
     if (r1.error) { throw r1.error; }
-    return terser.minify(EXPORT_BLOCK, {
-      module: true,
-      compress: { passes: 2 },
-      mangle: true,
-      format: { comments: false }
-    }).then(function (r2) {
-      if (r2.error) { throw r2.error; }
-      return {
-        body: r1.code,
-        exp: r2.code,
-        engine: "terser" + ver + " 两段式（script 体压缩保留顶层名 + export 块按 module 压缩，属性名原样）"
-      };
-    });
+    return {
+      code: r1.code,
+      engine: "terser" + ver + " 单遍全模块（body+export 合一，mangle.toplevel=true，属性名原样）"
+    };
   }, function (eT) {
     console.log("[minify] terser 管线失败，回退内置词法剥离器: " + (eT && eT.message ? eT.message : eT));
     return null;
@@ -393,9 +391,11 @@ function stripMinify(src) {
   return out;
 }
 
-/* ---- 共享构建主流程：写出 → 语法校验 → （可读路径）静态扫描 → eval+运行时复核+83 项回归
+/* ---- 共享构建主流程：写出 → 语法校验 → 静态扫描 → eval+运行时复核+83 项回归
  *      → （可选）微基准 → ESM 严格模式冒烟 → 字节数报告（--minify）→ BUILD OK ----
- * isMin=true 时 kernelBody 为压缩体（两引擎均保留顶层名），kernelFull 为带 MIN_HEADER 的压缩产物。 */
+ * kernelBody 形参恒为可读体（eval 回归依赖可读顶层名）；isMin=true 时 kernelFull
+ * 为 MIN_HEADER + terser 压缩全模块（行为等价性由 terser 语义 + 43 项 ESM 冒烟 +
+ * 603 门禁的产物 import 三重夹住）。 */
 function proceed(kernelBody, kernelFull, isMin, engine) {
   /* ---- 写出（普通构建若将覆盖压缩产物则先警示；压缩产物只经本全量校验路径产出） ---- */
   if (!isMin) {
@@ -443,9 +443,9 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     if (!syntaxOK) { die("BUILD FAILED: node --check 语法校验未通过\n" + syntaxDetail); }
   }
 
-  /* ---- [3/5] export 块引用标识符声明扫描（仅可读路径：文本正则依赖可读排版，
-   *      压缩路径由下方 eval 运行时存在性复核 + ESM 冒烟覆盖） ---- */
-  if (!isMin) {
+  /* ---- [3/5] export 块引用标识符声明扫描（kernelBody 恒为可读体，两路径都跑；
+   *      文本正则匹配 var/function/逗号声明符三种形态） ---- */
+  {
     var undeclaredStatic = [];
     for (var si = 0; si < EXPORTED_NAMES.length; si++) {
       var n0 = EXPORTED_NAMES[si];
@@ -454,11 +454,13 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
       if (!reDecl.test(kernelBody)) { undeclaredStatic.push(n0); }
     }
     if (undeclaredStatic.length > 0) { die("BUILD FAILED: export 块引用了未声明的全局变量（静态扫描）: " + undeclaredStatic.join(", ")); }
+    console.log("[3/5] 静态声明扫描 " + EXPORTED_NAMES.length + "/" + EXPORTED_NAMES.length + " 通过（可读体）");
   }
 
-  /* ---- [4/5] eval 拼接体（不含 export 块）+ 运行时存在性复核 + 83 项测试回归 ----
+  /* ---- [4/5] eval 可读体 + 运行时存在性复核 + 83 项测试回归 ----
    * 直接 eval：var/function 声明进入本函数作用域，测试代码同作用域访问。
-   * --minify 两引擎均保留顶层名，压缩体同样全量执行；运行时名单追加校验直接引用的内部名。 */
+   * 两路径统一跑可读体（压缩产物改由 ESM 冒烟在导出接口上覆盖）；
+   * --minify 时运行时名单追加测试直接引用的 4 个内部名。 */
   eval(kernelBody);
 
   var checkNames = isMin ? EXPORTED_NAMES.concat(MIN_TEST_ONLY_NAMES) : EXPORTED_NAMES;
@@ -813,11 +815,10 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     die("BUILD FAILED: 回归测试期望 83/83 (evaluator 41 + solvers 42)，实际 pass=" + pass + " fail=" + fail);
   }
   if (isMin) {
-    console.log("[4/5] 压缩体运行时存在性 " + checkNames.length + "/" + checkNames.length +
+    console.log("[4/5] 可读体运行时存在性 " + checkNames.length + "/" + checkNames.length +
                 " 通过（含测试直接引用的内部名 " + MIN_TEST_ONLY_NAMES.length + " 个）");
   } else {
-    console.log("[3/5] 静态声明扫描 " + EXPORTED_NAMES.length + "/" + EXPORTED_NAMES.length +
-                " + 运行时存在性 " + EXPORTED_NAMES.length + "/" + EXPORTED_NAMES.length + " 通过");
+    console.log("[4/5] 可读体运行时存在性 " + EXPORTED_NAMES.length + "/" + EXPORTED_NAMES.length + " 通过");
   }
   console.log("[4/5] eval 拼接体回归: evaluator " + evalPass + "/41 + solvers " + solverPass + "/42 = " + pass + "/83 全部通过");
 
