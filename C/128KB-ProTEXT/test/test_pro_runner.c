@@ -837,6 +837,15 @@ pro_multi_tally_t test_gb_degenerate(void);
 pro_multi_tally_t test_gb_accessors(void);
 pro_multi_tally_t test_gb_fuses(void);
 
+/* v2.3.0 功能 5：单变量有理函数工具（test/test_pro_rational.c，同跨 TU 约定） */
+pro_multi_tally_t test_rat_arith(void);
+pro_multi_tally_t test_rat_gcd(void);
+pro_multi_tally_t test_rat_cancel(void);
+pro_multi_tally_t test_rat_apart_exact(void);
+pro_multi_tally_t test_rat_apart_dk(void);
+pro_multi_tally_t test_rat_limits(void);
+pro_multi_tally_t test_rat_buffer(void);
+
 int main(void) {
     tally_t t;
 
@@ -991,6 +1000,26 @@ int main(void) {
         printf("--- v2.2.0 groebner: textbook %d/%d, degenerate %d/%d, accessors %d/%d, fuses %d/%d (checks/failed) ---\n",
                g1.checks, g1.failed, g2.checks, g2.failed,
                g3.checks, g3.failed, g4.checks, g4.failed);
+    }
+
+    /* v2.3.0 功能 5：单变量有理函数工具（test/test_pro_rational.c，7 用例） */
+    {
+        pro_multi_tally_t r1 = test_rat_arith();
+        pro_multi_tally_t r2 = test_rat_gcd();
+        pro_multi_tally_t r3 = test_rat_cancel();
+        pro_multi_tally_t r4 = test_rat_apart_exact();
+        pro_multi_tally_t r5 = test_rat_apart_dk();
+        pro_multi_tally_t r6 = test_rat_limits();
+        pro_multi_tally_t r7 = test_rat_buffer();
+        t.checks += r1.checks + r2.checks + r3.checks + r4.checks
+                  + r5.checks + r6.checks + r7.checks;
+        t.failed += r1.failed + r2.failed + r3.failed + r4.failed
+                  + r5.failed + r6.failed + r7.failed;
+        printf("--- v2.3.0 rational: arith %d/%d, gcd %d/%d, cancel %d/%d, exact %d/%d, dk %d/%d, limits %d/%d, buffer %d/%d (checks/failed) ---\n",
+               r1.checks, r1.failed, r2.checks, r2.failed,
+               r3.checks, r3.failed, r4.checks, r4.failed,
+               r5.checks, r5.failed, r6.checks, r6.failed,
+               r7.checks, r7.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */

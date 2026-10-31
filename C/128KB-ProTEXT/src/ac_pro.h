@@ -363,6 +363,61 @@ int ac_pro_integrate(const char *expr, char *out, int out_len);
  * 只有本层独有的失败模式（非精确整除）才值得一个新码。 */
 #define AC_PRO_MVI_ENONEXACT (-6) /* 系数不能被 (指数+1) 整除：原函数非整系数 */
 
+/* ==================== v2.3.0 功能 5：单变量有理函数工具 ====================
+ * （GCD / cancel 约分 / apart 部分分式；实现于 src/ac_pro_rational.c）
+ *
+ * 【能力边界 / Envelope】
+ *   单变量 x、整系数域：次数 ≤ 8（AC_PRO_RAT_MAX_DEG）、输入系数
+ *   |c| ≤ 9999（AC_PRO_RAT_COEF_MAX）。中间量（prem/Euclid 的伪除系数）
+ *   溢出即拒绝，绝不回绕 —— GCD/cancel 只在整系数域良定（A1 prem 同纪律）。
+ *   视图：Pro union 的 rat 槽（464 B，v2.3.0 起，低于 sparse 峰值被吸收）。
+ *
+ * 【输入语法 / Input syntax】
+ *   多项式串：项 = [符号] [系数] [x[^n]]，隐式系数 1、隐式次数 1、`*` 可选，
+ *   空白任意；与前游 gb 解析器同风格（ac_pro_groebner.c:111）。**没有括号、
+ *   分数、除法、多变量** —— 有理式一律写成 "p/q"（恰一个顶层 '/'），
+ *   gcd 走两个独立参数。
+ *
+ * 【四个入口 / Entry points】
+ *   ac_pro_rat_arith(f, op, g, out,n) 多项式四则的 + - *（op ∈ '+','-','*'；
+ *                                     除法走伪除 pdivmod 支撑 gcd/cancel，
+ *                                     不单设——商带余式，字符串语义不唯一）。
+ *   ac_pro_rat_gcd(f, g, out, n)     最大公因式：本原化（容度 1、首项为正）
+ *                                    的本原最大公因式；互素输出 "1"。
+ *                                    gcd(0,g)=primitive(g)；gcd(0,0) 拒绝。
+ *   ac_pro_rat_cancel(f, out, n)     f = "p/q"：约分到 (P)/(Q)，Q 已本原化且
+ *                                    首项为正，P/Q 的整数容差也约尽；Q=1 时
+ *                                    直接输出 P；P=0 输出 "0"。
+ *   ac_pro_rat_apart(f, out, n)      f = "p/q"：部分分式。前置：真分式
+ *                                    (deg p < deg q ≥ 1)、q 的根互异且全实
+ *                                    （deg q ≤ 4 走上游精确根、5..8 走 DK）。
+ *                                    A_i = p(r_i)/q'(r_i)（互异单根闭式），
+ *                                    重根/复根/假分式 → EDOM。**回乘验证**：
+ *                                    Σ A_i·Π_{j≠i}(x−r_j) 与 p 在 dq 个采样点
+ *                                    的数值残差 ≤ 1e-9·max(1,|p|)，不过即
+ *                                    EDOM —— 绝不输出未验证的分解。
+ *
+ * 【输出语法 / Output syntax】
+ *   多项式：降幂 "3*x^2-x-1"（±1 折叠、负号并项）。cancel 恒 "(P)/(Q)"。
+ *   apart：项 = A_i/(x ∓ r_i)（r>0 "x - R"、r<0 "x + M"、r=0 "x"），按 r
+ *   降序 " + " 连接；A_i 与 r 的数值串走三级 fmt（整判 1e-9 / 有理重建
+ *   q≤1000 / 定点 12 位），与 ODE 契约 §5.1 同算法。
+ *
+ * 【返回 / Return —— 错误码就是返回值（零存储通道）】
+ *   失败时 out 内容未定义。 */
+int ac_pro_rat_arith(const char *f, char op, const char *g,
+                     char *out, int out_len);
+int ac_pro_rat_gcd(const char *f, const char *g, char *out, int out_len);
+int ac_pro_rat_cancel(const char *f, char *out, int out_len);
+int ac_pro_rat_apart(const char *f, char *out, int out_len);
+
+#define AC_PRO_RAT_OK       0    /* 成功 */
+#define AC_PRO_RAT_EPARSE  (-1)  /* 语法错误 / 空串 / 非法字符 / 缺 '/' */
+#define AC_PRO_RAT_EDEG    (-2)  /* 次数超限（>8）或 apart 分母次数 < 1 */
+#define AC_PRO_RAT_ECOEF   (-3)  /* 系数超域（|c| > 9999）或中间整数溢出 */
+#define AC_PRO_RAT_EDOM    (-4)  /* apart 语义拒绝：假分式 / 重根 / 复根 / 回乘验证不过 */
+#define AC_PRO_RAT_EOVER   (-5)  /* 输出缓冲不足 */
+
 /* ==================== v2.1.0 方向④：稀疏线性方程组（方案 a）====================
  *
  * 【能力边界 / Envelope】
