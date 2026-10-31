@@ -58,3 +58,6 @@ tools/comment-cleanup/
 autoresearch-dashboard.html
 .verify-out/
 .verify-out-bench/
+
+# Sprint agent scratch scaffolding (local measurement tooling)
+.auto/
