@@ -497,6 +497,41 @@ double         ac_pro_schur_re(int k);
 double         ac_pro_schur_im(int k);
 const double  *ac_pro_schur_vector(int k);
 
+/* ==================== v2.4.0 功能 9(C 侧):square-free 分解与重根重数 =====
+ * 行为边界由 docs/contracts/sqfree-format-v24.md **逐字冻结**(本节是该
+ * 契约的镜像,ac_pro_sqfree.c 头注同;契约变更须先改契约再改码)。
+ *
+ * 【能力边界 / Envelope】
+ *   单变量 x、整系数域(char 0):次数 ≤ 8、|c| ≤ 999、ASCII 输入
+ *   ≤ 128 字节(契约 §3)。非零常数 → 成功、空列表 "[]";全零多项式
+ *   → ECOEF(契约 §4.4,刻意偏离 ODE 契约)。非整系数( '/' '.' 等)
+ *   在文法层 EPARSE;次数 n ≥ 9 词法层当场 EDEG;JS 侧整题 ≥ 5 拒绝
+ *   是契约 §5.1 成文的双侧能力边界,C 侧 5..8 走 DK。
+ *
+ * 【输出 / Output(契约 §6,逐字)】
+ *   "[根@e|d重数, ...]"(根 = fmt 数值串;e = 精确根式管线 / d = DK,
+ *   按无重因子次数路由:≤4 → e、5..8 → d);排序 Re 降序、并列(1e-9)
+ *   Im 降序稳定插入;复根 [re]("+"/"-")[|im|]"i",re≈0 省略、|im|≈1
+ *   只写 i;重根只出一次,重数由整系数 GCD 的 SFF 层指标精确决定,
+ *   浮点永不参与合并(契约 §4.3)。
+ *
+ * 【接口 / Interface】
+ *   int ac_pro_sqfree(const char *src, char *out, int out_len);
+ *   out 由调用方提供,契约冻结 out_len ≥ 512(§6.1 最坏估算 344 B);
+ *   不足容纳实际输出 → EOVER 且不写部分内容。返回 §7 错误码;失败时
+ *   out 内容未定义。无根访问器、无 SFF 中间态访问器。视图:仅解析期
+ *   持 rat 槽,整系数代数与渲染全在栈上(deg 5..8 的 numroots 写 nr
+ *   视图不冲突);.bss 零增长。 */
+int ac_pro_sqfree(const char *src, char *out, int out_len);
+
+#define AC_PRO_SQF_OK        0    /* 成功(out 已写入,含 "[]") */
+#define AC_PRO_SQF_EPARSE   (-1)  /* 词法/结构错误(契约 §3/§7) */
+#define AC_PRO_SQF_EDEG     (-2)  /* 次数域:n ≥ 9 当场 / 整题 > 8(JS 侧 ≥5) */
+#define AC_PRO_SQF_ECOEF    (-3)  /* |c| > 999 / 全零多项式 / SFF 中间溢出 */
+#define AC_PRO_SQF_EOVER    (-4)  /* 输出缓冲不足(JS 侧不产生) */
+#define AC_PRO_SQF_EINTERNAL (-5) /* 整除余式非零 / 求根失败 / 共轭残缺 /
+                                    账本不平 / fmt 越域(绝不硬凑) */
+
 
 /* ==================== v2.1.0 方向④：稀疏线性方程组（方案 a）====================
  *

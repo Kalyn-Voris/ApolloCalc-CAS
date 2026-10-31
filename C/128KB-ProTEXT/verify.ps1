@@ -8,7 +8,7 @@
 #       2) .bss 三层账本精确比对（42608 / 42640 / 39408 / 38672）
 #       3) 测试套件执行（内嵌测试全量，0 失败）
 #       4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 / SP / BD / RAT / ODE /
-#          SCHUR 覆盖度
+#          SCHUR / SQFREE 覆盖度
 #       5) 上游 C/128KB 零改动（git status + git diff 双证）
 #       6) 负向编译检查（AC_PRO=2 / AC_PRO=0 无 DEGRADED 必须编译失败）
 #       7) 关键符号唯一性（拦截层没有制造重复定义）
@@ -128,6 +128,7 @@ $gb = ([regex]::Matches($runOut, '\[case GB-\d+\]')).Count
 $rat = ([regex]::Matches($runOut, '\[case RAT-\d+\]')).Count
 $ode = ([regex]::Matches($runOut, '\[case ODE-\d+\]')).Count
 $schur = ([regex]::Matches($runOut, '\[case SCHUR-\d+\]')).Count
+$sqfree = ([regex]::Matches($runOut, '\[case SQFREE-\d+\]')).Count
 Write-Host "  B1 numeric roots  : $b1 cases"
 Write-Host "  A4 LU             : $a4 cases"
 Write-Host "  A6 implicit deriv : $a6 cases"
@@ -139,6 +140,7 @@ Write-Host "  GB groebner (v2.2.0): $gb cases"
 Write-Host "  RAT rational (v2.3.0 功能 5): $rat cases"
 Write-Host "  ODE ode (v2.3.0 功能 3): $ode cases"
 Write-Host "  SCHUR eigen (v2.4.0 功能 8): $schur cases"
+Write-Host "  SQFREE sqfree (v2.4.0 功能 9): $sqfree cases"
 Verdict ($b1 -ge 5) 'B1 has >= 5 cases' "$b1"
 Verdict ($a4 -ge 5) 'A4 has >= 5 cases' "$a4"
 Verdict ($a6 -ge 5) 'A6 has >= 5 cases' "$a6"
@@ -150,6 +152,7 @@ Verdict ($gb -ge 10) 'GB has >= 10 cases (v2.2.0 direction 6)' "$gb"
 Verdict ($rat -ge 5) 'RAT has >= 5 cases (v2.3.0 feature 5)' "$rat"
 Verdict ($ode -ge 5) 'ODE has >= 5 cases (v2.3.0 feature 3)' "$ode"
 Verdict ($schur -ge 12) 'SCHUR has >= 12 cases (v2.4.0 feature 8)' "$schur"
+Verdict ($sqfree -ge 10) 'SQFREE has >= 10 cases (v2.4.0 feature 9)' "$sqfree"
 
 # ---------- 5) 上游零改动 ----------
 Write-Host ''

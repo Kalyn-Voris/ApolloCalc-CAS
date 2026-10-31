@@ -861,6 +861,18 @@ sch_tally_t test_schur_complex(void);
 sch_tally_t test_schur_degenerate(void);
 sch_tally_t test_schur_large(void);
 sch_tally_t test_schur_reject(void);
+/* v2.4.0 功能 9 C 侧:square-free 分解(test/test_pro_sqfree.c,10 用例) */
+typedef struct { int checks; int failed; } sq_tally_t;
+void test_sqfree_basic(sq_tally_t *t);
+void test_sqfree_complex(sq_tally_t *t);
+void test_sqfree_route(sq_tally_t *t);
+void test_sqfree_const_dk(sq_tally_t *t);
+void test_sqfree_x8(sq_tally_t *t);
+void test_sqfree_fmt(sq_tally_t *t);
+void test_sqfree_x5(sq_tally_t *t);
+void test_sqfree_reject(sq_tally_t *t);
+void test_sqfree_order(sq_tally_t *t);
+void test_sqfree_bounds(sq_tally_t *t);
 
 int main(void) {
     tally_t t;
@@ -1071,6 +1083,26 @@ int main(void) {
                s1.checks, s1.failed, s2.checks, s2.failed,
                s3.checks, s3.failed, s4.checks, s4.failed,
                s5.checks, s5.failed);
+    }
+
+    /* v2.4.0 功能 9 C 侧:square-free 分解(test/test_pro_sqfree.c,10 用例) */
+    {
+        sq_tally_t q;
+        q.checks = 0;
+        q.failed = 0;
+        test_sqfree_basic(&q);
+        test_sqfree_complex(&q);
+        test_sqfree_route(&q);
+        test_sqfree_const_dk(&q);
+        test_sqfree_x8(&q);
+        test_sqfree_fmt(&q);
+        test_sqfree_x5(&q);
+        test_sqfree_reject(&q);
+        test_sqfree_order(&q);
+        test_sqfree_bounds(&q);
+        t.checks += q.checks;
+        t.failed += q.failed;
+        printf("--- v2.4.0 sqfree: %d/%d (checks/failed) ---\n", q.checks, q.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
