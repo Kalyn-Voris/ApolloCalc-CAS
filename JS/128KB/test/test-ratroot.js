@@ -1,11 +1,11 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB 有理根检验 / 多项式因式分解测试
- * Node 下从 ../src 按序拼接文件 1-5,7,8,9（与 build-kernel.js 顺序一致）后执行
- * 覆盖：整数根精确化（三次/四次）、分数根、重根、零根剥离、
- *       部分有理降次委托、无有理根回落（Cardano/三角/笛卡尔）、非整系数回落
- * 运行：node test/test-ratroot.js   （JS/128KB 目录下）
- * 全过输出：==== ratroot smoke: N pass, 0 fail ====
- * ============================================================ */
+/* ApolloCalc · test-ratroot.js — 有理根检验 / 多项式因式分解测试
+
+   Node 下从 ../src 按序拼接文件 1-5,7,8,9（与 build-kernel.js 顺序一致）后执行
+   覆盖：整数根精确化（三次/四次）、分数根、重根、零根剥离、部分有理降次委托、
+   无有理根回落（Cardano/三角/笛卡尔）、非整系数回落
+
+   运行：node test/test-ratroot.js   （JS/128KB 目录下）
+   全过输出：==== ratroot smoke: N pass, 0 fail ==== */
 var fs = require("fs");
 var dir = __dirname + "/../src";
 var code = ["core_parser.js", "core_math_functions.js", "core_complex.js", "core_exact.js",
@@ -77,7 +77,7 @@ function exactHitRad(val, radNum, rad, den, tol) {
 
 angleMode = "RAD";
 
-/* ==================== 一、整数根精确化（验证目标 1/3） ==================== */
+/* 整数根精确化（验证目标 1/3） */
 solvePoly("x^3-6x^2+11x-6=0", 3);
 ok("cubic 1,2,3 数值根", _solveError === 0 && rootsMatch([[1, 0], [2, 0], [3, 0]], 1e-9),
    "err=" + _solveError + " count=" + _rootCount);
@@ -93,7 +93,7 @@ ok("quartic 根 -1 精确", exactHit(-1, -1, 1, 1e-9) === 1);
 ok("quartic 根 2 精确", exactHit(2, 2, 1, 1e-9) === 1);
 ok("quartic 根 -2 精确", exactHit(-2, -2, 1, 1e-9) === 1);
 
-/* ==================== 二、验证目标 2：分数候选 + 降次委托 ==================== */
+/* 验证目标 2：分数候选 + 降次委托 */
 solvePoly("2x^3-x-1=0", 3);
 ok("2x^3-x-1 数值根", _solveError === 0 &&
    rootsMatch([[1, 0], [-0.5, 0.5], [-0.5, -0.5]], 1e-9),
@@ -106,7 +106,7 @@ for (i = 0; i < _rootCount; i++) {
 }
 ok("2x^3-x-1 复根精确置无效", complexInvalid === 1);
 
-/* ==================== 三、分数根（q|an）与重根、零根剥离 ==================== */
+/* 分数根（q|an）与重根、零根剥离 */
 solvePoly("2x^4-x^3-14x^2-5x+6=0", 4);
 ok("首系数 2 四次数值根", _solveError === 0 &&
    rootsMatch([[0.5, 0], [3, 0], [-2, 0], [-1, 0]], 1e-7),
@@ -127,7 +127,7 @@ ok("零根精确 0/1", exactHit(0, 0, 1, 1e-12) === 1);
 ok("√3 纯根式精确", exactHitRad(Math.sqrt(3), 1, 3, 1, 1e-9) === 1 &&
    exactHitRad(-Math.sqrt(3), -1, 3, 1, 1e-9) === 1);
 
-/* ==================== 四、无有理根回落：Cardano / 三角 / 笛卡尔 ==================== */
+/* 无有理根回落：Cardano / 三角 / 笛卡尔 */
 solvePoly("x^3-2x-5=0", 3);
 ok("x^3-2x-5 Cardano 回落", _solveError === 0 && _rootCount === 3, "err=" + _solveError);
 /* 复根由实根自推（韦达：和=0、|z|²=5/r0），自校验期望值 */
@@ -160,13 +160,13 @@ solvePoly("x^4+5x^2+4=0", 4);
 ok("x^4+5x^2+4 双二次回落", _solveError === 0 &&
    rootsMatch([[0, 1], [0, -1], [0, 2], [0, -2]], 1e-9));
 
-/* ==================== 五、非整系数回落（采样系数不在整数容差内） ==================== */
+/* 非整系数回落（采样系数不在整数容差内） */
 solvePoly("0.5x^3-x-0.5=0", 3);
 ok("非整系数 Cardano 回落", _solveError === 0 &&
    rootsMatch([[-1, 0], [1.618033988749895, 0], [-0.6180339887498949, 0]], 1e-7),
    "err=" + _solveError + " count=" + _rootCount);
 
-/* ==================== 六、残差回验（有理根路径整链） ==================== */
+/* 残差回验（有理根路径整链） */
 solvePoly("x^3-6x^2+11x-6=0", 3);
 verifyRoots();
 ok("三次有理根残差", _residualMax < 1e-6, "residual=" + _residualMax);
@@ -175,7 +175,7 @@ solvePoly("x^4-10x^3+35x^2-50x+24=0", 4);
 verifyRoots();
 ok("四次全有理残差", _residualMax < 1e-6, "residual=" + _residualMax);
 
-/* ==================== 七、复位覆盖（12 槽根池无残留） ==================== */
+/* 复位覆盖（12 槽根池无残留） */
 solvePoly("x^4-5x^2+4=0", 4);
 solveLinearSystem(12);
 solversReset();

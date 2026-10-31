@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 ApolloCalc-CAS - v2.1.0 骨架生成器（幂等，仅标准库）
-====================================================
 
 用法（仓库根或任意目录均可，基准取脚本自身位置）:
     python tools/scaffold_v2_1_0.py
@@ -20,7 +19,7 @@ ApolloCalc-CAS - v2.1.0 骨架生成器（幂等，仅标准库）
     8. .gitignore                              -- 追加 .worktrees/（若缺失）
 
 纪律:
-  - 【红线】绝不写 C/128KB/ 上游目录（每个写目标先过 check_target 校验）；
+  - 红线：绝不写 C/128KB/ 上游目录（每个写目标先过 check_target 校验）；
   - 不引入任何静态存储：骨架 TU 只有占位函数（返回错误码常量），
     Makefile 的 .bss 门禁常量（KERNEL_BSS_EXPECT / PRO_BSS_EXPECT）不动；
   - 公开 API 只进 src/ac_pro.h（Pro 层约定）；
@@ -42,7 +41,7 @@ PRO = ROOT / "C" / "128KB-ProTEXT"
 UPSTREAM = ROOT / "C" / "128KB"
 
 
-# ---------------------------------------------------------------- helpers --
+# helpers
 
 def _under(child: Path, parent: Path) -> bool:
     try:
@@ -53,7 +52,7 @@ def _under(child: Path, parent: Path) -> bool:
 
 
 def check_target(path: Path) -> None:
-    """【红线校验】所有写目标必须在仓库内、且不在上游 C/128KB/ 之下。"""
+    """红线校验：所有写目标必须在仓库内、且不在上游 C/128KB/ 之下。"""
     rp = path.resolve()
     root = ROOT.resolve()
     if not _under(rp, root):
@@ -107,7 +106,7 @@ def apply_edit(path: Path, marker: str, editor, label: str) -> None:
     print(f"  [edit] {label}")
 
 
-# ------------------------------------------------- generated C file bodies --
+# generated C file bodies
 
 AC_PRO_SPARSE_C = r"""/* ============================================================
  * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_sparse.c
@@ -357,7 +356,7 @@ int ac_pro_bigdec_probe(void);
 """
 
 
-# ------------------------------------------------------------- edit bodies --
+# edit bodies
 
 def edit_ac_pro_h(text: str) -> str:
     return patch(text, "#endif /* AC_PRO_H */\n",
@@ -431,7 +430,7 @@ def edit_gitignore(text: str) -> str:
             + ".worktrees/\n")
 
 
-# -------------------------------------------------------------------- main --
+# main
 
 def main() -> int:
     print(f"[scaffold] v2.1.0 skeleton generator  (repo root: {ROOT})")

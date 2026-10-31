@@ -1,30 +1,18 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/test/test_pro_diff_multi.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.0.0：多变量符号求导（ac_pro_diff_multi）的单元测试，
- *   共 12 条测试（runner 基线 259 + 12 = 271）。
- *
- * 【接口约定 / Interface】
- *   照抄 test/test_pro_multi.c：本文件定义自己的 pro_tally_t 与
- *   pcheck 助手，导出 test_diff_multi(void) 返回计数结构，runner
- *   只汇总、不感知内部类型。这样两个 TU 之间没有类型依赖。
- *
- * 【零静态存储纪律 / Zero static storage】
- *   本文件不声明任何静态对象（函数是 static 但不占 .bss），
- *   链接进来后 runner 口径的 .bss 增量仍是 0。
- *
- * 【用例选材说明 / Case notes】
- *   - 溢出例：解析器的字面量守卫是 `c > (INT64_MAX - 9) / 10`，对
- *     末位数字偏保守 —— INT64_MAX 本身（9223372036854775807）会在
- *     **词法层**被拒（第 18 位后的 922337203685477580 已越界）。
- *     故按任务卡的替换规则改用**能进池的最大字面量**
- *     9223372036854775799，对 x 求导时 ×2 必然溢出（走 ac_safe_mul
- *     拒绝路径，g_solve_error = 5）。
- *   - 语法错例：任务卡建议的 "x^" 实测**不是**语法错 —— 词法分析把
- *     悬空 ^ 读成指数 0，整个项退化为常数 1。故换 "sin(x)"：
- *     多项式词法里 's' 是非法分隔符，mv_parse 必拒。
- * ============================================================ */
+/* ApolloCalc · test_pro_diff_multi.c — v2.0.0 多变量符号求导（ac_pro_diff_multi）的单元测试，共 12 条测试（runner 基线 259 + 12 = 271）
+
+   接口照抄 test/test_pro_multi.c：本文件定义自己的 pro_tally_t 与 pcheck 助手,
+   导出 test_diff_multi(void) 返回计数结构,runner 只汇总、不感知内部类型。这样
+   两个 TU 之间没有类型依赖。本文件不声明任何静态对象（函数是 static 但不占
+   .bss）,链接进来后 runner 口径的 .bss 增量仍是 0。
+
+   溢出例：解析器的字面量守卫是 `c > (INT64_MAX - 9) / 10`,对末位数字偏保守,
+   INT64_MAX 本身（9223372036854775807）会在词法层被拒（第 18 位后的
+   922337203685477580 已越界）。故按任务卡的替换规则改用能进池的最大字面量
+   9223372036854775799,对 x 求导时 ×2 必然溢出（走 ac_safe_mul 拒绝路径,
+   g_solve_error = 5）。
+
+   语法错例：任务卡建议的 "x^" 实测不是语法错,词法分析把悬空 ^ 读成指数 0,整个
+   项退化为常数 1。故换 "sin(x)"：多项式词法里 's' 是非法分隔符,mv_parse 必拒。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -51,7 +39,7 @@ static void pcheck(pro_tally_t *t, int cond, const char *name, const char *detai
 
 static int streq(const char *a, const char *b) { return strcmp(a, b) == 0; }
 
-/* ==================== 多变量符号求导（12 项测试） ==================== */
+/* 多变量符号求导（12 项测试） */
 pro_tally_t test_diff_multi(void) {
     pro_tally_t t;
     char out[256];

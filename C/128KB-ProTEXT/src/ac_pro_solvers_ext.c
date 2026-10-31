@@ -1,21 +1,16 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_solvers_ext.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   阶段一①的内存水位门禁重写 + 阶段二 B1 的数值求根 + 次数路由。
- *
- * 【为什么是「_ext」而不是新名字】
- *   Makefile 的包装清单由 `wildcard ac_*.c` 推导：每个上游 ac_<mod>.c
- *   都必须有同名包装 src/ac_pro_<mod>.c。本文件是**额外的** Pro TU，
- *   名字不落在包装清单的映射里，只由 Makefile 的 PRO_EXTRA 显式追加，
- *   因此不会被误认为某个上游模块的包装。
- *
- * 【Zero-GC / 内存纪律】
- *   无 malloc、无 VLA、无递归。数值求根的复数工作区全部落在 Pro union
- *   的 nr 视图（264 B）；系数先拷进 nr.coef，避免调用方缓冲与视图别名。
- *   唯一「大」的临时量是 8×8 的 Durand-Kerner 乘积——它是**栈上标量
- *   循环累加**，不建数组。
- * ============================================================ */
+/* ApolloCalc · ac_pro_solvers_ext.c — 内存水位门禁重写 + 数值求根 + 次数路由
+
+   阶段一的内存水位门禁重写,阶段二 B1 的数值求根与次数路由。
+
+   为什么是「_ext」而不是新名字:Makefile 的包装清单由 `wildcard ac_*.c`
+   推导,每个上游 ac_<mod>.c 都必须有同名包装 src/ac_pro_<mod>.c。本文件是
+   额外的 Pro TU,名字不落在包装清单的映射里,只由 Makefile 的 PRO_EXTRA
+   显式追加,因此不会被误认为某个上游模块的包装。
+
+   内存纪律:无 malloc,无 VLA,无递归。数值求根的复数工作区全部落在 Pro
+   union 的 nr 视图(264 B);系数先拷进 nr.coef,避免调用方缓冲与视图别名。
+   唯一「大」的临时量是 8×8 的 Durand-Kerner 乘积,它是栈上标量循环累加,
+   不建数组。 */
 
 #include <math.h>
 
@@ -25,9 +20,9 @@
 
 #if AC_PRO_ACTIVE
 
-/* ==================== 阶段一①：内存水位门禁 ====================
+/* 阶段一①：内存水位门禁
  * 上游 ac_check_memory_watermark（ac_solvers.c:679-724）的估算式基数
- * 11176 B + 动态上限 6144 B = 17320 B，阈值却是 98304 B —— 比值 5.68×，
+ * 11176 B + 动态上限 6144 B = 17320 B，阈值却是 98304 B，比值 5.68×，
  * 任何输入都不可能触发，是死代码。且它漏算两块最大的池：
  *     g_ac_scratch 8224 B + g_sym_nodes 12288 B = 20512 B。
  *
@@ -36,12 +31,12 @@
  *          + 动态项（token / number 游标）
  *          + extra_bytes（测试注入的假池）
  *
- * AC_STATIC_FOOTPRINT = 38672 是**内核口径**的 `size` 实测值（16 个上游
+ * AC_STATIC_FOOTPRINT = 38672 是内核口径的 `size` 实测值（16 个上游
  * 模块 + trivial main）。它包含了 g_ac_scratch 与 g_sym_nodes，所以上游
  * 那两块漏算在这里被一次性补上。Pro 自己的 3936 B 单独加：
  *     AC_PRO_STATIC_FOOTPRINT = 38672 + 80 + 3848 + 8 = 42608（v2.1.0，sparse 视图定峰）
  * 这两个常量都在 ac_pro_config.h 里，且被下面的编译期断言与 sizeof
- * 硬绑定 —— 不是手抄的数字。 */
+ * 硬绑定,不是手抄的数字。 */
 
 /* 账本自证：常量之间必须闭合，且必须等于真实的 sizeof 之和。 */
 AC_STATIC_ASSERT(AC_PRO_STATIC_FOOTPRINT == AC_PRO_TARGET_BSS, pro_footprint_matches_target);
@@ -75,13 +70,13 @@ int ac_pro_check_memory_watermark_ex(double extra_bytes) {
     return 0;
 }
 
-/* 与上游同签名的对外门禁。注意：它**不是**上游那个死代码的包装，
- * 而是完整重写 —— 上游版本在 AC_PRO_ACTIVE=0 的退化构建里才生效。 */
+/* 与上游同签名的对外门禁。注意：它不是上游那个死代码的包装，
+ * 而是完整重写,上游版本在 AC_PRO_ACTIVE=0 的退化构建里才生效。 */
 int ac_pro_check_memory_watermark(void) {
     return ac_pro_check_memory_watermark_ex(0.0);
 }
 
-/* ==================== 阶段二 B1：次数路由 ====================
+/* 阶段二 B1：次数路由
  * 上游 ac_guard_degree 硬拒绝 degree > 4（阿贝尔-鲁菲尼）。
  * Pro 改成三态（设计说明 §4.1.3）：
  *     1..4  -> 精确/根式路径（走上游 ac_solve_quadratic/cubic/quartic）
@@ -89,7 +84,7 @@ int ac_pro_check_memory_watermark(void) {
  *     > 8   -> 拒绝，g_solve_error = 1
  *
  * 上游原件已被 ac_pro_solvers.c 的宏改名为 ac_pro_upstream_guard_degree，
- * 这里显式声明它，保证「1..4 的行为与上游逐位一致」这件事是**调用**
+ * 这里显式声明它，保证「1..4 的行为与上游逐位一致」这件事是调用
  * 上游代码实现的，而不是抄一遍判断。 */
 int ac_pro_upstream_guard_degree(int degree);
 
@@ -103,7 +98,7 @@ int ac_guard_degree(int degree) {
         return ac_pro_upstream_guard_degree(degree);
     }
     if (degree <= AC_PRO_NUMROOT_MAX_DEG) {
-        /* 5..8：放行到数值路径。此处不置 g_solve_error —— 与上游「放行
+        /* 5..8：放行到数值路径。此处不置 g_solve_error，与上游「放行
            时 error 保持 0」的约定一致；不收敛由数值求解器置 3。 */
         return 0;
     }
@@ -116,7 +111,7 @@ int ac_pro_degree_route(int degree) {
     return (degree <= 4) ? 0 : 1;
 }
 
-/* ==================== 阶段二 B1：Durand-Kerner 数值求根 ====================
+/* 阶段二 B1：Durand-Kerner 数值求根
  * 设计说明 §4.1.2 实测：5 次 10–13 次迭代、6 次 15 次迭代收敛到 1e−15 量级，
  * max_iter 取 200 有 13.3× 余量。
  *
@@ -130,8 +125,7 @@ int ac_pro_degree_route(int degree) {
  * 边界处理（设计说明 §4.1.2 实测边界）：
  *   - 高次零系数先行降次：|c_n| < 1e-300 时把次数降下来，否则 R 除零；
  *   - 迭代中若 Π 分母为 0（两点重合），给一个确定性的微小扰动而不是
- *     直接放弃 —— 这是 DK 法对重根的已知弱点，扰动后仍不收敛则报 3。
- * ============================================================ */
+ *     直接放弃，这是 DK 法对重根的已知弱点，扰动后仍不收敛则报 3。 */
 
 #define PRO_NR_MAX_ITER 200
 #define PRO_NR_TOL      1e-12
@@ -175,17 +169,17 @@ int ac_pro_numroots(const double *coef, int degree) {
        s_pro_nr_coef），二来后面的降次要原地改它。 */
     for (i = 0; i <= degree; i++) { s_pro_nr_coef[i] = coef[i]; }
 
-    /* ---- 前置：系数必须有限 ---- */
+    /* 前置：系数必须有限 */
     for (i = 0; i <= degree; i++) {
         if (!isfinite(s_pro_nr_coef[i])) { g_solve_error = 2; return 0; }
     }
 
-    /* ---- 高次零系数降次（|c_n| < 1e-300 会让 Aberth 半径除零）---- */
+    /* 高次零系数降次（|c_n| < 1e-300 会让 Aberth 半径除零） */
     n = degree;
     while (n >= 1 && fabs(s_pro_nr_coef[n]) < PRO_NR_TINY) { n--; }
     if (n < 1) { g_solve_error = 1; return 0; }   /* 全零 / 退化为常数 */
 
-    /* ---- Aberth 初始半径 R = 1 + max|c_k|/|c_n|（k = 0..n-1）---- */
+    /* Aberth 初始半径 R = 1 + max|c_k|/|c_n|（k = 0..n-1） */
     rmax = 0.0;
     for (i = 0; i < n; i++) {
         double a = fabs(s_pro_nr_coef[i]);
@@ -195,7 +189,7 @@ int ac_pro_numroots(const double *coef, int degree) {
     radius = 1.0 + rmax / cn;
     if (!isfinite(radius) || radius < 1.0) { g_solve_error = 2; return 0; }
 
-    /* ---- 初值：圆盘上均匀分布，半格偏移 ---- */
+    /* 初值：圆盘上均匀分布，半格偏移 */
     two_pi_over_n = 6.283185307179586 / (double)n;
     for (i = 0; i < n; i++) {
         double ang = two_pi_over_n * ((double)i + 0.5);
@@ -204,7 +198,7 @@ int ac_pro_numroots(const double *coef, int degree) {
         s_pro_nr_den[i] = 0.0;      /* Aberth 备用槽，DK 不读 */
     }
 
-    /* ---- Durand-Kerner 迭代 ---- */
+    /* Durand-Kerner 迭代 */
     for (iter = 0; iter < PRO_NR_MAX_ITER; iter++) {
         max_delta = 0.0;
         for (i = 0; i < n; i++) {
@@ -261,11 +255,11 @@ int ac_pro_numroots(const double *coef, int degree) {
         if (max_delta < PRO_NR_TOL) { break; }
     }
 
-    /* ---- 收敛判定：步长判据 + 残差判据，二者取「或」----
+    /* 收敛判定：步长判据 + 残差判据，二者取「或」
      *
-     * 【为什么单靠步长判据会误杀重根 / Why step-only convergence fails】
-     *   实测：P(x) = (x−1)³(x+2)² 在 200 次迭代内**步长**始终停在 ~1e-5
-     *   量级，永远达不到 1e-12，于是旧实现返回「不收敛」—— 但根其实已经
+     * 为什么单靠步长判据会误杀重根
+     *   实测：P(x) = (x−1)³(x+2)² 在 200 次迭代内步长始终停在 ~1e-5
+     *   量级，永远达不到 1e-12，于是旧实现返回「不收敛」，但根其实已经
      *   找对了（残差 2.2e-16）。
      *
      *   这是重根的固有性质，不是 bug：m 重根附近
@@ -278,7 +272,7 @@ int ac_pro_numroots(const double *coef, int degree) {
      *   后一项是求值的绝对误差尺度（Horner 的舍入量级），用相对判据可以
      *   让大系数多项式不被误判。
      *
-     *   注意：**没有**放宽步长阈值 —— 步长 1e-12 仍是收敛的主要判据，
+     *   注意：没有放宽步长阈值，步长 1e-12 仍是收敛的主要判据，
      *   残差只是给重根开的一扇门。若 200 次后两者都不满足，仍然返回 3。 */
     {
         double residual = 0.0;
@@ -309,7 +303,7 @@ int ac_pro_numroots(const double *coef, int degree) {
         }
     }
 
-    /* ---- 落根：写上游根池（12 槽，n ≤ 8 装得下）---- */
+    /* 落根：写上游根池（12 槽，n ≤ 8 装得下） */
     for (i = 0; i < n; i++) {
         g_root_re[i] = s_pro_nr_re[i];
         /* 数值噪声归零：|im| < 1e-10 时判为实根，避免 ac_verify_roots
@@ -327,7 +321,7 @@ int ac_pro_numroots(const double *coef, int degree) {
     return 1;
 }
 
-/* ==================== B1 配套：1..8 次系数采样提取 ====================
+/* B1 配套：1..8 次系数采样提取
  * 上游 ac_extract_coefficients 硬限 max_degree ∈ [1,4]（ac_solvers.c:752），
  * 且用 g_matrix_pool 装 5×6。Pro 需要到 8 次：9×10 = 90 double，
  * g_matrix_pool 有 156 个 double，装得下，所以不新增任何存储。
@@ -421,7 +415,7 @@ int ac_pro_extract_coefficients(int degree) {
 
 /* 端到端：已解析表达式 -> 提取系数 -> 数值求根。
  * 注意 nr.coef 是同一个视图的两段使用者：extract 写它，numroots 读它，
- * 但 numroots 开头会先把它拷到自己（同一块）——别名安全，因为拷贝是
+ * 但 numroots 开头会先把它拷到自己（同一块），别名安全，因为拷贝是
  * 恒等拷贝，随后只在原地读。为避免「看起来像 bug」，这里显式先提取到
  * nr.coef，再让 numroots 用同一个指针，并在注释里说明。 */
 int ac_pro_solve_numeric_from_expr(int degree) {
@@ -441,7 +435,7 @@ int ac_pro_solve_numeric_from_expr(int degree) {
     return ac_pro_numroots(coef_copy, degree);
 }
 
-/* ==================== 阶段二 A4：LU 分解 ====================
+/* 阶段二 A4：LU 分解
  * 设计说明 §3.2：上游 mat_echelon（ac_matrix.c:74-121）就是部分主元消元核，
  * 但它是 static，Pro 拿不到。且它把乘数写在原矩阵里、把置换记成交换次数
  * （单个 int），拿不回置换向量。所以 Pro 侧重写一个 Doolittle 版本：
@@ -468,7 +462,7 @@ int ac_mat_lu(const double *a, int n) {
     if (a == (const double *)0) { return 0; }
     if (n < 1 || n > AC_PRO_MATRIX_MAX_DIM) { return 0; }
 
-    /* ---- 初始化：U = A 的拷贝（按行），L = I，piv = 恒等置换 ---- */
+    /* 初始化：U = A 的拷贝（按行），L = I，piv = 恒等置换 */
     for (i = 0; i < n; i++) {
         s_pro_lu_piv[i] = i;
         for (j = 0; j < n; j++) {
@@ -477,7 +471,7 @@ int ac_mat_lu(const double *a, int n) {
         }
     }
 
-    /* ---- 逐列部分主元消元 ---- */
+    /* 逐列部分主元消元 */
     for (k = 0; k < n; k++) {
         /* 选列主元：在当前列 k 的 [k, n) 行里取 |·| 最大者 */
         piv = k;

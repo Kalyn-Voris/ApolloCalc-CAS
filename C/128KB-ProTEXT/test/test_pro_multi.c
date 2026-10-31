@@ -1,25 +1,16 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/test/test_pro_multi.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v1.3 方向 A 的单元测试：A1 多变量 GCD（18 项测试）、
- *   A2 多变量因式分解（10 项测试）、A3 结式（8 项测试）。
- *
- * 【接口约定 / Interface】
- *   三个测试函数各自返回 pro_tally_t（checks / failed），runner 负责
- *   汇总。这样本文件**不依赖** runner 的内部类型，可单独编译、单独
- *   测试；runner 也不需要知道本文件的计数细节。
- *
- * 【为什么单独一个文件】
- *   ① runner 那个 TU 已有 s_kernel_live，再塞 36 条测试会让它过长；
- *   ② 本文件**不声明任何静态对象**（函数是 static 但不占 .bss），
- *      所以链接进来后 runner 口径的 .bss 增量仍是 0。
- *
- * 【测试口径 / Test convention】
- *   A1 的 GCD 结果按「原始部分 + 首项系数为正」归一化，测试比对的是
- *   **归一化后的字符串**而不是原始公因式（后者可以差任意常数倍）。
- *   这是设计说明没规定、但实现必须选定的约定，在此作为契约写明。
- * ============================================================ */
+/* ApolloCalc · test_pro_multi.c — v1.3 方向 A 单元测试:A1 多变量 GCD（18 项测试）/ A2 多变量因式分解（10 项测试）/ A3 结式（8 项测试）
+
+   三个测试函数各自返回 pro_tally_t（checks / failed），runner 负责汇总。这样本
+   文件不依赖 runner 的内部类型，可单独编译、单独测试；runner 也不需要知道本文件
+   的计数细节。
+
+   单独一个文件有两个理由：runner 那个 TU 已有 s_kernel_live，再塞 36 条测试会
+   让它过长；本文件不声明任何静态对象（函数是 static 但不占 .bss），所以链接进
+   来后 runner 口径的 .bss 增量仍是 0。
+
+   A1 的 GCD 结果按「原始部分 + 首项系数为正」归一化，测试比对的是归一化后的字
+   符串而不是原始公因式（后者可以差任意常数倍）。这是设计说明没规定、但实现必须
+   选定的约定，在此作为契约写明。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -48,17 +39,7 @@ static void pcheck(pro_tally_t *t, int cond, const char *name, const char *detai
 
 static int streq(const char *a, const char *b) { return strcmp(a, b) == 0; }
 
-/* ==================== A1：多变量 GCD（18 项测试） ====================
- *
- * 覆盖：
- *   ① 经典系统（稀疏、±1 系数）
- *   ② 内容提取（2x²−2y² 与 4x²−4xy 的 GCD 应为 x−y，不是 2x−2y）
- *   ③ 互素（GCD = 1）
- *   ④ 一方为零（GCD = 另一方）
- *   ⑤ 完全相同（GCD = 自身）
- *   ⑥ 单项式公因式
- *   ⑦ 超限拒绝（总次数 7 > 6）
- */
+/* A1：多变量 GCD（18 项测试） */
 pro_tally_t test_multi_gcd(void) {
     pro_tally_t t;
     char out[256];
@@ -119,14 +100,7 @@ pro_tally_t test_multi_gcd(void) {
     return t;
 }
 
-/* ==================== A2：多变量因式分解（10 项测试） ====================
- *
- * 覆盖：
- *   ① 单变量完全分解（x²−1）
- *   ② 内容提取（2x²−8）
- *   ③ 不可约（x²+1，无有理根）
- *   ④ 真 2 变量 -> 超出 v1.3 边界，返回 0
- */
+/* A2：多变量因式分解（10 项测试） */
 pro_tally_t test_multi_factor(void) {
     pro_tally_t t;
     char out[256];
@@ -169,14 +143,7 @@ pro_tally_t test_multi_factor(void) {
     return t;
 }
 
-/* ==================== A3：结式（8 项测试） ====================
- *
- * 覆盖：
- *   ① 与手算值比对
- *   ② Sylvester 矩阵构造正确（尺寸 + 每行元素）
- *   ③ 有公共根时结式为 0
- *   ④ 阶数超限拒绝（13 > 12），且输出不被改写（**绝不截断**）
- */
+/* A3：结式（8 项测试） */
 pro_tally_t test_resultant(void) {
     pro_tally_t t;
     double r;

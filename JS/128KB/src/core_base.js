@@ -1,5 +1,4 @@
-/* ============================================================
- * ApolloCalc · core_base.js — 进制转换 + SI 前缀（文件 8）
+/* ApolloCalc · core_base.js — 进制转换 + SI 前缀（文件 8）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：整数 → 2/8/10/16 进制字符串（字符码缓冲输出）
  *       数值 → SI 前缀规范化（尾数 + 前缀字符码）
@@ -9,24 +8,22 @@
  * UI 契约：decToXxx(n) 返回 1 后调 baseToString() 取串（缓冲逆序存放，出口内反转）；
  *          返回 0 表示失败（_baseLen=0，baseToString() 得空串）；
  *          siNormalize(v) 返回 1 后读 _siMantissa / _siPrefixCode / _siPrefixExp
- *          或直接 siToString()；_siValid=0 时 siToString() 得空串
- * ============================================================ */
+ *          或直接 siToString()；_siValid=0 时 siToString() 得空串 */
 
-/* ==================== 文件 8 专属全局变量（唯一声明处） ==================== */
+/* 文件 8 专属全局变量（唯一声明处） */
 var _baseBuf = new Int32Array(64);   /* 字符码缓冲：0-9 存 48-57，A-F 存 65-70，负号存 45 */
-var _baseLen = 0;                    /* 有效字符数（逆序：低位在前，出口反转） */
+var _baseLen = 0;                    /* 逆序：低位在前，出口反转 */
 
-var _siMantissa = 0.0;               /* SI 尾数（1 ≤ |m| < 1000） */
-var _siPrefixCode = 0;               /* SI 前缀字符码（如 'k' = 107；空串用 0 表示） */
-var _siPrefixExp = 0;                /* 10 的幂（3 的倍数，范围 -24..+24） */
+var _siMantissa = 0.0;               /* 1 ≤ |m| < 1000 */
+var _siPrefixCode = 0;               /* 如 'k' = 107；空串用 0 表示 */
+var _siPrefixExp = 0;                /* 10 的幂，3 的倍数，范围 -24..+24 */
 var _siValid = 0;                    /* 0=无效（0 或非有限或超范围） 1=有效 */
 
-/* ==================== 模块一：进制转换 ====================
+/* 模块一：进制转换
  * 只支持 2/8/10/16；超过 53 位安全整数范围拒绝。
- * _baseBuf 逆序存放（低位在前），baseToString 反向遍历得正序字符串。
- */
+ * _baseBuf 逆序存放（低位在前），baseToString 反向遍历得正序字符串。 */
 
-/* 内核：十进制整数 → base 进制，字符码写入 _baseBuf（返回 1 成功 / 0 失败） */
+/* 内核：十进制整数 → base 进制，字符码写入 _baseBuf（1 成功 / 0 失败） */
 function decToBase(n, base) {
   if (base !== 2 && base !== 8 && base !== 10 && base !== 16) {
     _baseLen = 0;
@@ -61,7 +58,7 @@ function decToBase(n, base) {
   return 1;
 }
 
-/* 出口：把 _baseBuf 逆序拼成正序字符串（UI 层调用一次，此处允许字符串拼接） */
+/* 出口：把 _baseBuf 逆序拼成正序字符串（UI 层调用一次，允许字符串拼接） */
 function baseToString() {
   var s = "";
   var i = 0;
@@ -71,15 +68,14 @@ function baseToString() {
   return s;
 }
 
-/* 便捷封装（返回 1 成功 / 0 失败，字符串经 baseToString() 取） */
+/* 便捷封装（1 成功 / 0 失败，字符串经 baseToString() 取） */
 function decToBin(n) { return decToBase(n, 2); }
 function decToOct(n) { return decToBase(n, 8); }
 function decToHex(n) { return decToBase(n, 16); }
 
-/* ==================== 模块二：SI 前缀规范化 ====================
+/* 模块二：SI 前缀规范化
  * y/z/a/f/p/n/µ/m/（空）/k/M/G/T/P/E/Z/Y ↔ 指数 -24..+24（3 的倍数）。
- * 前缀表用 if 链（铁律禁数组字面量）；空串前缀用字符码 0 表示。
- */
+ * 前缀表用 if 链（铁律禁数组字面量）；空串前缀用字符码 0 表示。 */
 
 /* 指数（3 的倍数）→ 前缀字符码；超范围返回 -1；空串返回 0 */
 function siPrefixCode(exp) {
@@ -103,7 +99,7 @@ function siPrefixCode(exp) {
   return -1;                         /* 超出范围 */
 }
 
-/* 内核：v → 尾数 + 前缀（返回 1 成功 / 0 无效）。
+/* 内核：v → 尾数 + 前缀（1 成功 / 0 无效）。
  * 无效（0 / 非有限 / 超 SI 范围 / 前缀缺失）时四元组全部清零，不残留上次结果。 */
 function siNormalize(v) {
   if (!isFinite(v) || v === 0) {
@@ -154,7 +150,7 @@ function siToString() {
   return s;
 }
 
-/* ==================== 模块三：复位 ==================== */
+/* 模块三：复位 */
 function baseReset() {
   _baseLen = 0;
   _siMantissa = 0.0;

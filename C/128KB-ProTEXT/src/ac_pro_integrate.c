@@ -1,19 +1,21 @@
-/* 本文件的文件级对象必须全是 static const：Pro 层的 .bss 账本是
- * 38672 + 80 + 2688 + 16 = 41456，没有余量。实测（gcc 8.1.0 / MinGW-w64 ld）
- * 任何一个非 const 的 static 对象都会让本 TU 产生 .bss 段，叠加链接期对齐
- * 后全程序 .bss 净涨 32 B，门禁直接失败。错误码走返回值，不设 static error 槽。
- * 自检：gcc ... -c src/ac_pro_integrate.c -o x.o && size x.o  -> bss 必须 0
- *
- * 节点预算：上游 g_sym_nodes arena（512）被 6 个上游 TU 共享，本文件只读不建
- * （不调用任何 ac_sym_new_*），对 arena 的写入量恒为 0。但预算仍按真实消耗查：
- * 表匹配路径 ≤ 256 节点；分部积分固定两层（v2.3.0 功能 4），每层额外 ≤ 96
- * 节点，即 256 + 2×96 = 448，用的是本模块实际占用的 IR 节点数 P.count，
- * 并同时校验 base + need ≤ 512。超限返回 AC_PRO_INT_EBUDGET。
- *
- * 「固定两层」与禁递归红线（CONTRIBUTING.md:62）的关系：分部尝试的层数
- * parts_left 是硬编码上界 2 的递减参数——外层调内层时严格 −1，到 0 关死；
- * 不存在同形自调用，也不存在层数随输入增长的通路，等价于把两层展开写成
- * 两个函数，只是共享同一份匹配体。深度另受 PRO_INT_MAX_DEPTH 双重封顶。 */
+/* ApolloCalc · ac_pro_integrate.c — 积分表匹配 + 固定两层分部积分
+
+   本文件的文件级对象必须全是 static const:Pro 层的 .bss 账本是
+   38672 + 80 + 2688 + 16 = 41456,没有余量。实测(gcc 8.1.0 / MinGW-w64 ld)
+   任何一个非 const 的 static 对象都会让本 TU 产生 .bss 段,叠加链接期对齐
+   后全程序 .bss 净涨 32 B,门禁直接失败。错误码走返回值,不设 static error 槽。
+   自检:gcc ... -c src/ac_pro_integrate.c -o x.o && size x.o  -> bss 必须 0
+
+   节点预算:上游 g_sym_nodes arena(512)被 6 个上游 TU 共享,本文件只读不建
+   (不调用任何 ac_sym_new_*),对 arena 的写入量恒为 0。但预算仍按真实消耗查:
+   表匹配路径 ≤ 256 节点;分部积分固定两层(v2.3.0 功能 4),每层额外 ≤ 96
+   节点,即 256 + 2×96 = 448,用的是本模块实际占用的 IR 节点数 P.count,
+   并同时校验 base + need ≤ 512。超限返回 AC_PRO_INT_EBUDGET。
+
+   「固定两层」与禁递归红线(CONTRIBUTING.md:62)的关系:分部尝试的层数
+   parts_left 是硬编码上界 2 的递减参数,外层调内层时严格 −1,到 0 关死;
+   不存在同形自调用,也不存在层数随输入增长的通路,等价于把两层展开写成
+   两个函数,只是共享同一份匹配体。深度另受 PRO_INT_MAX_DEPTH 双重封顶。 */
 
 #include <string.h>
 
@@ -362,7 +364,7 @@ static int pro_int_mul(pro_int_pool_t *P, int a, int b) {
     }
     /* 常数×常数头先折叠（必须先于下方的外提归一）：否则
      * mul(c1, MUL(c2, X)) 会被外提换成 mul(c2, mul(c1, X))，再被分配
-     * 拆回 —— 提升与分配互为逆操作，乒乓不休（实测 512 节点池溢出）。
+     * 拆回，提升与分配互为逆操作，乒乓不休（实测 512 节点池溢出）。
      * 先折叠成 mul(c1·c2, X) 让变换单向汇聚。 */
     if (pro_int_is_const(P, a) && P->n[b].op == PRO_INT_OP_MUL &&
         pro_int_is_const(P, P->n[b].a)) {
@@ -782,7 +784,7 @@ static int pro_int_emit(pro_int_pool_t *P, int r, char *buf, int cap, int *pos,
 }
 
 /* 64 项标准积分表。原函数写成模板串，由 pro_int_parse_string 按 bind 代换
- * 解析出来——代码里没有第二份原函数知识。
+ * 解析出来,代码里没有第二份原函数知识。
  * 占位符：u 内层表达式；a/b 是把 u 视为 a·x+b 时的斜率与常数项；
  *         n 捕获的幂次（K_XN）或常量值（K_CONST）。
  * static const，落 .rdata，不占 .bss。 */
@@ -800,7 +802,7 @@ static int pro_int_emit(pro_int_pool_t *P, int r, char *buf, int cap, int *pos,
 #define PRO_INT_K_FUNC      11   /* f(u)，u 为 x 的一次式 */
 #define PRO_INT_K_FUNC_POW  12   /* f(u)^n */
 #define PRO_INT_K_XN_FUNC   13   /* x^n · f(x) */
-/* ---- v2.3.0 功能 4：表 64 → 128 的新 kind ----
+/* v2.3.0 功能 4：表 64 → 128 的新 kind
  * QUAD_L/QUAD_K 的 pow 字段编码子形态（0..7/0..8，见各 case 注释）；
  * FUNC_DIV/FUNC_FUNC/SECTAN/FUNCOVERFP 的 pow 字段编码第二个函数 id。 */
 #define PRO_INT_K_QUAD_L    14   /* 二次核（k=1）+ 线性内层 u=a*x+b */
@@ -895,7 +897,7 @@ static const pro_int_entry_t s_pro_int_table[AC_PRO_INT_TABLE_SIZE] = {
     { PRO_INT_K_XN_FUNC, PRO_INT_F_LN,    3, "x^4*ln(x)/4-x^4/16" },
     { PRO_INT_K_XN_FUNC, PRO_INT_F_SINH,  3, "x^3*cosh(x)-3*x^2*sinh(x)+6*x*cosh(x)-6*sinh(x)" },
     { PRO_INT_K_XN_FUNC, PRO_INT_F_COSH,  3, "x^3*sinh(x)-3*x^2*cosh(x)+6*x*sinh(x)-6*cosh(x)" },
-    /* ---- v2.3.0 功能 4：65..128（表 64 → 128）----
+    /* v2.3.0 功能 4：65..128（表 64 → 128）
      * 形态接续原有 kind：二次核/倒数函数族/x^n·f(x) 扩充/函数幂扩充。
      * QUAD_L/QUAD_K/XQUAD 的 pow 字段 = 子形态码；FUNC_DIV/FUNC_FUNC/
      * SECTAN/FUNCOVERFP 的 pow 字段 = 第二个函数 id。模板变量 m = n² 类
@@ -1101,7 +1103,7 @@ static int pro_int_is_lin_func(const pro_int_pool_t *P, int i, int *pu,
 
 /* 命中返回 1（*bd 已填），未命中 0，池满 -1。 */
 
-/* ---- v2.3.0 功能 4：新 kind 的共用匹配辅助 ----
+/* v2.3.0 功能 4：新 kind 的共用匹配辅助
  * 全部只读池节点 + 写调用方 bind，零存储。 */
 
 /* 完全平方判定：m = k² 且 k ≥ 2 时返回 k，否则 0（k=1 的形态归老表管）。 */
@@ -1321,7 +1323,7 @@ static int pro_int_match_entry(pro_int_pool_t *P, const pro_int_entry_t *e,
         return 1;
     }
 
-    /* ---- v2.3.0 功能 4：QUAD_L / QUAD_K ----
+    /* v2.3.0 功能 4：QUAD_L / QUAD_K
      * 三种外层形式：r = 1/Q（form 0）、r = 1/sqrt(Q)（form 1）、
      * r = sqrt(Q)（form 2）。形态码见表注释。 */
     case PRO_INT_K_QUAD_L:
@@ -1814,7 +1816,7 @@ static int pro_int_integrate_rec(pro_int_pool_t *P, int r, int depth,
                                  int parts_left, int *out);
 
 /* 分部积分。parts_left ∈ {1,2}：本层用掉一次，内层带 parts_left-1 收尾；
- * 到 0 后内层只查表/多项式，绝不展开 —— 固定两层，硬编码上界。
+ * 到 0 后内层只查表/多项式，绝不展开，固定两层，硬编码上界。
  * sin 的 v 取 -cos，所以这一支是 -x^n·cos + n·∫x^(n-1)·cos。 */
 static int pro_int_try_parts(pro_int_pool_t *P, int r, int depth,
                              int parts_left, int *out) {

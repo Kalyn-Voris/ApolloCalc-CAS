@@ -1,12 +1,13 @@
-/* 功能 8(一般实矩阵特征值)的验收测试。检查口径:
- *   ① 特征值谱按「多重集 + 容差」匹配(与 tests/polynomials.json 的根多重
- *      集同思想):期望谱逐项在未用槽位里找容差内匹配,不预设顺序 —— 只有
- *      |λ| 拉开(>1e-6)的用例才逐位断言 (|λ|, Re, Im) 降序。
- *   ② 实特征向量:‖Av − λv‖∞ 直接对原始 A 复核(不信任视图内任何中间量);
- *      复特征值 vector(k) 必须返回 NULL(绝不硬凑复向量)。
- *   ③ 对称矩阵与 A5(ac_pro_eig_all)交叉对拍。
- * 自带 pro_tally_t,不 include runner 的内部头(与 test_pro_ode.c 同约定)。
- * 不声明静态对象:本 TU 的 .bss 必须是 0。 */
+/* ApolloCalc · test_pro_schur.c — 功能 8(一般实矩阵特征值)的验收测试
+
+   检查口径:特征值谱按「多重集 + 容差」匹配(与 tests/polynomials.json 的根
+   多重集同思想),期望谱逐项在未用槽位里找容差内匹配,不预设顺序,只有 |λ|
+   拉开(>1e-6)的用例才逐位断言 (|λ|, Re, Im) 降序;实特征向量用
+   ‖Av − λv‖∞ 直接对原始 A 复核(不信任视图内任何中间量),复特征值
+   vector(k) 必须返回 NULL(绝不硬凑复向量);对称矩阵与 A5(ac_pro_eig_all)
+   交叉对拍。
+   自带 pro_tally_t,不 include runner 的内部头(与 test_pro_ode.c 同约定)。
+   不声明静态对象:本 TU 的 .bss 必须是 0。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -79,7 +80,7 @@ static int sch_spectrum_match(int n, int nexp,
     return 1;
 }
 
-/* ---- [case SCHUR-1] 旋转矩阵:纯虚共轭对,复向量列 NULL ---- */
+/* 旋转矩阵:纯虚共轭对,复向量列 NULL */
 static void schur_case_rotation(sch_tally_t *t) {
     double m[4] = { 0.0, -1.0, 1.0, 0.0 };
     double ere[2], eim[2];
@@ -102,7 +103,7 @@ static void schur_case_rotation(sch_tally_t *t) {
            "rotation: complex eigenvectors are NULL", detail);
 }
 
-/* ---- [case SCHUR-2] 对角阵:|λ| 降序逐位(3 > 2 > 1,序确定) ---- */
+/* 对角阵:|λ| 降序逐位(3 > 2 > 1,序确定) */
 static void schur_case_diag(sch_tally_t *t) {
     double m[9] = { 1.0, 0.0, 0.0,
                     0.0, 2.0, 0.0,
@@ -124,7 +125,7 @@ static void schur_case_diag(sch_tally_t *t) {
            "diag: vector residuals <= 1e-9", "");
 }
 
-/* ---- [case SCHUR-3] 非对称三角阵(实特征值,降序) ---- */
+/* 非对称三角阵(实特征值,降序) */
 static void schur_case_asym(sch_tally_t *t) {
     double m[4] = { 1.0, 1.0,
                     0.0, 2.0 };
@@ -140,7 +141,7 @@ static void schur_case_asym(sch_tally_t *t) {
            "asym: vector residuals <= 1e-9", "");
 }
 
-/* ---- [case SCHUR-4] 混合谱:实 3 与 ±i 块(块对角) ---- */
+/* 混合谱:实 3 与 ±i 块(块对角) */
 static void schur_case_mixed(sch_tally_t *t) {
     double m[9] = { 0.0, -1.0, 0.0,
                     1.0,  0.0, 0.0,
@@ -162,7 +163,7 @@ static void schur_case_mixed(sch_tally_t *t) {
     scheck(t, ac_pro_schur_vector(1) == 0, "mixed: +i has no vector", "");
 }
 
-/* ---- [case SCHUR-5] x³−1 的友矩阵:1 与 (−1±i√3)/2 ---- */
+/* x³−1 的友矩阵:1 与 (−1±i√3)/2 */
 static void schur_case_companion3(sch_tally_t *t) {
     double m[9];
     double ere[3], eim[3];
@@ -199,7 +200,7 @@ static void schur_case_companion3(sch_tally_t *t) {
     }
 }
 
-/* ---- [case SCHUR-6] 简并:diag(2,2,2),三条特征向量均过残差闸 ---- */
+/* 简并:diag(2,2,2),三条特征向量均过残差闸 */
 static void schur_case_degenerate(sch_tally_t *t) {
     double m[9] = { 2.0, 0.0, 0.0,
                     0.0, 2.0, 0.0,
@@ -219,8 +220,8 @@ static void schur_case_degenerate(sch_tally_t *t) {
            "degen: all vector residuals <= 1e-9", "");
 }
 
-/* ---- [case SCHUR-7] 亏损(Jordan 块 [[2,1],[0,2]]):几何重数 1,
- *     两条特征向量同向(诚实,不做正交化修饰) ---- */
+/* 亏损(Jordan 块 [[2,1],[0,2]]):几何重数 1,
+ *     两条特征向量同向(诚实,不做正交化修饰) */
 static void schur_case_defective(sch_tally_t *t) {
     double m[4] = { 2.0, 1.0,
                     0.0, 2.0 };
@@ -244,7 +245,7 @@ static void schur_case_defective(sch_tally_t *t) {
            "defect: both vectors along the same 1-dim eigenspace", "");
 }
 
-/* ---- [case SCHUR-8] 4×4 两个复共轭对(e^{±i60°}, e^{±i90°}) ---- */
+/* 4×4 两个复共轭对(e^{±i60°}, e^{±i90°}) */
 static void schur_case_twopairs(sch_tally_t *t) {
     double s60 = 0.8660254037844386;
     double m[16] = { 0.0, -1.0, 0.0, 0.0,
@@ -268,7 +269,7 @@ static void schur_case_twopairs(sch_tally_t *t) {
            "2pairs: all complex, all vectors NULL", "");
 }
 
-/* ---- [case SCHUR-9] n = 1 边界 ---- */
+/* n = 1 边界 */
 static void schur_case_n1(sch_tally_t *t) {
     double m[1] = { 5.0 };
     const double *v;
@@ -285,7 +286,7 @@ static void schur_case_n1(sch_tally_t *t) {
     scheck(t, sch_vec_resid(m, 1, 0) <= 1e-12, "n1: residual 0", "");
 }
 
-/* ---- [case SCHUR-10] 12×12 友矩阵(x^12−1):单位圆上 12 个根 ---- */
+/* 12×12 友矩阵(x^12−1):单位圆上 12 个根 */
 static void schur_case_c12(sch_tally_t *t) {
     double m[144];
     double ang[12];
@@ -318,7 +319,7 @@ static void schur_case_c12(sch_tally_t *t) {
            "c12: spectrum == 12th roots of unity", "");
 }
 
-/* ---- [case SCHUR-11] 对称矩阵与 A5 交叉对拍 ---- */
+/* 对称矩阵与 A5 交叉对拍 */
 static void schur_case_symmetric(sch_tally_t *t) {
     double m[9] = { 2.0, 1.0, 0.0,
                     1.0, 2.0, 1.0,
@@ -332,7 +333,7 @@ static void schur_case_symmetric(sch_tally_t *t) {
     rc5 = ac_pro_eig_all(m, 3);
     /* 视图持有纪律(ac_pro_scratch.h 头注):eig 与 schur 是同一 union 的
      * 两个视图,ac_pro_schur_all 会整块覆写 eig 结果(含 a[0] 的 count
-     * 停泊位)—— A5 的特征值必须在调 schur 之前拷贝到栈上。 */
+     * 停泊位),A5 的特征值必须在调 schur 之前拷贝到栈上。 */
     for (i = 0; i < 3; i++) { expect[i] = ac_pro_eig_value(i); }
     rcs = ac_pro_schur_all(m, 3);
     scheck(t, rc5 == 1 && rcs == 1, "sym: both pipelines succeed", "");
@@ -350,7 +351,7 @@ static void schur_case_symmetric(sch_tally_t *t) {
            "sym: vector residuals <= 1e-9", "");
 }
 
-/* ---- [case SCHUR-12] 参数拒绝(n 越界 / 空指针),count 归零 ---- */
+/* 参数拒绝(n 越界 / 空指针),count 归零 */
 static void schur_case_reject(sch_tally_t *t) {
     double m[4] = { 1.0, 0.0, 0.0, 2.0 };
     char detail[64];
@@ -366,7 +367,7 @@ static void schur_case_reject(sch_tally_t *t) {
     scheck(t, rc == -1, "NULL matrix -> -1", "");
 }
 
-/* ---- [case SCHUR-13] 实特征向量残差全查(4×4 混合块对角) ---- */
+/* 实特征向量残差全查(4×4 混合块对角) */
 static void schur_case_vecresid(sch_tally_t *t) {
     double m[16] = { 3.0, 1.0,  0.0, 0.0,
                      0.5, 1.0,  0.0, 0.0,
@@ -398,7 +399,7 @@ static void schur_case_vecresid(sch_tally_t *t) {
     scheck(t, all_ok, "resid: real vectors pass, complex are NULL", "");
 }
 
-/* ---- 测试入口(runner 调用) ---- */
+/* 测试入口(runner 调用) */
 sch_tally_t test_schur_basic(void) {
     sch_tally_t t;
     t.checks = 0; t.failed = 0;

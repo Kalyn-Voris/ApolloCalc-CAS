@@ -1,5 +1,4 @@
-/* ============================================================
- * ApolloCalc · core_ratroot.js — 有理根检验与低次多项式因式分解（文件 9）
+/* ApolloCalc · core_ratroot.js — 有理根检验与低次多项式因式分解（文件 9）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：有理根定理——整系数多项式 an·x^n+…+a0 的有理根 p/q 满足
  *       p 整除 a0、q 整除 an。枚举候选（约简去重）→ 综合除法验证 →
@@ -12,18 +11,17 @@
  *       全部中间量为函数内 var 标量 + 本模块预分配 TypedArray
  * 数值约定：采样提取的系数经 |c − round(c)| ≤ 1e-6·max(1,|c|) 判为整数；
  *   真有理根的综合除法余项为浮点噪声（< 1e-6·尺度），非根余项 O(1)，
- *   两者相距多个数量级；商系数按高斯引理必为整数，提交前逐项近整复核。
- * ============================================================ */
+ *   两者相距多个数量级；商系数按高斯引理必为整数，提交前逐项近整复核。 */
 
-/* ==================== 文件 9 专属全局变量（唯一声明处） ==================== */
-var _ratRootCandidates = new Int32Array(64);   /* 候选根缓存：p/q 交错存放（至多 32 组） */
-var _ratRootCount = 0;                         /* 最近一次枚举生成的候选数 */
-var _ratRootFound = 0;                         /* 实际找到的根数（显式栈深度，0..8） */
-var _ratRootValues = new Float64Array(8);      /* 根值（发现顺序，栈） */
-var _ratRootIsExact = new Int32Array(8);       /* 每个根是否精确（有理根恒 1） */
-var _ratRootNum = new Int32Array(8);           /* 精确形式分子 p（与 _ratRootValues 配对） */
-var _ratRootDen = new Int32Array(8);           /* 精确形式分母 q（>0，已约简） */
-var _ratRootWork = new Float64Array(16);       /* 降次工作区：当前整系数多项式（升幂） */
+/* 文件 9 专属全局变量（唯一声明处） */
+var _ratRootCandidates = new Int32Array(64);   /* p/q 交错存放（至多 32 组） */
+var _ratRootCount = 0;
+var _ratRootFound = 0;                         /* 显式栈深度，0..8 */
+var _ratRootValues = new Float64Array(8);      /* 发现顺序，栈 */
+var _ratRootIsExact = new Int32Array(8);       /* 有理根恒 1 */
+var _ratRootNum = new Int32Array(8);           /* 分子 p（与 _ratRootValues 配对） */
+var _ratRootDen = new Int32Array(8);           /* 分母 q（>0，已约简） */
+var _ratRootWork = new Float64Array(16);       /* 当前整系数多项式（升幂） */
 var _ratRootTrial = new Float64Array(16);      /* 综合除法试除区（失败即弃，不污染 work） */
 var _ratRootDivs = new Int32Array(128);        /* 常数项 |a0| 的因数表（试除到 √） */
 
@@ -31,7 +29,7 @@ var _ratRootDivs = new Int32Array(128);        /* 常数项 |a0| 的因数表（
 var RATROOT_INT_TOL = 1e-6;
 var RATROOT_ENUM_MAX = 10000000;
 
-/* ==================== 模块一：基础工具 ==================== */
+/* 模块一：基础工具 */
 
 /* 欧几里得 gcd（迭代，无递归；入参非负） */
 function ratRootGcd(a, b) {
@@ -70,7 +68,7 @@ function ratRootScale(cd) {
   return mx;
 }
 
-/* ==================== 模块二：整系数快照与提交 ==================== */
+/* 模块二：整系数快照与提交 */
 
 /* 快照：_coeffs[0..cd] 逐项近整判定后舍入存入 _ratRootWork；
  * 任一系数非近整（非整系数多项式）返回 -1，调用方放弃降次走原路径 */
@@ -102,7 +100,7 @@ function ratRootCommit(cd) {
   }
 }
 
-/* ==================== 模块三：候选枚举 ==================== */
+/* 模块三：候选枚举 */
 
 /* 因数表：|m| 的全部因数存入 _ratRootDivs（试除到 √m），返回个数；表满返回 -1 */
 function ratRootDivisors(m) {
@@ -168,7 +166,7 @@ function ratRootEnumerate(an, a0) {
   return _ratRootCount;
 }
 
-/* ==================== 模块四：综合除法（升幂布局） ====================
+/* 模块四：综合除法（升幂布局）
  * P(x) = (x−r)·Q(x) + rem，Q 升幂落 _ratRootTrial[1..cd]：
  *   q_{cd-1} = c_cd；q_{k-1} = c_k + r·q_k（k = cd−1..1）；rem = c_0 + r·q_0
  * 试除区失败即弃（work 不动），余项返回给调用方判定 */
@@ -183,7 +181,7 @@ function ratRootTrialDivide(cd, r) {
   return _ratRootTrial[0] + r * _ratRootTrial[1];
 }
 
-/* ==================== 模块五：主入口（迭代降次，显式栈） ====================
+/* 模块五：主入口（迭代降次，显式栈）
  * ratRootDescent(deg)：在 _coeffs[0..deg] 上迭代找有理根并降次。
  * 返回找到的有理根个数：
  *   0  = 无有理根（_coeffs 原样保留，调用方走原求解路径）
@@ -257,7 +255,7 @@ function ratRootDescent(deg) {
   return _ratRootFound;
 }
 
-/* ==================== 模块六：收尾合并（供 solveCubic/solveQuartic 调用） ====================
+/* 模块六：收尾合并（供 solveCubic/solveQuartic 调用）
  * ratRootFinish(k, deg)：栈中 k 个有理根排在结果前段，剩余 dd = deg−k 次
  * 多项式（已在 _coeffs）交低次求解器，其根整体右移 k 位拼接：
  *   dd=0：全有理，直接填栈；dd≤2：二次求解器（含 dd=1 防御：首项零退化线性）；
@@ -301,8 +299,7 @@ function ratRootFinish(k, deg) {
   return 0;
 }
 
-/* ============================================================
- * ApolloCalc · core_ratroot.js 扩展 — sqfree 单变量多项式
+/* ApolloCalc · core_ratroot.js 扩展 — sqfree 单变量多项式
  * square-free 分解与重根重数(v2.4.0 功能 9,JS 侧)
  * 契约:docs/contracts/sqfree-format-v24.md(冻结),与 C 侧
  * ac_pro_sqfree.c 互为镜像;唯一双侧分叉:JS 整题次数 ≥5 → EDEG
@@ -331,8 +328,7 @@ function ratRootFinish(k, deg) {
  * 零 GC:17 组 TypedArray 加载期一次分配(allocCount=17);词法/SFF/
  *   排序/渲染全显式循环,零递归、零对象字面量热路径;结果对象
  *   {code,out} 加载期一次分配复用(core_ode _result 先例)。
- * 导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
- */
+ * 导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。 */
 
 var ApolloSqfree = (function () {
   "use strict";
@@ -351,7 +347,7 @@ var ApolloSqfree = (function () {
   var SQ_ECOEF = -3;
   var SQ_EINTERNAL = -5;         /* −4 EOVER 为 C 侧缓冲码,JS 不产生(§7) */
 
-  /* ---- 池(加载期一次分配;allocCount = 17) ---- */
+  /* 池(加载期一次分配;allocCount = 17) */
   var _coef = new Float64Array(SQ_MAX_DEG + 1);         /* 1 输入系数(升幂) */
   var _f = new Float64Array(SQ_MAX_DEG + 1);            /* 2 SFF 当前 f */
   var _g = new Float64Array(SQ_MAX_DEG + 1);            /* 3 gcd 出参/导数工作区 */
@@ -388,7 +384,7 @@ var ApolloSqfree = (function () {
     for (i = 0; i < 8; i++) { _itRe[i] = 0; _itIm[i] = 0; _itMult[i] = 0; }
   }
 
-  /* ==================== 词法(§3,单趟左→右,首错即返) ==================== */
+  /* 词法(§3,单趟左→右,首错即返) */
 
   function lex(src) {
     var n = src.length;
@@ -535,7 +531,7 @@ var ApolloSqfree = (function () {
     return SQ_OK;
   }
 
-  /* ==================== 整系数多项式工具(升幂) ==================== */
+  /* 整系数多项式工具(升幂) */
 
   function _igcd(a, b) {
     var x = a;
@@ -666,7 +662,7 @@ var ApolloSqfree = (function () {
     return -1;
   }
 
-  /* ==================== fmt 三分支(§5.4,与 ODE _fmt 同款) ==================== */
+  /* fmt 三分支(§5.4,与 ODE _fmt 同款) */
 
   function _pushCC(ch) {
     if (_outLen < 256) { _outBuf[_outLen] = ch; }
@@ -705,12 +701,12 @@ var ApolloSqfree = (function () {
     m = Math.round(x);
     d = x - m;
     if (d < 0) { d = -d; }
-    if (d < SQ_TOL) {                                  /* 1. 整数判定(含 "0",无 -0) */
+    if (d < SQ_TOL) {                                  /* 整数判定(含 "0",无 -0) */
       if (m < 0) { _pushCC(45); m = -m; }
       _pushInt(m);
       return 0;
     }
-    /* 2. 有理重建 q ≤ 1000(平局取 q 小、再 |p| 小——升序首遇即保证) */
+    /* 有理重建 q ≤ 1000(平局取 q 小、再 |p| 小——升序首遇即保证) */
     for (q = 1; q <= SQ_RAT_Q; q++) {
       p = Math.round(x * q);
       pq = p / q;
@@ -731,7 +727,7 @@ var ApolloSqfree = (function () {
       if (bestQ !== 1) { _pushCC(47); _pushInt(bestQ); }
       return 0;
     }
-    /* 3. 定点 12 位半连舍(§5.4;|r| < 1000 ⟹ |s| < 1e15 < 2^53) */
+    /* 定点 12 位半连舍(§5.4;|r| < 1000 ⟹ |s| < 1e15 < 2^53) */
     s = x * 1e12;
     s = s >= 0 ? Math.floor(s + 0.5) : -Math.floor(-s + 0.5);
     neg = s < 0;
@@ -771,7 +767,7 @@ var ApolloSqfree = (function () {
     return im < ki - SQ_TOL;
   }
 
-  /* ==================== 主入口 ==================== */
+  /* 主入口 */
 
   function sqfree(src) {
     var rc = 0;
@@ -817,7 +813,7 @@ var ApolloSqfree = (function () {
     }
     fd0 = fd;
 
-    /* ---- 循环式 SFF(§4.2;零递归) ---- */
+    /* 循环式 SFF(§4.2;零递归) */
     _copyTo(_f, _coef, fd);
     L = 0;
     for (round = 0; round <= SQ_JS_DEG; round++) {
@@ -837,7 +833,7 @@ var ApolloSqfree = (function () {
       fd = gd;
     }
 
-    /* ---- q_j = h_j / h_{j+1}(§4.2;h_{L+1} = f_{L+1} = 常数槽 _f) ---- */
+    /* q_j = h_j / h_{j+1}(§4.2;h_{L+1} = f_{L+1} = 常数槽 _f) */
     for (j = 1; j <= L; j++) {
       var hjD = _layerD[j - 1];
       if (j < L) {
@@ -859,7 +855,7 @@ var ApolloSqfree = (function () {
     }
     if (ledger !== fd0) { _result.code = SQ_EINTERNAL; return _result; }
 
-    /* ---- 逐层求根(deg 1 直接;deg 2..4 复用求解层,_coeffs 临时写入) ---- */
+    /* 逐层求根(deg 1 直接;deg 2..4 复用求解层,_coeffs 临时写入) */
     cnt = 0;
     tokenCount = 0;                                    /* guardMultivariateNonlinear 防御 */
     for (j = 1; j <= L; j++) {
@@ -889,7 +885,7 @@ var ApolloSqfree = (function () {
       }
     }
 
-    /* ---- 排序(§5.3,稳定插入) ---- */
+    /* 排序(§5.3,稳定插入) */
     for (i = 1; i < cnt; i++) {
       kr = _itRe[i];
       ki = _itIm[i];
@@ -906,7 +902,7 @@ var ApolloSqfree = (function () {
       _itMult[i2 + 1] = km;
     }
 
-    /* ---- 共轭完整性(§5.2) ---- */
+    /* 共轭完整性(§5.2) */
     for (i = 0; i < cnt; i++) {
       imAbs = _itIm[i] < 0 ? -_itIm[i] : _itIm[i];
       if (imAbs < SQ_TOL) { continue; }
@@ -922,7 +918,7 @@ var ApolloSqfree = (function () {
       if (good === 0) { _result.code = SQ_EINTERNAL; return _result; }
     }
 
-    /* ---- 渲染(§6.1:实根 fmt(re);复根 [fmt(re)][±][fmt(|im|)]i) ---- */
+    /* 渲染(§6.1:实根 fmt(re);复根 [fmt(re)][±][fmt(|im|)]i) */
     _pushCC(91);                                       /* '[' */
     for (i = 0; i < cnt; i++) {
       if (i > 0) { _pushCC(44); _pushCC(32); }         /* ", " */

@@ -48,7 +48,7 @@ C 侧 Francis QR 与 square-free），收尾组串行收口。
   27 747 B；v2.4.0 累计 +53 578 B）。
 - **全项目静态池 30 112 → 167 908 B**（符号微分 35 232 + 符号积分 93 676 +
   结式/Groebner 6 648 + sqfree 2 240，实测各模块加载期 TypedArray byteLength
-  之和）——已超 ROADMAP §五 口径的 98 304 B 水位门禁（见 Known issues）。
+  之和），已超 ROADMAP §五 口径的 98 304 B 水位门禁（见 Known issues）。
 
 ### 测试口径
 
@@ -60,7 +60,7 @@ C 侧 Francis QR 与 square-free），收尾组串行收口。
 ### Known issues（如实口径 · 交付说明成文转写）
 
 - **静态池水位**：167 908 B 已超 ROADMAP §五 口径的 98 304 B 水位门禁；
-  门禁函数 `checkMemoryWatermark`（core_solvers.js:622-644）只累计基础内核
+  门禁函数 `checkMemoryWatermark`（core_solvers.js:612-634）只累计基础内核
   池、不含模块池，故测试仍全绿。**后续任何 JS 功能落位前应重估水位**。
 - **Groebner 系数域收窄（不称「对等」）**：JS 无 int64，系数域为 Float64
   安全整数，所有系数加减乘结果 \|v\| > 2^53−1 即 EOVER（−6）熔断（实现

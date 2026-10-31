@@ -1,10 +1,12 @@
-/* 功能 9 C 侧(square-free 分解与重根重数)的验收测试。比对的是
- * docs/contracts/sqfree-format-v24.md 冻结的期望串(§6.2 范例逐字,
- * 含 d 标注的 DK 数值路径)与错误码(§7/§8 逐条,精确比较)。
- * d 标注用例的期望串已按契约 §4/§5 规则离线核算(√2/2、cos/sin 72°
- * 等 12 位定点展开),并经本套件 C 侧实跑核对(契约 §10-2)。
- * 自带 pro_tally_t,不 include runner 的内部头(与 test_pro_ode.c 同
- * 约定)。不声明静态对象:本 TU 的 .bss 必须是 0。 */
+/* ApolloCalc · test_pro_sqfree.c — 功能 9 C 侧(square-free 分解与重根重数)的验收测试
+
+   比对的是 docs/contracts/sqfree-format-v24.md 冻结的期望串(§6.2 范例逐字,
+   含 d 标注的 DK 数值路径)与错误码(§7/§8 逐条,精确比较)。d 标注用例的期望串
+   已按契约 §4/§5 规则离线核算(√2/2、cos/sin 72° 等 12 位定点展开),并经本套件
+   C 侧实跑核对(契约 §10-2)。
+
+   自带 pro_tally_t,不 include runner 的内部头(与 test_pro_ode.c 同约定)。不声
+   明静态对象:本 TU 的 .bss 必须是 0。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -45,7 +47,7 @@ static void expect_sqfree(sq_tally_t *t, const char *in, int want_rc,
     sqcheck(t, 0, name, detail);
 }
 
-/* ---- [case SQFREE-1] 契约 §6.2 行 1..3(单根 / 实重根 / 混合)---- */
+/* 契约 §6.2 行 1..3(单根 / 实重根 / 混合) */
 void test_sqfree_basic(sq_tally_t *t) {
     printf("[case SQFREE-1] contract 6.2 rows 1-3\n");
     expect_sqfree(t, "x^2-5x+6", AC_PRO_SQF_OK, "[3@e1, 2@e1]",
@@ -56,7 +58,7 @@ void test_sqfree_basic(sq_tally_t *t) {
                   "x^3+x^2-5x+3(Re 降序:1 先于 -3)");
 }
 
-/* ---- [case SQFREE-2] 契约 §6.2 行 4..6(纯虚对 / 本原化 / (x^2+1)^2)---- */
+/* 契约 §6.2 行 4..6(纯虚对 / 本原化 / (x^2+1)^2) */
 void test_sqfree_complex(sq_tally_t *t) {
     printf("[case SQFREE-2] contract 6.2 rows 4-6\n");
     expect_sqfree(t, "x^2+1", AC_PRO_SQF_OK, "[i@e1, -i@e1]",
@@ -67,7 +69,7 @@ void test_sqfree_complex(sq_tally_t *t) {
                   "x^4+2x^2+1(q1=1 层跳过)");
 }
 
-/* ---- [case SQFREE-3] 契约 §6.2 行 7..8(按因子次数路由 / 重数 8)---- */
+/* 契约 §6.2 行 7..8(按因子次数路由 / 重数 8) */
 void test_sqfree_route(sq_tally_t *t) {
     printf("[case SQFREE-3] contract 6.2 rows 7-8 (per-factor routing)\n");
     expect_sqfree(t, "x^6-4x^5+7x^4-8x^3+7x^2-4x+1", AC_PRO_SQF_OK,
@@ -78,7 +80,7 @@ void test_sqfree_route(sq_tally_t *t) {
                   "(x-1)^8:重数 8、因子 1 次 -> e");
 }
 
-/* ---- [case SQFREE-4] 契约 §6.2 行 9..10(常数边界 / DK 路径)---- */
+/* 契约 §6.2 行 9..10(常数边界 / DK 路径) */
 void test_sqfree_const_dk(sq_tally_t *t) {
     printf("[case SQFREE-4] contract 6.2 rows 9-10 (f'=0 edge, DK path)\n");
     expect_sqfree(t, "7", AC_PRO_SQF_OK, "[]",
@@ -88,7 +90,7 @@ void test_sqfree_const_dk(sq_tally_t *t) {
                   "Pi(x-k),k=1..5:deg5 因子整题走 DK,整根整判命中");
 }
 
-/* ---- [case SQFREE-5] 契约 §6.2 行 11(x^8-1 的 DK 单位圆谱,逐字)---- */
+/* 契约 §6.2 行 11(x^8-1 的 DK 单位圆谱,逐字) */
 void test_sqfree_x8(sq_tally_t *t) {
     printf("[case SQFREE-5] contract 6.2 row 11 (x^8-1)\n");
     expect_sqfree(t, "x^8-1", AC_PRO_SQF_OK,
@@ -99,7 +101,7 @@ void test_sqfree_x8(sq_tally_t *t) {
                   "x^8-1:DK 根的 fmt 12 位定点(√2/2)");
 }
 
-/* ---- [case SQFREE-6] fmt 三级(有理重建 / 定点 12 位 / q=999 边界)---- */
+/* fmt 三级(有理重建 / 定点 12 位 / q=999 边界) */
 void test_sqfree_fmt(sq_tally_t *t) {
     printf("[case SQFREE-6] fmt three tiers\n");
     expect_sqfree(t, "2x^2-2x+1", AC_PRO_SQF_OK,
@@ -113,7 +115,7 @@ void test_sqfree_fmt(sq_tally_t *t) {
                   "系数 999 刚好通过;根 ±√(1/999)i,定点 12 位");
 }
 
-/* ---- [case SQFREE-7] DK 五次单位圆根(x^5-1,d 标注实跑核对)----
+/* DK 五次单位圆根(x^5-1,d 标注实跑核对)
  * 期望串按契约 §10-2 机制冻结:C 侧实跑核对后写死。sin72° 分量的
  * DK 收敛特征(与真值差 ~5.7e-11,12 位定点为 …295)是共享 B1 管线
  * (PRO_NR_TOL 步长判据)在本配置下的确定性表现 —— d 标注正是
@@ -128,7 +130,7 @@ void test_sqfree_x5(sq_tally_t *t) {
                   "x^5-1:q1=全式(deg5 -> DK),cos/sin 72° 12 位");
 }
 
-/* ---- [case SQFREE-8] 拒绝情形(契约 §8 逐条)---- */
+/* 拒绝情形(契约 §8 逐条) */
 void test_sqfree_reject(sq_tally_t *t) {
     char longbuf[132];
     int i;
@@ -158,7 +160,7 @@ void test_sqfree_reject(sq_tally_t *t) {
                   "129 字节超长 -> -1");
 }
 
-/* ---- [case SQFREE-9] 判定全序交叉例(契约 §7)---- */
+/* 判定全序交叉例(契约 §7) */
 void test_sqfree_order(sq_tally_t *t) {
     printf("[case SQFREE-9] error-precedence cross cases\n");
     expect_sqfree(t, "0.5+x^9", AC_PRO_SQF_EPARSE, "",
@@ -171,7 +173,7 @@ void test_sqfree_order(sq_tally_t *t) {
                   "x^9 词法当场,先于后面系数域判定");
 }
 
-/* ---- [case SQFREE-10] 边界:EOVER / 出缓冲恰好足够 ---- */
+/* 边界:EOVER / 出缓冲恰好足够 */
 void test_sqfree_bounds(sq_tally_t *t) {
     char tiny[8];
     char detail[64];

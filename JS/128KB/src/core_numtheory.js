@@ -1,5 +1,4 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB · core_numtheory.js — 数论模块(v2.3.0 功能 1)
+/* ApolloCalc-CAS · JS/128KB · core_numtheory.js — 数论模块(v2.3.0 功能 1)
  * 算法 1:1 移植 C/128KB/src/ac_numtheory.c(+ ac_numtheory.h 契约注释),
  * 与 C 侧唯一能力差异:安全整数域从 int64 收窄为 Float64 安全整数
  * ≤ 2^53−1(MAX_SAFE),溢出/越域置错误码,绝不返回错值。
@@ -31,15 +30,14 @@
  *   128 B + 指数表 64 B = 288 B),全路径无对象/数组字面量、无字符串操作、
  *   无递归(ncr 调 gcd 是迭代函数调用,非自调用,与 C 侧先例同判)。
  *
- * 导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
- */
+ * 导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。 */
 
 var ApolloNumtheory = (function () {
   "use strict";
 
   var MAX_SAFE = 9007199254740991;          /* 2^53−1,安全整数域上界 */
 
-  /* ---- 加载期一次分配的池(allocCount = 3) ---- */
+  /* 加载期一次分配的池(allocCount = 3) */
   /* MR 底数集:与 C 侧 NT_MR_BASES(ac_numtheory.c:184-186)逐字一致 */
   var MR_BASES = new Float64Array(12);
   MR_BASES[0] = 2;  MR_BASES[1] = 3;  MR_BASES[2] = 5;  MR_BASES[3] = 7;
@@ -70,7 +68,7 @@ var ApolloNumtheory = (function () {
     return 0;
   }
 
-  /* ---- 整数域守卫:整数且 |x| ≤ 2^53−1 → 1,否则置 _err = 1 返 0 ---- */
+  /* 整数域守卫:整数且 |x| ≤ 2^53−1 → 1,否则置 _err = 1 返 0 */
   function _domainOK(x) {
     if (x !== x || x === Infinity || x === -Infinity) { _err = 1; return 0; }
     if (Math.floor(x) !== x) { _err = 1; return 0; }
@@ -78,16 +76,16 @@ var ApolloNumtheory = (function () {
     return 1;
   }
 
-  /* ---- 精确乘法:真积 ≤ 2^53−1 时 float64 精确;真积 ≥ 2^53 时舍入结果
+  /* 精确乘法:真积 ≤ 2^53−1 时 float64 精确;真积 ≥ 2^53 时舍入结果
    * ≥ 2^53 > MAX_SAFE(向最近舍入不可能低于真值下确界 2^53),故单比较即
-   * 精确判定。溢出返回 −1(真积恒 ≥ 0,−1 哨兵无歧义),调用方置 _err = 2。 ---- */
+   * 精确判定。溢出返回 −1(真积恒 ≥ 0,−1 哨兵无歧义),调用方置 _err = 2。 */
   function _safeMul(a, b) {
     var p = a * b;
     if (p > MAX_SAFE) { return -1; }
     return p;
   }
 
-  /* ==================== gcd / lcm(ac_numtheory.c:20-49 同款) ==================== */
+  /* gcd / lcm(ac_numtheory.c:20-49 同款) */
 
   function gcd(a, b) {
     _err = 0;
@@ -115,7 +113,7 @@ var ApolloNumtheory = (function () {
     return prod;
   }
 
-  /* ==================== is_prime:6k±1 试除(ac_numtheory.c:53-65 同款) ==================== */
+  /* is_prime:6k±1 试除(ac_numtheory.c:53-65 同款) */
 
   function isPrime(n) {
     _err = 0;
@@ -137,7 +135,7 @@ var ApolloNumtheory = (function () {
     return 1;
   }
 
-  /* ==================== 模算术(ac_numtheory.c:188-219 同款,float64 版) ==================== */
+  /* 模算术(ac_numtheory.c:188-219 同款,float64 版) */
 
   /* (a + b) mod m:0 ≤ a,b < m ≤ 2^53−1。a+b 可达 2^54−4 越精确域,
    * 用 m−b 预减:a ≥ m−b 时 (a+b)−m == a−(m−b)(两侧皆 ≤ 2^53 精确);
@@ -201,7 +199,7 @@ var ApolloNumtheory = (function () {
     return t;
   }
 
-  /* ==================== Miller-Rabin(ac_numtheory.c:246-284 逐字镜像) ==================== */
+  /* Miller-Rabin(ac_numtheory.c:246-284 逐字镜像) */
 
   function isPrimeMr(n) {
     _err = 0;
@@ -240,7 +238,7 @@ var ApolloNumtheory = (function () {
     return 1;
   }
 
-  /* ==================== factorize(ac_numtheory.c:69-108 同款) ==================== */
+  /* factorize(ac_numtheory.c:69-108 同款) */
 
   function factorize(n) {
     _err = 0;
@@ -302,7 +300,7 @@ var ApolloNumtheory = (function () {
     return 0;
   }
 
-  /* ==================== nCr / nPr(ac_numtheory.c:112-165 同款) ====================
+  /* nCr / nPr(ac_numtheory.c:112-165 同款)
    * 不变式:第 i 步后 result == C(base+i, i),单调升至 C(n, r)。
    * 先乘后除会在可表示答案上溢出中间量(C(66,33) 在 int64 域的经典反例,
    * 本域更早),对 (n−r+i)/i 与 result 逐级 gcd 约减保证每次乘法都是

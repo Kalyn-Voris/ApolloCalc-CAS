@@ -1,33 +1,26 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/test/test_pro_sparse.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.1.0 方向④「稀疏线性方程组」的单元测试：12 个用例、35 条测试，
- *   覆盖功能主干（乱序三元组压缩、同列重复合并、行交换 + perm、稠密
- *   退化 CSR 对照、n=32 稀疏带状系统）、全部四类熔断（n 超限 / nnz
- *   超限 / 主元下限 / 结构奇异）以及填充溢出、下标非法、阈值主元的
- *   稀疏偏好。骨架期的探针冒烟（1 项测试）已被本文件整体取代。
- *
- * 【期望值来源 / Where the constants come from —— 确定性】
- *   全部期望值用 node 离线核算后以字面常量写入，不含任何运行期随机：
- *   - 小型用例（SP-1/2/3/12）与 SP-5 的右端 b：整数/半整数精确算术，
- *     node 按 A·x_true 逐项算出 b 后以常量写入；
- *   - SP-4（随机稠密对照）：矩阵由**定种子 LCG**生成 ——
- *         st = (1664525·st + 1013904223) mod 2^32，st0 = 12345，
- *         v = (st mod 2001)/100 − 10，按行主序先填 A 的 16 行、每行后
- *         填 b_i —— node（BigInt 精确复现同一 LCG）解出参考解 x̂，
- *     16 个分量以全精度字面量写入（容差 1e-6）；C 侧运行期用同一 LCG
- *     复现同一矩阵，两次运行逐位一致，校验确定。
- *
- * 【接口约定 / Interface】
- *   照抄 test/test_pro_multi.c / test_pro_eigen.c：本文件定义自己的
- *   pro_tally_t 与 pcheck 助手，导出 6 个入口函数返回计数结构，runner
- *   只汇总、不感知内部类型。入口函数不带 static（external linkage）。
- *
- * 【零静态存储纪律 / Zero static storage】
- *   本文件不声明任何静态对象（pcheck / LCG 助手是 static **函数**，
- *   不占 .bss），链接进来后 runner 口径的 .bss 增量仍是 0。
- * ============================================================ */
+/* ApolloCalc · test_pro_sparse.c — v2.1.0 方向④「稀疏线性方程组」的单元测试
+
+   12 个用例、35 条测试，覆盖功能主干（乱序三元组压缩、同列重复合并、行
+   交换 + perm、稠密退化 CSR 对照、n=32 稀疏带状系统）、全部四类熔断（n
+   超限 / nnz 超限 / 主元下限 / 结构奇异）以及填充溢出、下标非法、阈值主
+   元的稀疏偏好。骨架期的探针冒烟（1 项测试）已被本文件整体取代。
+
+   期望值来源（确定性）：全部期望值用 node 离线核算后以字面常量写入，不
+   含任何运行期随机。小型用例（SP-1/2/3/12）与 SP-5 的右端 b 走整数/半整
+   数精确算术，node 按 A·x_true 逐项算出 b 后以常量写入；SP-4（随机稠密
+   对照）的矩阵由定种子 LCG 生成：
+        st = (1664525·st + 1013904223) mod 2^32，st0 = 12345，
+        v = (st mod 2001)/100 − 10，按行主序先填 A 的 16 行、每行后填 b_i
+   node（BigInt 精确复现同一 LCG）解出参考解 x̂，16 个分量以全精度字面量
+   写入（容差 1e-6）；C 侧运行期用同一 LCG 复现同一矩阵，两次运行逐位一
+   致，校验确定。
+
+   接口照抄 test/test_pro_multi.c / test_pro_eigen.c：本文件定义自己的
+   pro_tally_t 与 pcheck 助手，导出 6 个入口函数返回计数结构，runner 只汇
+   总、不感知内部类型。入口函数不带 static（external linkage）。
+
+   本文件不声明任何静态对象（pcheck / LCG 助手是 static 函数，不占
+   .bss），链接进来后 runner 口径的 .bss 增量仍是 0。 */
 
 #include <math.h>
 #include <stdio.h>
@@ -52,7 +45,7 @@ static void pcheck(pro_tally_t *t, int cond, const char *name, const char *detai
     }
 }
 
-/* ---- 定种子 LCG（与 node 离线核算逐位一致，见文件头）---- */
+/* 定种子 LCG（与 node 离线核算逐位一致，见文件头） */
 static uint32_t sp_lcg_next(uint32_t *st) {
     *st = 1664525u * (*st) + 1013904223u;   /* uint32 溢出回绕 = mod 2^32 */
     return *st;
@@ -62,7 +55,7 @@ static double sp_lcg_val(uint32_t *st) {
     return (double)(sp_lcg_next(st) % 2001u) / 100.0 - 10.0;
 }
 
-/* ==================== SP-1/2/3：主干功能（压缩/合并/交换） ==================== */
+/* SP-1/2/3：主干功能（压缩/合并/交换） */
 pro_tally_t test_sparse_basic(void) {
     pro_tally_t t;
     const double *x;
@@ -72,7 +65,7 @@ pro_tally_t test_sparse_basic(void) {
     t.checks = 0;
     t.failed = 0;
 
-    /* ---- [case SP-1] 乱序三元组 → CSR 压缩 → 求解 ----
+    /* 乱序三元组 → CSR 压缩 → 求解
      * A = [[2,1,1],[1,3,2],[1,0,0]]，x_true = [5,3,8]
      * b = [21,30,5]（node 离线核算 A·x_true）。 */
     printf("[case SP-1] 3x3 unsorted triplets -> CSR compress -> solve (x_true = [5,3,8])\n");
@@ -93,7 +86,7 @@ pro_tally_t test_sparse_basic(void) {
         printf("         x = [%.4f, %.4f, %.4f]\n", x[0], x[1], x[2]);
     }
 
-    /* ---- [case SP-2] 同坐标重复三元组求和合并：(0,0)=1+(0,0)=2 -> 3 ----
+    /* 同坐标重复三元组求和合并：(0,0)=1+(0,0)=2 -> 3
      * A = [[3,1],[0,4]]，x_true = [1,2]，b = [5,8]。 */
     printf("[case SP-2] duplicate triplets are summed: (0,0)=1+(0,0)=2 -> A[0][0]=3\n");
     {
@@ -108,7 +101,7 @@ pro_tally_t test_sparse_basic(void) {
         pcheck(&t, fabs(x[1] - 2.0) < 1e-12, "x[1] == 2", "component mismatch");
     }
 
-    /* ---- [case SP-3] 列 k 对角为零 → 必须行交换 ----
+    /* 列 k 对角为零 → 必须行交换
      * A = [[0,1],[1,0]]，b = [3,7] -> x = [7,3]；perm = [1,0]
      * （位置 0 持有原始行 1，与 A4 lu.piv 同语义）。 */
     printf("[case SP-3] zero-diagonal swap: A=[[0,1],[1,0]] -> x=[7,3], perm=[1,0]\n");
@@ -129,8 +122,8 @@ pro_tally_t test_sparse_basic(void) {
     return t;
 }
 
-/* ==================== SP-4：随机稠密对照（退化 CSR） ====================
- * n=16 的稠密矩阵按全非零三元组（nnz=256）喂入 —— CSR 的退化形态。
+/* SP-4：随机稠密对照（退化 CSR）
+ * n=16 的稠密矩阵按全非零三元组（nnz=256）喂入，是 CSR 的退化形态。
  * 矩阵与右端由定种子 LCG 生成（node 离线核算参考解 x̂，常量见下）。 */
 pro_tally_t test_sparse_dense_control(void) {
     pro_tally_t t;
@@ -188,7 +181,7 @@ pro_tally_t test_sparse_dense_control(void) {
     return t;
 }
 
-/* ==================== SP-5：n=32 稀疏带状系统（n > 12 的主打能力） ====================
+/* SP-5：n=32 稀疏带状系统（n > 12 的主打能力）
  * 对角 5、次对角 ±1/−2、两角各一个远端非零元，nnz_in = 96。
  * x_true[i] = ((7i) mod 13) − 6（精确整数），b 由 node 离线算出（常量）。 */
 pro_tally_t test_sparse_banded32(void) {
@@ -252,7 +245,7 @@ pro_tally_t test_sparse_banded32(void) {
     return t;
 }
 
-/* ==================== SP-6/7/8：超限熔断 ==================== */
+/* SP-6/7/8：超限熔断 */
 pro_tally_t test_sparse_limits(void) {
     pro_tally_t t;
     static const int32_t R1[1] = {0};
@@ -264,14 +257,14 @@ pro_tally_t test_sparse_limits(void) {
     t.checks = 0;
     t.failed = 0;
 
-    /* ---- [case SP-6] n 超限：n=33 与 n=0 都拒绝 ---- */
+    /* n 超限：n=33 与 n=0 都拒绝 */
     printf("[case SP-6] n over limit: n=33 and n=0 -> AC_PRO_SP_EN\n");
     rc = ac_pro_sparse_solve(33, 1, R1, C1, V1, B1);
     pcheck(&t, rc == AC_PRO_SP_EN, "n=33 -> AC_PRO_SP_EN", "wrong code");
     rc = ac_pro_sparse_solve(0, 1, R1, C1, V1, B1);
     pcheck(&t, rc == AC_PRO_SP_EN, "n=0 -> AC_PRO_SP_EN", "wrong code");
 
-    /* ---- [case SP-7] nnz 超限：nnz=321 与 nnz=0 都拒绝 ---- */
+    /* nnz 超限：nnz=321 与 nnz=0 都拒绝 */
     printf("[case SP-7] nnz over limit: nnz=321 and nnz=0 -> AC_PRO_SP_ENNZ\n");
     {
         int32_t R[321], C[321];          /* 栈上自动数组（禁可变 static 对象） */
@@ -285,7 +278,7 @@ pro_tally_t test_sparse_limits(void) {
         pcheck(&t, rc == AC_PRO_SP_ENNZ, "nnz=0 -> AC_PRO_SP_ENNZ", "wrong code");
     }
 
-    /* ---- [case SP-8] 三元组下标越界：col=5 在 n=2 中非法 ---- */
+    /* 三元组下标越界：col=5 在 n=2 中非法 */
     printf("[case SP-8] triplet index out of range: col=5 with n=2 -> AC_PRO_SP_EINDEX\n");
     {
         static const int32_t R2[1] = {0};
@@ -296,7 +289,7 @@ pro_tally_t test_sparse_limits(void) {
     return t;
 }
 
-/* ==================== SP-9/10/11：填充溢出 / 奇异 / 主元下限 ==================== */
+/* SP-9/10/11：填充溢出 / 奇异 / 主元下限 */
 pro_tally_t test_sparse_robustness(void) {
     pro_tally_t t;
     int rc, i;
@@ -304,7 +297,7 @@ pro_tally_t test_sparse_robustness(void) {
     t.checks = 0;
     t.failed = 0;
 
-    /* ---- [case SP-9] 填充溢出 ----
+    /* 填充溢出
      * 首行近稠密（a_00=1000 压住阈值选择）+ 30 个星型行（每行仅
      * {col0, col31}）：第 0 步以稠密首行为主元，星型行全部被填充成
      * 31 列满行；node 离线核证：总非零元在第 8 行更新时 296+29=325
@@ -326,7 +319,7 @@ pro_tally_t test_sparse_robustness(void) {
         pcheck(&t, rc == AC_PRO_SP_EFILL, "fill > 320 -> AC_PRO_SP_EFILL (no silent drop)", "wrong code");
     }
 
-    /* ---- [case SP-10] 结构奇异 ---- */
+    /* 结构奇异 */
     printf("[case SP-10] structurally singular: empty column / cancellation -> AC_PRO_SP_ESING\n");
     {
         static const int32_t RA[2] = {0, 1};   /* 列 1 无任何非零元 */
@@ -345,7 +338,7 @@ pro_tally_t test_sparse_robustness(void) {
         pcheck(&t, rc == AC_PRO_SP_ESING, "rank-1 cancellation -> AC_PRO_SP_ESING", "wrong code");
     }
 
-    /* ---- [case SP-11] 主元低于下限：列最大模 1e-14 ∈ (0, 1e-12) ---- */
+    /* 主元低于下限：列最大模 1e-14 ∈ (0, 1e-12) */
     printf("[case SP-11] pivot below floor: column max 1e-14 -> AC_PRO_SP_EPIVOT\n");
     {
         static const int32_t R[3] = {0, 1, 1};
@@ -358,10 +351,10 @@ pro_tally_t test_sparse_robustness(void) {
     return t;
 }
 
-/* ==================== SP-12：阈值主元的稀疏偏好 ====================
+/* SP-12：阈值主元的稀疏偏好
  * 第 0 步列 0 有三个等模 2 的候选：行 0（4 非零元）、行 1/2（各 2 个）。
  * 纯部分主元（同模取行号最小）会选行 0；阈值主元按「行非零元最少」
- * 选行 1 —— perm[0] == 1 是阈值行为存在的直接证据。
+ * 选行 1,perm[0] == 1 是阈值行为存在的直接证据。
  * x_true = [1,2,3,4]，b = [11,10,14,32]（node 离线核算）。 */
 pro_tally_t test_sparse_threshold(void) {
     pro_tally_t t;

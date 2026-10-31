@@ -1,37 +1,34 @@
-/* ============================================================
- * ApolloCalc · core_evaluator.js — RPN 求值器（文件 5/6）
+/* ApolloCalc · core_evaluator.js — RPN 求值器（文件 5）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：Shunting-yard 中缀→后缀（显式栈迭代）、RPN 栈式求值、
  *       方程 f(x)=g(x) → f(x)-g(x)、数值采样法提取多项式系数
- * 铁律：热路径零堆分配、零字符串操作、零递归、零对象/数组字面量
- * ============================================================ */
+ * 铁律：热路径零堆分配、零字符串操作、零递归、零对象/数组字面量 */
 
-/* ==================== 文件 5 专属全局变量（唯一声明处） ====================
+/* 文件 5 专属全局变量（唯一声明处）
  * 池溢出检查一律读 xxStack.length / xxToken.length，尺寸调整时检查值自动跟随 */
-var _rpnLen = 0;                          /* 逆波兰 Token 流长度 */
-var _rpnToken = new Int32Array(512);      /* 逆波兰 Token 流（与 tokenPool 同编码，256 → 512） */
-var _evalX = 0.0;                         /* 当前代入的 x 值 */
+var _rpnLen = 0;
+var _rpnToken = new Int32Array(512);      /* 与 tokenPool 同编码（256 → 512） */
+var _evalX = 0.0;
 var _evalError = 0;                       /* 0=OK 1=除零 2=域错误 3=溢出 4=内部错 */
-var _evalResult = 0.0;                    /* 最近一次求值结果 */
-var _evalSp = 0;                          /* evalStack 栈指针 */
+var _evalResult = 0.0;
+var _evalSp = 0;
 
-var _opStack = new Int32Array(128);       /* Shunting-yard 运算符栈（存完整 Token word，64 → 128） */
-var _opSp = 0;                            /* 运算符栈指针 */
+var _opStack = new Int32Array(128);       /* Shunting-yard 运算符栈，存完整 Token word（64 → 128） */
+var _opSp = 0;
 
-var _lhsToken = new Int32Array(256);      /* 方程等号左侧 Token 段（128 → 256） */
-var _rhsToken = new Int32Array(256);      /* 方程等号右侧 Token 段（128 → 256） */
+var _lhsToken = new Int32Array(256);      /* 128 → 256 */
+var _rhsToken = new Int32Array(256);      /* 128 → 256 */
 var _lhsCount = 0;
 var _rhsCount = 0;
 var _lhsResult = 0.0;
 var _rhsResult = 0.0;
 
-var _coeffs = new Float64Array(5);        /* 多项式系数 [常数项..最高次项] */
+var _coeffs = new Float64Array(5);        /* [常数项..最高次项] */
 
-/* ==================== 内联助手：运算符优先级（整数化，×2 避开 2.5） ====================
+/* 内联助手：运算符优先级（整数化，×2 避开 2.5）
  * +− = 2   ×÷ = 4   一元负号 = 5（高于乘除低于乘方）   ^ = 6
  * 右结合：^ 与 T_UMINUS；其余左结合
- * 返回 0 表示该 Token 不是可比较优先级的运算符（LP / FUNC 等）
- */
+ * 返回 0 表示该 Token 不是可比较优先级的运算符（LP / FUNC 等） */
 function opPrec(word) {
   var t = word >> 8;
   var p = word & 255;
@@ -44,11 +41,10 @@ function opPrec(word) {
   return 0;
 }
 
-/* ==================== 模块一：Shunting-yard 中缀转后缀 ====================
+/* 模块一：Shunting-yard 中缀转后缀
  * 读取 srcPool[0..srcCount-1]，输出到 dstPool[0.._rpnLen-1]，返回 _rpnLen
  * 运算符栈 _opStack 存完整 Token word（一元负号入栈时无条件压栈，
- * 保证 a^-b 不弹缺右操作数的 ^）；方程等号必须由 evalEquationAt 分段后传入
- */
+ * 保证 a^-b 不弹缺右操作数的 ^）；方程等号必须由 evalEquationAt 分段后传入 */
 function toRPN(srcPool, srcCount, dstPool) {
   _rpnLen = 0;
   _opSp = 0;
@@ -64,7 +60,7 @@ function toRPN(srcPool, srcCount, dstPool) {
     t = w >> 8;
     p = w & 255;
 
-    /* ---- 操作数：直接输出 ---- */
+    /* 操作数：直接输出 */
     if (t === T_NUM || t === T_VAR || t === T_CONST) {
       if (_rpnLen >= _rpnToken.length) { _evalError = 4; return _rpnLen; }
       dstPool[_rpnLen] = w;
@@ -72,7 +68,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 函数 / 左括号 / 一元负号：无条件压栈 ---- */
+    /* 函数 / 左括号 / 一元负号：无条件压栈 */
     if (t === T_FUNC || t === T_LP || t === T_UMINUS) {
       if (_opSp >= _opStack.length) { _evalError = 4; return _rpnLen; }
       _opStack[_opSp] = w;
@@ -80,7 +76,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 右括号：弹到左括号；括号前若是函数则一并弹出 ---- */
+    /* 右括号：弹到左括号；括号前若是函数则一并弹出 */
     if (t === T_RP) {
       while (_opSp > 0) {
         _opSp--;
@@ -100,7 +96,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 逗号：弹到左括号（双参函数参数分隔，如 atan2） ---- */
+    /* 逗号：弹到左括号（双参函数参数分隔，如 atan2） */
     if (t === T_COMMA) {
       while (_opSp > 0 && (_opStack[_opSp - 1] >> 8) !== T_LP) {
         _opSp--;
@@ -112,7 +108,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 二元运算符：按优先级弹栈后压栈 ---- */
+    /* 二元运算符：按优先级弹栈后压栈 */
     if (t === T_OP) {
       cur = w;
       /* OP_POW 右结合，+−×÷ 左结合 */
@@ -136,11 +132,11 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 等号不该流到这里：必须先经 evalEquationAt 分段 ---- */
+    /* 等号不该流到这里：必须先经 evalEquationAt 分段 */
     if (t === T_EQ) { _evalError = 4; return _rpnLen; }
   }
 
-  /* ---- 收尾：清空运算符栈；残余左括号 = 括号不匹配 ---- */
+  /* 收尾：清空运算符栈；残余左括号 = 括号不匹配 */
   while (_opSp > 0) {
     _opSp--;
     if ((_opStack[_opSp] >> 8) === T_LP) { _evalError = 4; return _rpnLen; }
@@ -151,10 +147,9 @@ function toRPN(srcPool, srcCount, dstPool) {
   return _rpnLen;
 }
 
-/* ==================== 模块二：RPN 求值器 ====================
+/* 模块二：RPN 求值器
  * 读取 rpnPool[0..rpnLen-1]，evalStack + _evalSp 栈式求值
- * 结果写 _evalResult 并返回；任何错误置 _evalError 后立即返回 NaN
- */
+ * 结果写 _evalResult 并返回；任何错误置 _evalError 后立即返回 NaN */
 function evalRPN(rpnPool, rpnLen) {
   _evalSp = 0;
   var w = 0;
@@ -170,7 +165,7 @@ function evalRPN(rpnPool, rpnLen) {
     t = w >> 8;
     p = w & 255;
 
-    /* ---- 压栈类操作数 ---- */
+    /* 压栈类操作数 */
     if (t === T_NUM) {
       if (_evalSp >= evalStack.length) { _evalError = 3; return NaN; }    /* 栈溢出 */
       evalStack[_evalSp] = numberPool[p];
@@ -190,14 +185,14 @@ function evalRPN(rpnPool, rpnLen) {
       continue;
     }
 
-    /* ---- 一元负号 ---- */
+    /* 一元负号 */
     if (t === T_UMINUS) {
       if (_evalSp < 1) { _evalError = 4; return NaN; }      /* 栈下溢 */
       evalStack[_evalSp - 1] = -evalStack[_evalSp - 1];     /* 原地取负，栈深不变 */
       continue;
     }
 
-    /* ---- 双参函数 atan2(y, x)：先弹 x 后弹 y ---- */
+    /* 双参函数 atan2(y, x)：先弹 x 后弹 y */
     if (t === T_FUNC && p === F_ATAN2) {
       if (_evalSp < 2) { _evalError = 4; return NaN; }
       b = evalStack[--_evalSp];                              /* x */
@@ -210,7 +205,7 @@ function evalRPN(rpnPool, rpnLen) {
       continue;
     }
 
-    /* ---- 单参函数 ---- */
+    /* 单参函数 */
     if (t === T_FUNC) {
       if (_evalSp < 1) { _evalError = 4; return NaN; }
       a = evalStack[--_evalSp];
@@ -223,7 +218,7 @@ function evalRPN(rpnPool, rpnLen) {
       continue;
     }
 
-    /* ---- 二元运算符：右操作数先弹 ---- */
+    /* 二元运算符：右操作数先弹 */
     if (t === T_OP) {
       if (_evalSp < 2) { _evalError = 4; return NaN; }
       b = evalStack[--_evalSp];
@@ -247,13 +242,13 @@ function evalRPN(rpnPool, rpnLen) {
     }
   }
 
-  /* ---- 收尾：栈上必须恰好剩一个结果 ---- */
+  /* 收尾：栈上必须恰好剩一个结果 */
   if (_evalSp !== 1) { _evalError = 4; return NaN; }
   _evalResult = evalStack[0];
   return _evalResult;
 }
 
-/* ==================== 模块三：求值入口 ==================== */
+/* 模块三：求值入口 */
 
 /* 单表达式入口：tokenPool / tokenCount 已由 parseExpression 填充（无等号） */
 function evalExpressionAt(x) {
@@ -301,12 +296,11 @@ function evalEquationAt(x) {
   return _evalResult;
 }
 
-/* ==================== 模块四：多项式系数提取（数值采样 + 高斯消元） ====================
+/* 模块四：多项式系数提取（数值采样 + 高斯消元）
  * 把当前方程 f(x)=0（或 f(x)=g(x) 已转差）在 maxDegree+1 个采样点上求值，
  * 解范德蒙德方程组得幂基系数，写入 _coeffs[0..maxDegree]（常数项→最高次）
  * 内存策略：增广矩阵复用 matrixPool 前 30 个元素（5x6，行主序，步长 maxDegree+2）
- * 返回 0 = 成功；否则返回错误码且 _coeffs 已清零
- */
+ * 返回 0 = 成功；否则返回错误码且 _coeffs 已清零 */
 function extractCoefficients(maxDegree) {
   var n = maxDegree + 1;               /* 采样点数 = 方程组元数 */
   var stride = n + 1;                  /* 增广矩阵行宽 */
@@ -321,7 +315,7 @@ function extractCoefficients(maxDegree) {
   for (i = 0; i < 5; i++) { _coeffs[i] = 0.0; }
   if (maxDegree < 1 || maxDegree > 4) { _evalError = 4; return _evalError; }
 
-  /* ---- 采样并构造增广矩阵：第 k 行 = [1, xk, xk², .., xkⁿ⁻¹ | y_k] ----
+  /* 采样并构造增广矩阵：第 k 行 = [1, xk, xk², .., xkⁿ⁻¹ | y_k]
    * 幂用循环累乘（内存策略：仅标量累加器，避免 Math.pow 调用开销） */
   for (k = 0; k < n; k++) {
     xk = k - maxDegree / 2;            /* 小整数/半整数采样点，如 4 次取 −2..2 */
@@ -339,7 +333,7 @@ function extractCoefficients(maxDegree) {
     matrixPool[base + maxDegree + 1] = y;
   }
 
-  /* ---- 高斯消元（列主元部分选主，显式循环，零递归） ---- */
+  /* 高斯消元（列主元部分选主，显式循环，零递归） */
   var col = 0;
   var row = 0;
   var piv = 0;
@@ -378,7 +372,7 @@ function extractCoefficients(maxDegree) {
     }
   }
 
-  /* ---- 回代（内存策略：结果直接落 _coeffs，不建临时数组） ---- */
+  /* 回代（内存策略：结果直接落 _coeffs，不建临时数组） */
   var s = 0.0;
   for (i = n - 1; i >= 0; i--) {
     s = matrixPool[i * stride + n];
@@ -392,7 +386,7 @@ function extractCoefficients(maxDegree) {
   return 0;
 }
 
-/* ==================== 模块五：复位 ====================
+/* 模块五：复位
  * 方程求解器每轮求解前调用（内存策略：只清标量与预分配数组，零分配） */
 function evaluatorReset() {
   _rpnLen = 0;

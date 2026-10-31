@@ -1,52 +1,51 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB · core_groebner.js — 结式 + 2 变量 Groebner 基
- * (v2.4.0 功能 10,JS 侧;对齐 C 侧 ac_pro_resultant.c A3 + ac_pro_groebner.c GB)
- *
- * ==================== 结式(A3,数值路径镜像) ====================
- *   Res_y(f, g) 在 x = x0 处:f(x0,y)、g(x0,y) 视为 y 的一元多项式,
- *   构造 Sylvester 矩阵((df+dg)×(df+dg),df/dg 为 y 次数)取行列式;
- *   阶数严格 ≤ 12(复用 v2.3.0 功能 2 的 pro 层 12×12 部分主元 det:
- *   ApolloMatrix.proSetA + proDet——依赖关系即 ROADMAP 功能 10 所指)。
- *   行为对齐 C:解析失败/不含 y/参数非法 → 0 且 error=2;阶数 >12 → 0
- *   且 error=1(绝不截断);det 非有限 → 0 且 error=3;成功返回 1
- *   (结果可为 0——公共根判据,是意义不是错误)。
- *   词法:2 变量项语法同 gb(系数可省/变量序可换/指数可省);每变量
- *   指数 ≤15(C mv 层 4-bit 域,超限 → 拒绝),不设总次数上限——与 C
- *   parse_into 同域(总次数 6 的 preCheck 是 A1/GCD 调用方语义,A3 无)。
- *
- * ==================== Groebner(GB,M4GB 逐对归约,1:1 移植) ====================
- *   lex 序(x>y,ep=(ex<<4)|ey 无符号比较)、输入总次数 ≤4、基 8 槽/
- *   16 项/pair 32 熔断;critical pair 全对重建(跳过首项互素——Buchberger
- *   第一判据);S-多项式稠密合成(首项精确相消);稠密伪除归约(81 格
- *   lex 降序单趟,每步提 content);interreduce 替换式不动点(≤16 轮,
- *   全项快照判稳);余式非零常数 → 基坍缩 {1};输出按首项 lex 降序,
- *   元素 " | " 分隔——与 C 侧逐字一致(reduced GB 在固定单项式序下唯一)。
- *
- * ==================== 系数域收窄(JS 无 int64,如实成文) ====================
- *   C 侧系数域 int64 + ac_safe_*;JS 收窄为 **Float64 安全整数**:
- *   所有系数加减乘结果 |v| > 2^53−1 即 AC_PRO_GB_EOVER(−6) 熔断,
- *   绝不返回静默错值。经典用例(C GB-1..GB-12)系数幅值 ≤ 数千,距
- *   熔断线多个数量级;两侧能力边界因此不完全对等(ROADMAP 功能 10
- *   评审修订所要求的披露)。
- *
- * ==================== 错误码(= AC_PRO_GB_*,返回值即错误码) ====================
- *   1 OK / −1 EARG(空指针/语法错/空输入)/ −2 EDEG(输入总次数 >4 或
- *   中间单项式总次数 >8)/ −3 ETERM(基元素项数 >16)/ −4 ESLOT(基槽
- *   >8)/ −5 EPAIR(pair >32)/ −6 EOVER(系数溢出)/ −7 EBUF(渲染 512
- *   字符上限,防御位)/ −8 EINTERNAL(不变式破坏)。失败串 getString()
- *   恒 ""(sqfree 同款 JS 失败语义)。
- *
- * 零 GC:18 组 TypedArray 加载期一次分配(allocCount=18);全路径无
- *   对象/数组字面量、无递归(归一化/归约/interreduce/排序全显式循环)、
- *   热路径零字符串操作;渲染 charCode 缓冲 + fromCharCode 出口。
- * 依赖:ApolloMatrix.proSetA/proDet(12×12 det,内核拼接序在其后)。
- * 导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
+/* ApolloCalc · core_groebner.js — 结式 + 2 变量 Groebner 基
+   (v2.4.0 功能 10,JS 侧;对齐 C 侧 ac_pro_resultant.c A3 + ac_pro_groebner.c GB)
+
+   结式(A3,数值路径镜像)
+   Res_y(f, g) 在 x = x0 处:f(x0,y)、g(x0,y) 视为 y 的一元多项式,
+   构造 Sylvester 矩阵((df+dg)×(df+dg),df/dg 为 y 次数)取行列式;
+   阶数严格 ≤ 12(复用 v2.3.0 功能 2 的 pro 层 12×12 部分主元 det:
+   ApolloMatrix.proSetA + proDet——依赖关系即 ROADMAP 功能 10 所指)。
+   行为对齐 C:解析失败/不含 y/参数非法 → 0 且 error=2;阶数 >12 → 0
+   且 error=1(绝不截断);det 非有限 → 0 且 error=3;成功返回 1
+   (结果可为 0——公共根判据,是意义不是错误)。
+   词法:2 变量项语法同 gb(系数可省/变量序可换/指数可省);每变量
+   指数 ≤15(C mv 层 4-bit 域,超限 → 拒绝),不设总次数上限——与 C
+   parse_into 同域(总次数 6 的 preCheck 是 A1/GCD 调用方语义,A3 无)。
+
+   Groebner(GB,M4GB 逐对归约,1:1 移植)
+   lex 序(x>y,ep=(ex<<4)|ey 无符号比较)、输入总次数 ≤4、基 8 槽/
+   16 项/pair 32 熔断;critical pair 全对重建(跳过首项互素——Buchberger
+   第一判据);S-多项式稠密合成(首项精确相消);稠密伪除归约(81 格
+   lex 降序单趟,每步提 content);interreduce 替换式不动点(≤16 轮,
+   全项快照判稳);余式非零常数 → 基坍缩 {1};输出按首项 lex 降序,
+   元素 " | " 分隔——与 C 侧逐字一致(reduced GB 在固定单项式序下唯一)。
+
+   系数域收窄(JS 无 int64,如实成文)
+   C 侧系数域 int64 + ac_safe_*;JS 收窄为 Float64 安全整数:
+   所有系数加减乘结果 |v| > 2^53−1 即 AC_PRO_GB_EOVER(−6) 熔断,
+   绝不返回静默错值。经典用例(C GB-1..GB-12)系数幅值 ≤ 数千,距
+   熔断线多个数量级;两侧能力边界因此不完全对等(ROADMAP 功能 10
+   评审修订所要求的披露)。
+
+   错误码(= AC_PRO_GB_*,返回值即错误码)
+   1 OK / −1 EARG(空指针/语法错/空输入)/ −2 EDEG(输入总次数 >4 或
+   中间单项式总次数 >8)/ −3 ETERM(基元素项数 >16)/ −4 ESLOT(基槽
+   >8)/ −5 EPAIR(pair >32)/ −6 EOVER(系数溢出)/ −7 EBUF(渲染 512
+   字符上限,防御位)/ −8 EINTERNAL(不变式破坏)。失败串 getString()
+   恒 ""(sqfree 同款 JS 失败语义)。
+
+   零 GC:18 组 TypedArray 加载期一次分配(allocCount=18);全路径无
+   对象/数组字面量、无递归(归一化/归约/interreduce/排序全显式循环)、
+   热路径零字符串操作;渲染 charCode 缓冲 + fromCharCode 出口。
+   依赖:ApolloMatrix.proSetA/proDet(12×12 det,内核拼接序在其后)。
+   导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
  */
 
 var ApolloGroebner = (function () {
   "use strict";
 
-  /* ==================== 常量(C 同值) ==================== */
+  /* 常量(C 同值) */
   var GB_MAX_DEG = 8;            /* 视图内一切多项式总次数上限 */
   var GB_IN_DEG = 4;             /* 输入多项式总次数上限 */
   var GB_DENSE = 81;             /* (8+1)² 稠密格 */
@@ -72,25 +71,25 @@ var ApolloGroebner = (function () {
 
   var GB_SAFE = 9007199254740991; /* 2^53−1(JS 系数域熔断线,见文件头) */
 
-  /* ==================== 池(加载期一次分配;allocCount = 18) ==================== */
-  var _coef = new Float64Array(GB_BASIS * GB_TERMS);   /* 1 基系数(槽 s 项 t = [s*16+t]) */
-  var _ep = new Int32Array(GB_BASIS * GB_TERMS);       /* 2 基打包指数 (ex<<4)|ey,降序 */
-  var _cnt = new Int32Array(GB_BASIS);                 /* 3 每槽项数(0 = 空) */
-  var _dead = new Int32Array(GB_BASIS);                /* 4 死槽标记 */
-  var _dense = new Float64Array(GB_DENSE);             /* 5 稠密工作区 81 格 */
-  var _cpA = new Int32Array(GB_PAIRS);                 /* 6 pair 队列 a */
-  var _cpB = new Int32Array(GB_PAIRS);                 /* 7 pair 队列 b */
-  var _snapC = new Float64Array(GB_TERMS);             /* 8 interreduce 快照系数 */
-  var _snapE = new Int32Array(GB_TERMS);               /* 9 interreduce 快照指数 */
-  var _order = new Int32Array(GB_BASIS);               /* 10 输出序槽映射 */
-  var _outBuf = new Int32Array(GB_OUT_CAP);            /* 11 渲染缓冲(charCode) */
-  var _digits = new Int32Array(24);                    /* 12 整数位数字垫 */
-  var _resF = new Float64Array(GB_RES_MAX_DIM + 1);    /* 13 结式 f 的 y 系数(升幂) */
-  var _resG = new Float64Array(GB_RES_MAX_DIM + 1);    /* 14 结式 g 的 y 系数(升幂) */
-  var _sylv = new Float64Array(GB_RES_MAX_DIM * GB_RES_MAX_DIM);  /* 15 Sylvester 矩阵 */
-  var _tCoef = new Float64Array(GB_TERMS);             /* 16 解析项系数暂存 */
-  var _tEp = new Int32Array(GB_TERMS);                 /* 17 解析项指数暂存 */
-  var _resParseC = new Float64Array(GB_RES_TERMS);     /* 18 结式解析项系数 */
+  /* 池(加载期一次分配;allocCount = 18) */
+  var _coef = new Float64Array(GB_BASIS * GB_TERMS);   /* 基系数(槽 s 项 t = [s*16+t]) */
+  var _ep = new Int32Array(GB_BASIS * GB_TERMS);       /* 基打包指数 (ex<<4)|ey,降序 */
+  var _cnt = new Int32Array(GB_BASIS);                 /* 每槽项数(0 = 空) */
+  var _dead = new Int32Array(GB_BASIS);                /* 死槽标记 */
+  var _dense = new Float64Array(GB_DENSE);             /* 稠密工作区 81 格 */
+  var _cpA = new Int32Array(GB_PAIRS);                 /* pair 队列 a */
+  var _cpB = new Int32Array(GB_PAIRS);                 /* pair 队列 b */
+  var _snapC = new Float64Array(GB_TERMS);             /* interreduce 快照系数 */
+  var _snapE = new Int32Array(GB_TERMS);               /* interreduce 快照指数 */
+  var _order = new Int32Array(GB_BASIS);               /* 输出序槽映射 */
+  var _outBuf = new Int32Array(GB_OUT_CAP);            /* 渲染缓冲(charCode) */
+  var _digits = new Int32Array(24);                    /* 整数位数字垫 */
+  var _resF = new Float64Array(GB_RES_MAX_DIM + 1);    /* 结式 f 的 y 系数(升幂) */
+  var _resG = new Float64Array(GB_RES_MAX_DIM + 1);    /* 结式 g 的 y 系数(升幂) */
+  var _sylv = new Float64Array(GB_RES_MAX_DIM * GB_RES_MAX_DIM);  /* Sylvester 矩阵 */
+  var _tCoef = new Float64Array(GB_TERMS);             /* 解析项系数暂存 */
+  var _tEp = new Int32Array(GB_TERMS);                 /* 解析项指数暂存 */
+  var _resParseC = new Float64Array(GB_RES_TERMS);     /* 结式解析项系数 */
 
   var _allocCount = 18;
   var _gbN = 0;              /* 已开基槽数 */
@@ -104,14 +103,14 @@ var ApolloGroebner = (function () {
   function allocCount() { return _allocCount; }
   function getString() { return _result; }
 
-  /* ==================== 单项式编码(ep = (ex<<4)|ey) ==================== */
+  /* 单项式编码(ep = (ex<<4)|ey) */
 
   function _exOf(e) { return (e >> 4) & 15; }
   function _eyOf(e) { return e & 15; }
   function _mkEp(ex, ey) { return (ex << 4) | ey; }
   function _idx(ex, ey) { return ex * (GB_MAX_DEG + 1) + ey; }
 
-  /* ==================== 安全算术(|结果| > 2^53−1 → EOVER,见文件头) ==================== */
+  /* 安全算术(|结果| > 2^53−1 → EOVER,见文件头) */
 
   function _safeAdd(a, b) {
     var r = a + b;
@@ -136,7 +135,7 @@ var ApolloGroebner = (function () {
     return x;
   }
 
-  /* ==================== 槽位读取 ==================== */
+  /* 槽位读取 */
 
   function _lm(s) {
     if (_cnt[s] <= 0) { return -1; }
@@ -146,7 +145,7 @@ var ApolloGroebner = (function () {
     return s >= 0 && s < GB_BASIS && _dead[s] === 0 && _cnt[s] > 0;
   }
 
-  /* ==================== 解析(语法与 A1/A2 多变量层一致,C gb_parse_* 1:1) ==================== */
+  /* 解析(语法与 A1/A2 多变量层一致,C gb_parse_* 1:1) */
 
   /* 词法出参 */
   var _ptNeg = 0;
@@ -264,7 +263,7 @@ var ApolloGroebner = (function () {
     }
     _cnt[s] = cnt;
 
-    /* ---- 归一化:按 ep 降序插入排序 ---- */
+    /* 归一化:按 ep 降序插入排序 */
     for (k = 1; k < cnt; k++) {
       kc = _coef[s * GB_TERMS + k];
       ke = _ep[s * GB_TERMS + k];
@@ -277,7 +276,7 @@ var ApolloGroebner = (function () {
       _coef[s * GB_TERMS + j + 1] = kc;
       _ep[s * GB_TERMS + j + 1] = ke;
     }
-    /* ---- 同类项合并(safe add)+ 去零 ---- */
+    /* 同类项合并(safe add)+ 去零 */
     out = 0;
     k = 0;
     while (k < cnt) {
@@ -300,7 +299,7 @@ var ApolloGroebner = (function () {
     return GB_OK;
   }
 
-  /* ==================== 稠密工作区 ==================== */
+  /* 稠密工作区 */
 
   function denseClear() {
     var i = 0;
@@ -346,7 +345,7 @@ var ApolloGroebner = (function () {
     return GB_OK;
   }
 
-  /* ==================== 稠密伪除归约(M4GB 核心,C gb_dense_reduce 1:1) ==================== */
+  /* 稠密伪除归约(M4GB 核心,C gb_dense_reduce 1:1) */
 
   function denseReduce(exclude) {
     var ex = 0;
@@ -440,7 +439,7 @@ var ApolloGroebner = (function () {
     return 1;
   }
 
-  /* ==================== S-多项式合成(C gb_spoly 1:1) ==================== */
+  /* S-多项式合成(C gb_spoly 1:1) */
 
   function spoly(i, j) {
     var li = _lm(i);
@@ -489,7 +488,7 @@ var ApolloGroebner = (function () {
     return GB_OK;
   }
 
-  /* ==================== interreduce(替换式不动点,C 1:1) ==================== */
+  /* interreduce(替换式不动点,C 1:1) */
 
   function interreduceAll() {
     var round = 0;
@@ -530,7 +529,7 @@ var ApolloGroebner = (function () {
     return GB_EINTERNAL;                                 /* 不动点 16 轮未收敛:防御 */
   }
 
-  /* ==================== pair 队列重建(跳过首项互素对) ==================== */
+  /* pair 队列重建(跳过首项互素对) */
 
   function rebuildPairs() {
     var i = 0;
@@ -572,7 +571,7 @@ var ApolloGroebner = (function () {
     _cpN = 0;
   }
 
-  /* ==================== Buchberger 主循环(C gb_solve 1:1) ==================== */
+  /* Buchberger 主循环(C gb_solve 1:1) */
 
   function gbSolve() {
     var guard = 0;
@@ -644,7 +643,7 @@ var ApolloGroebner = (function () {
     return interreduceAll();                             /* 终结不动点 */
   }
 
-  /* ==================== 输出序与格式化(C 1:1) ==================== */
+  /* 输出序与格式化(C 1:1) */
 
   function kthSlot(k) {
     var n = 0;
@@ -739,7 +738,7 @@ var ApolloGroebner = (function () {
     return GB_OK;
   }
 
-  /* ==================== 对外:Groebner ==================== */
+  /* 对外:Groebner */
 
   function groebner(fsrc, gsrc) {
     var rc = 0;
@@ -775,7 +774,7 @@ var ApolloGroebner = (function () {
     return GB_OK;
   }
 
-  /* ==================== 访问器(输出序 = 首项 lex 降序) ==================== */
+  /* 访问器(输出序 = 首项 lex 降序) */
 
   function gbCount() {
     var i = 0;
@@ -799,7 +798,7 @@ var ApolloGroebner = (function () {
     return _ep[s * GB_TERMS + t];
   }
 
-  /* ==================== 结式(A3 数值路径,C ac_pro_resultant.c 镜像) ==================== */
+  /* 结式(A3 数值路径,C ac_pro_resultant.c 镜像) */
 
   /* 2 变量项解析(语法同 gb;每变量指数 ≤15,无总次数上限——C parse_into 同域)。
    * 产出 _resParseC/_tEp(系数与 (xd<<4)|yd),返回项数;失败 −1。 */
@@ -962,7 +961,7 @@ var ApolloGroebner = (function () {
   function resRun(fsrc, gsrc, x0, buildOnly) {
     var nf = resParse(fsrc);
     if (nf < 0) { _resErr = 2; return 0; }
-    /* C 同款纪律:解析完**立刻**把 y 系数提取到系数槽——随后 g 的解析
+    /* C 同款纪律:解析完立刻把 y 系数提取到系数槽——随后 g 的解析
      * 会覆写项暂存区(res 视图与 mv 视图共享存储的 JS 对应物) */
     var df = resYCoeffsAtFrom(nf, x0, _resF);
     if (df < 0) { _resErr = 2; return 0; }
@@ -1014,7 +1013,7 @@ var ApolloGroebner = (function () {
   function getResultant() { return _resDet; }
   function getResultantError() { return _resErr; }
 
-  /* ==================== 复位 ==================== */
+  /* 复位 */
   function reset() {
     var i = 0;
     for (i = 0; i < GB_BASIS; i++) { _cnt[i] = 0; _dead[i] = 0; }

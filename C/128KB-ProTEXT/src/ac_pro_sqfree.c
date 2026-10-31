@@ -1,48 +1,45 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_sqfree.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.4.0 功能 9(C 侧):单变量多项式 square-free 分解与重根重数,
- *   字符串进、字符串出。行为边界由 docs/contracts/sqfree-format-v24.md
- *   **逐字冻结**(本头注是该契约的镜像;任何变更须先改契约再改码,
- *   ROADMAP.md:178)。
- *
- * 【管线 / Pipeline(契约 §3-§6)】
- *   ① 解析(契约 §3,自备从严文法):项 = [符号][系数][*][x[^n]],
- *      整数字面量、|c| ≤ 999、次数 1..8(n ≥ 9 词法层当场 EDEG)、
- *      '^' 与次数紧连、'='/'/'/'.' 一律 EPARSE(非整系数在文法层拒)、
- *      同次项重复 EPARSE;长度 ≤ 128 B。
- *   ② SFF(契约 §4,整系数域循环式):本原化(容度 1、首项为正)→
- *      f_{i+1} = f_i / gcd(f_i, f_i') 的显式循环 → h_j = f_j / g_j →
- *      q_j = h_j / h_{j+1}(末层 q_L = h_L / 1)= 重数恰为 j 的无重因子。
- *      **重数由整系数 GCD 的层指标精确决定,浮点永不参与合并**(契约
- *      §4.3,ROADMAP.md:149)——「重根只出一次」是结构性保证,不是
- *      数值聚类。全程 ac_int_t,中间量 > 1e18 即 ECOEF(绝不回绕)。
- *   ③ 逐无重因子求根(契约 §5.1,**按因子次数路由**):deg ≤ 4 走上游
- *      精确根式(ac_solvers 硬限 [1,4])标 'e';deg 5..8 走 Durand-Kerner
- *      (ac_pro_numroots)标 'd'。q_j 无重 ⇒ DK 的重根弱点被结构性规避。
- *      JS 侧整题 ≥5 拒绝是契约 §5.1 成文的双侧能力边界,C 侧不适用。
- *   ④ 渲染(契约 §6,逐字):`[根@e|d重数, ...]`,空表 "[]";排序
- *      Re 降序、Re 并列(1e-9)Im 降序的稳定插入排序;复根 = [re]
- *      ("+"|"-")[|im|]"i",re≈0 整段省略、|im|≈1 只写 i(与 §6.2
- *      冻结范例 i@e1/-i@e1/2i 一致:re 省略时正号一并吸收);fmt 三级
- *      (整判 1e-9 / 有理重建 q≤1000 / 定点 12 位半连舍)与 ODE §5.1
- *      同算法,平局再取 |p| 小者(契约 §5.4)。
- *
- * 【f' = 0 与常数的边界(契约 §4.4,写死)】
- *   全零多项式(输入 "0")→ ECOEF;非零常数(deg 0)→ 成功、输出 "[]"
- *   (刻意偏离 ODE 契约的 ECOEF——常数的 (根,重数) 列表良定为空)。
- *
- * 【视图纪律 / View discipline】
- *   解析+本原化持有 rat 槽(464 B,「复用 poly 视图零增量」,
- *   ROADMAP.md:152);此后一切整系数代数与渲染在栈上进行(deg ≤ 8 →
- *   9 系数 × 8 B/数组),deg 5..8 的 ac_pro_numroots 写同 union 的 nr
- *   视图,不构成冲突 —— rat 槽数据在拷栈后不再读(apart 同款纪律)。
- *
- * 【零存储纪律 / Zero-storage】
- *   零 static 对象、零 malloc、零 VLA、零递归;错误码走返回值
- *   (ac_pro.h eig 节论证:一个 static = TU 净 +32 B .bss)。
- * ============================================================ */
+/* ApolloCalc · ac_pro_sqfree.c — 单变量多项式 square-free 分解 + 重根重数(字符串进、字符串出)
+
+   v2.4.0 功能 9(C 侧):单变量多项式 square-free 分解与重根重数,字符串进、
+   字符串出。行为边界由 docs/contracts/sqfree-format-v24.md 逐字冻结(本头注
+   是该契约的镜像;任何变更须先改契约再改码,ROADMAP.md:178)。
+
+   管线(契约 §3-§6):
+
+   解析(契约 §3,自备从严文法):项 = [符号][系数][*][x[^n]],整数字面量、
+   |c| ≤ 999、次数 1..8(n ≥ 9 词法层当场 EDEG),'^' 与次数紧连,
+   '='/'/'/'.' 一律 EPARSE(非整系数在文法层拒),同次项重复 EPARSE;
+   长度 ≤ 128 B。
+
+   SFF(契约 §4,整系数域循环式):本原化(容度 1、首项为正)→
+   f_{i+1} = f_i / gcd(f_i, f_i') 的显式循环 → h_j = f_j / g_j →
+   q_j = h_j / h_{j+1}(末层 q_L = h_L / 1)= 重数恰为 j 的无重因子。
+   重数由整系数 GCD 的层指标精确决定,浮点永不参与合并(契约 §4.3,
+   ROADMAP.md:149),「重根只出一次」是结构性保证,不是数值聚类。
+   全程 ac_int_t,中间量 > 1e18 即 ECOEF(绝不回绕)。
+
+   逐无重因子求根(契约 §5.1,按因子次数路由):deg ≤ 4 走上游精确根式
+   (ac_solvers 硬限 [1,4])标 'e';deg 5..8 走 Durand-Kerner
+   (ac_pro_numroots)标 'd'。q_j 无重 ⇒ DK 的重根弱点被结构性规避。
+   JS 侧整题 ≥5 拒绝是契约 §5.1 成文的双侧能力边界,C 侧不适用。
+
+   渲染(契约 §6,逐字):`[根@e|d重数, ...]`,空表 "[]";排序 Re 降序、
+   Re 并列(1e-9)Im 降序的稳定插入排序;复根 = [re]("+"|"-")[|im|]"i",
+   re≈0 整段省略、|im|≈1 只写 i(与 §6.2 冻结范例 i@e1/-i@e1/2i 一致:
+   re 省略时正号一并吸收);fmt 三级(整判 1e-9 / 有理重建 q≤1000 /
+   定点 12 位半连舍)与 ODE §5.1 同算法,平局再取 |p| 小者(契约 §5.4)。
+
+   f' = 0 与常数的边界(契约 §4.4,写死):全零多项式(输入 "0")→ ECOEF;
+   非零常数(deg 0)→ 成功、输出 "[]"(刻意偏离 ODE 契约的 ECOEF,常数的
+   (根,重数) 列表良定为空)。
+
+   视图纪律:解析+本原化持有 rat 槽(464 B,「复用 poly 视图零增量」,
+   ROADMAP.md:152);此后一切整系数代数与渲染在栈上进行(deg ≤ 8 →
+   9 系数 × 8 B/数组),deg 5..8 的 ac_pro_numroots 写同 union 的 nr 视图,
+   不构成冲突,rat 槽数据在拷栈后不再读(apart 同款纪律)。
+
+   零存储纪律:零 static 对象、零 malloc、零 VLA、零递归;错误码走返回值
+   (ac_pro.h eig 节论证:一个 static = TU 净 +32 B .bss)。 */
 
 #include <string.h>
 #include <stdint.h>
@@ -62,9 +59,9 @@
 #define SQF_MAX_ITEMS    AC_PRO_RAT_MAX_DEG                /* 相异根 ≤ 8 */
 #define SQF_MAX_LAYER    AC_PRO_RAT_MAX_DEG                /* 重数 ≤ 8 = deg f */
 
-/* ==================== 错误码(契约 §7)—— ac_pro.h 已定义 ==================== */
+/* 错误码(契约 §7),ac_pro.h 已定义 */
 
-/* ---- 溢出检查的整系数算术(绝不回绕,rational 模块同款) ---- */
+/* 溢出检查的整系数算术(绝不回绕,rational 模块同款) */
 static ac_int_t sq_iabs(ac_int_t x) { return (x < 0) ? -x : x; }
 
 static int sq_add_ov(ac_int_t x, ac_int_t y, ac_int_t *out) {
@@ -92,7 +89,7 @@ static ac_int_t sq_igcd(ac_int_t a, ac_int_t b) {
     return (a < 0) ? -a : a;
 }
 
-/* ---- 输出缓冲追加 ---- */
+/* 输出缓冲追加 */
 static int sq_puts(char *buf, int cap, int *pos, const char *s) {
     while (*s != '\0') {
         if (*pos >= cap - 1) { return AC_PRO_SQF_EOVER; }
@@ -123,7 +120,7 @@ static int sq_puti(char *buf, int cap, int *pos, long long v) {
     return 0;
 }
 
-/* ---- 数值三级 fmt(契约 §5.4,与 ODE §5.1 同算法;平局加 |p| 小者)----
+/* 数值三级 fmt(契约 §5.4,与 ODE §5.1 同算法;平局加 |p| 小者)
  * 域 |x| ≤ 1000(§3.4 Cauchy 界)⇒ x·1e12 < 2^53 且 int64 无溢出。 */
 static int sq_fmt(double x, char *out) {
     double r = (x < 0) ? -x : x;
@@ -235,8 +232,8 @@ static int sq_fmt(double x, char *out) {
     }
 }
 
-/* ==================== 契约 §3:解析(自备从严文法) ====================
- * 项 = [符号串(逐字符消费,gb 先例 ac_pro_groebner.c:134)][系数]
+/* 契约 §3:解析(自备从严文法)
+ * 项 = [符号串(逐字符消费,gb 先例 ac_pro_groebner.c:129)][系数]
  *      [*][x[^n]];'*' 须夹在系数与 x 之间(悬空 3*、*x → EPARSE);
  *      x 后仅允许 ^/空白/+-/串尾;'^' 与次数紧连;n = 0 → EPARSE、
  *      n ≥ 9 → EDEG 当场;|c| > 999 → ECOEF;同次项重复 → EPARSE;
@@ -332,7 +329,7 @@ static int sq_parse(const char *s, ac_int_t *coef, int *deg_out) {
     return 0;
 }
 
-/* ---- 本原化:去整数容差 + 首项为正(dst 就地,契约 §4.1) ---- */
+/* 本原化:去整数容差 + 首项为正(dst 就地,契约 §4.1) */
 static void sq_primitive(ac_int_t *f, int *df) {
     ac_int_t g = 0;
     int k;
@@ -351,7 +348,7 @@ static void sq_primitive(ac_int_t *f, int *df) {
     }
 }
 
-/* ---- 伪除:f·lc^m = q·g + r(rational 模块同款,r 就地写 rout) ---- */
+/* 伪除:f·lc^m = q·g + r(rational 模块同款,r 就地写 rout) */
 static int sq_pdivmod(const ac_int_t *f, int df, const ac_int_t *g, int dg,
                       ac_int_t *qout, ac_int_t *rout, ac_int_t *scale) {
     ac_int_t w[AC_PRO_RAT_MAX_DEG + 1];
@@ -408,7 +405,7 @@ static int sq_pdivmod(const ac_int_t *f, int df, const ac_int_t *g, int dg,
     return 0;
 }
 
-/* ---- 整系数精确除:dst = f / g(双方本原,商在 Z[x],Gauss)----
+/* 整系数精确除:dst = f / g(双方本原,商在 Z[x],Gauss)
  * 余式非零或 scale 除不尽 = 不变式破坏 → EINTERNAL(契约 §4.2)。 */
 static int sq_exact_div(const ac_int_t *f, int df, const ac_int_t *g, int dg,
                         ac_int_t *dst, int *ddst,
@@ -432,7 +429,7 @@ static int sq_exact_div(const ac_int_t *f, int df, const ac_int_t *g, int dg,
     return 0;
 }
 
-/* ---- 整系数欧几里得 GCD(本原归一,契约 §4.2;ac_pro_rat_gcd 同款)----
+/* 整系数欧几里得 GCD(本原归一,契约 §4.2;ac_pro_rat_gcd 同款)
  * (a, b) ← (b, primitive(prem(a, b))),b = 0 时 a 即 gcd。 */
 static int sq_gcd(ac_int_t *a, int *da, ac_int_t *b, int *db,
                   ac_int_t *qtmp, ac_int_t *rtmp) {
@@ -457,7 +454,7 @@ static int sq_gcd(ac_int_t *a, int *da, ac_int_t *b, int *db,
     return 0;
 }
 
-/* ---- 求根产物项(契约 §5/§6) ---- */
+/* 求根产物项(契约 §5/§6) */
 typedef struct {
     double re;
     double im;
@@ -465,7 +462,7 @@ typedef struct {
     char tag;   /* 'e' = 精确根式管线,'d' = DK 数值管线(契约 §5.1) */
 } sq_item_t;
 
-/* ---- 单个无重因子 q(deg dq ≥ 1)的全部根 → items ---- */
+/* 单个无重因子 q(deg dq ≥ 1)的全部根 → items */
 static int sq_factor_roots(const ac_int_t *q, int dq, int mult,
                            sq_item_t *items, int *nitems) {
     double qdc[AC_PRO_RAT_MAX_DEG + 1];
@@ -508,8 +505,8 @@ static int sq_factor_roots(const ac_int_t *q, int dq, int mult,
     return 0;
 }
 
-/* ==================== 主入口(契约 §3-§6 判定全序:EPARSE → EDEG 当场
- * → ECOEF → [SFF 期] ECOEF(溢出)→ [求根渲染期] EOVER / EINTERNAL)==== */
+/* 主入口(契约 §3-§6 判定全序:EPARSE → EDEG 当场
+ * → ECOEF → [SFF 期] ECOEF(溢出)→ [求根渲染期] EOVER / EINTERNAL) */
 int ac_pro_sqfree(const char *src, char *out, int out_len) {
     /* 整系数 SFF 工作区(栈;deg ≤ 8 → 9 系数/数组) */
     ac_int_t fc[AC_PRO_RAT_MAX_DEG + 1];    /* f_i(当前层输入) */
@@ -540,7 +537,7 @@ int ac_pro_sqfree(const char *src, char *out, int out_len) {
         return AC_PRO_SQF_EPARSE;                        /* 空/超长(§3.1) */
     }
 
-    /* ---- 解析进 rat 槽(复用 poly 视图),再拷栈(此后不读 rat 槽) ---- */
+    /* 解析进 rat 槽(复用 poly 视图),再拷栈(此后不读 rat 槽) */
     {
         ac_int_t *pc = s_pro_rat_slot(0).c;
         rc = sq_parse(src, pc, &s_pro_rat_deg(0));
@@ -561,7 +558,7 @@ int ac_pro_sqfree(const char *src, char *out, int out_len) {
         return AC_PRO_SQF_OK;
     }
 
-    /* ---- 契约 §4.2:循环式 SFF(f_{i+1} = f_i / gcd(f_i, f_i'))----
+    /* 契约 §4.2:循环式 SFF(f_{i+1} = f_i / gcd(f_i, f_i'))
      * h_i = f_i / g_i;q_j = h_j / h_{j+1}(j = 1..L−1),末层 q_L = h_L / 1
      * (f_{L+1} = g_L 本原归一下恒为 1,Gauss)。迭代数 ≤ deg f ≤ 8。 */
     while (dfc >= 1) {
@@ -612,7 +609,7 @@ int ac_pro_sqfree(const char *src, char *out, int out_len) {
         return AC_PRO_SQF_EINTERNAL;
     }
 
-    /* ---- 契约 §5.2:共轭完整性(残缺 → EINTERNAL,绝不硬凑)---- */
+    /* 契约 §5.2:共轭完整性(残缺 → EINTERNAL,绝不硬凑) */
     for (i = 0; i < nitems; i++) { usedp[i] = 0; }
     for (i = 0; i < nitems; i++) {
         if (items[i].im < SQF_EPS && items[i].im > -SQF_EPS) { continue; }
@@ -637,8 +634,8 @@ int ac_pro_sqfree(const char *src, char *out, int out_len) {
         }
     }
 
-    /* ---- 契约 §5.3:排序(渲染顺序的根源)——稳定插入,Re 降序,
-       Re 并列(1e-9)按 Im 降序 ---- */
+    /* 契约 §5.3:排序(渲染顺序的根源),稳定插入,Re 降序,
+       Re 并列(1e-9)按 Im 降序 */
     for (i = 1; i < nitems; i++) {
         sq_item_t cr = items[i];
         j = i - 1;
@@ -657,7 +654,7 @@ int ac_pro_sqfree(const char *src, char *out, int out_len) {
         items[j + 1] = cr;
     }
 
-    /* ---- 契约 §6:渲染(机械拼接,特例仅二)---- */
+    /* 契约 §6:渲染(机械拼接,特例仅二) */
     rc = sq_puts(tmp, SQF_OUT_EST, &pos, "[");
     if (rc != 0) { return rc; }
     for (i = 0; i < nitems; i++) {

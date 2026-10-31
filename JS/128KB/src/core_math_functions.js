@@ -1,25 +1,23 @@
-/* ============================================================
- * ApolloCalc · core_math_functions.js — 数学执行层（文件 2/4）
- * Lite Wearable / JerryScript / 堆上限 64KB / Zero-GC
+/* ApolloCalc · core_math_functions.js — 数学执行层（文件 2）
+ * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 依赖文件 1 全局（只引用，不重复声明）：
  *   angleMode("DEG"|"RAD") / DEG_TO_RAD / RAD_TO_DEG
  *   F_SIN..F_ATANH 函数 ID
  * 必须在 core_parser.js 之后加载
- * 铁律：热路径零堆分配、零字符串操作、零递归、零对象字面量
- * ============================================================ */
+ * 铁律：热路径零堆分配、零字符串操作、零递归、零对象字面量 */
 
-/* ==================== 文件 2 专属全局变量（唯一声明处） ==================== */
-var _dmsDeg = 0;    /* 度：带符号整数。分秒恒非负，符号全挂在度上 */
-var _dmsMin = 0;    /* 分：非负整数 0..59 */
-var _dmsSec = 0.0;  /* 秒：非负浮点 [0,60) */
+/* 文件 2 专属全局变量（唯一声明处） */
+var _dmsDeg = 0;    /* 带符号整数；分秒恒非负，符号全挂在度上 */
+var _dmsMin = 0;    /* 非负整数 0..59 */
+var _dmsSec = 0.0;  /* 非负浮点 [0,60) */
 
-/* ---------- Math.log10 兜底（仅加载期执行一次，热路径不经过） ----------
+/* Math.log10 兜底（仅加载期执行一次，热路径不经过）
  * 个别 JerryScript 裁剪构建未启用 ES6 Math.log10，缺失时以 log*LOG10E 顶替 */
 if (Math.log10 === undefined) {
   Math.log10 = function (v) { return Math.log(v) * Math.LOG10E; };
 }
 
-/* ---------- 双曲 / 反双曲函数兜底（仅加载期执行一次，热路径不经过） ----------
+/* 双曲 / 反双曲函数兜底（仅加载期执行一次，热路径不经过）
  * 个别 JerryScript 裁剪构建未启用 ES6 双曲函数，缺失时按恒等式以 exp/log 组装：
  *   sinh(x) = (e^x − e^−x)/2    cosh(x) = (e^x + e^−x)/2
  *   tanh(x) = (e^2x − 1)/(e^2x + 1)
@@ -64,7 +62,7 @@ if (Math.atanh === undefined) {
   };
 }
 
-/* ==================== 模块一：三角函数（DEG / RAD 双模式） ==================== */
+/* 模块一：三角函数（DEG / RAD 双模式） */
 
 function mathSin(v) {
   /* 零分配：原生 sin，DEG 模式入参乘一次常量，全程栈上完成 */
@@ -112,7 +110,7 @@ function mathAtan2(y, x) {
   return Math.atan2(y, x);
 }
 
-/* ==================== 模块二：对数 / 指数 / 绝对值 ==================== */
+/* 模块二：对数 / 指数 / 绝对值 */
 
 function mathLn(v) {
   /* 零分配：原生 log（自然对数），直通 C 底层数学库，不手写泰勒级数 */
@@ -134,7 +132,7 @@ function mathAbs(v) {
   return Math.abs(v);
 }
 
-/* ==================== 模块二补充：双曲 / 反双曲函数 ====================
+/* 模块二补充：双曲 / 反双曲函数
  * 双曲函数不是角度量纲，DEG/RAD 模式均直通原生，不做换算 */
 
 function mathSinh(v) {
@@ -167,7 +165,7 @@ function mathAtanh(v) {
   return Math.atanh(v);
 }
 
-/* ==================== 模块三：度分秒（D°M′S″）转换 ==================== */
+/* 模块三：度分秒（D°M′S″）转换 */
 
 function degToDms(deg) {
   /* 零分配：floor + 取余纯算术，结果写全局 _dmsDeg/_dmsMin/_dmsSec，无堆对象无字符串 */
@@ -199,7 +197,7 @@ function dmsToDeg(d, m, s) {
   return d + m / 60.0 + s / 3600.0;
 }
 
-/* ==================== 模块四：函数派发入口 ==================== */
+/* 模块四：函数派发入口 */
 
 /* funcId：文件 1 的 F_* 常量。
  * atan2 双参：arg1 = y（对边），arg2 = x（邻边）；其余函数只读 arg1。

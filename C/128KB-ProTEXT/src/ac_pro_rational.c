@@ -1,34 +1,29 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_rational.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.3.0 功能 5：单变量有理函数工具 —— 欧几里得 GCD、cancel 约分、
- *   apart 部分分式（ROADMAP.md:117-119）。多项式四则（加/减/乘 + 伪除
- *   pdivmod）是内部基建，直接支撑 GCD 与 cancel，不单设字符串 API ——
- *   调用方（积分前预处理 / 式化简）需要的终点是本文件三个入口。
- *
- * 【整系数域契约 / Integer-coefficient domain —— 为什么没有浮点系数】
- *   GCD/cancel 这类算法只在整系数域良定（与 A1 的 prem 同纪律，
- *   ac_pro_multi.c）：浮点系数下「公因式」没有精确意义。全程 ac_int_t
- *   （int64），任何中间量溢出立即返回 AC_PRO_RAT_ECOEF —— 绝不回绕、
- *   绝不降级成浮点。唯一的浮点出现在 apart 的数值端：分母根（deg ≤ 4
- *   上游精确根式管线 / deg 5..8 Durand-Kerner）与 A_i = p(r_i)/q'(r_i)，
- *   且必须过回乘验证（残差 ≤ 1e-9·尺度）才准出串 —— 绝不输出未验证的
- *   分解（ROADMAP.md:118「验证不过即报错」）。
- *
- * 【为什么错误码走返回值 / Why return-value error codes】
- *   一个 static 错误槽就让 TU 净增 32 B .bss（ac_pro.h:425 同款论证），
- *   直接破坏 42608/42640 门禁。全程零 static 对象、零 malloc、零 VLA、
- *   零递归（Euclid / pdivmod / DK 求根全部显式循环）。
- *
- * 【视图纪律 / View discipline】
- *   解析与整系数代数阶段持有 rat 槽（464 B，union 吸收）；apart 的数值
- *   阶段全部在栈上数组进行（次数 ≤ 8），因为 deg(q) 5..8 时
- *   ac_pro_numroots 写同 union 的 nr 视图、整块覆写 rat —— 先拷栈、
- *   再求根、再回代（ac_pro_scratch.h rat 视图头注同款说明）。
- *   deg(q) ≤ 4 时上游 ac_solvers 用的是上游 g_ac_scratch（物理不重叠），
- *   但实现统一走栈拷贝，两条路径同构、纪律只有一条。
- * ============================================================ */
+/* ApolloCalc · ac_pro_rational.c — 单变量有理函数:欧几里得 GCD,cancel 约分,apart 部分分式
+
+   v2.3.0 功能 5:单变量有理函数工具,欧几里得 GCD,cancel 约分,apart
+   部分分式(ROADMAP.md:117-119)。多项式四则(加/减/乘 + 伪除 pdivmod)是
+   内部基建,直接支撑 GCD 与 cancel,不单设字符串 API:调用方(积分前预处理
+   / 式化简)需要的终点是本文件三个入口。
+
+   整系数域契约,为什么没有浮点系数:GCD/cancel 这类算法只在整系数域良定
+   (与 A1 的 prem 同纪律,ac_pro_multi.c),浮点系数下「公因式」没有精确
+   意义。全程 ac_int_t(int64),任何中间量溢出立即返回 AC_PRO_RAT_ECOEF,
+   绝不回绕,绝不降级成浮点。唯一的浮点出现在 apart 的数值端:分母根
+   (deg ≤ 4 上游精确根式管线 / deg 5..8 Durand-Kerner)与
+   A_i = p(r_i)/q'(r_i),且必须过回乘验证(残差 ≤ 1e-9·尺度)才准出串,
+   绝不输出未验证的分解(ROADMAP.md:118「验证不过即报错」)。
+
+   错误码走返回值:一个 static 错误槽就让 TU 净增 32 B .bss
+   (ac_pro.h:292 同款论证),直接破坏 42608/42640 门禁。全程零 static
+   对象,零 malloc,零 VLA,零递归(Euclid / pdivmod / DK 求根全部显式
+   循环)。
+
+   视图纪律:解析与整系数代数阶段持有 rat 槽(464 B,union 吸收);apart
+   的数值阶段全部在栈上数组进行(次数 ≤ 8),因为 deg(q) 5..8 时
+   ac_pro_numroots 写同 union 的 nr 视图,整块覆写 rat,先拷栈,再求根,
+   再回代(ac_pro_scratch.h rat 视图头注同款说明)。deg(q) ≤ 4 时上游
+   ac_solvers 用的是上游 g_ac_scratch(物理不重叠),但实现统一走栈拷贝,
+   两条路径同构,纪律只有一条。 */
 
 #include <string.h>
 #include <stdint.h>
@@ -40,7 +35,7 @@
 
 #if AC_PRO_ACTIVE
 
-/* ---- 槽位约定（见 ac_pro_scratch.h rat 视图头注） ---- */
+/* 槽位约定（见 ac_pro_scratch.h rat 视图头注） */
 #define RAT_P    0
 #define RAT_Q    1
 #define RAT_G    2
@@ -82,7 +77,7 @@ static ac_int_t rat_lead(int slot) {
     return (d >= 0) ? rat_c(slot)[d] : 0;
 }
 
-/* ---- 溢出检查的整系数算术（绝不回绕） ---- */
+/* 溢出检查的整系数算术（绝不回绕） */
 static ac_int_t rat_iabs(ac_int_t x) { return (x < 0) ? -x : x; }
 
 static int rat_add_ov(ac_int_t x, ac_int_t y, ac_int_t *out) {
@@ -100,7 +95,7 @@ static int rat_mul_ov(ac_int_t x, ac_int_t y, ac_int_t *out) {
     return 0;
 }
 
-/* ---- 加 / 减 / 乘（次数 ≤ 8、系数溢出即拒绝） ---- */
+/* 加 / 减 / 乘（次数 ≤ 8、系数溢出即拒绝） */
 static int rat_poly_add(int dst, int f, int g) {   /* dst = f + g */
     ac_int_t t[AC_PRO_RAT_MAX_DEG + 1];
     int k;
@@ -162,7 +157,7 @@ static int rat_poly_mul(int dst, int f, int g) {   /* dst = f * g */
     return 0;
 }
 
-/* ---- int64 欧几里得 gcd（正值） ---- */
+/* int64 欧几里得 gcd（正值） */
 static ac_int_t rat_igcd(ac_int_t a, ac_int_t b) {
     ac_int_t t;
     while (b != 0) {
@@ -173,7 +168,7 @@ static ac_int_t rat_igcd(ac_int_t a, ac_int_t b) {
     return (a < 0) ? -a : a;
 }
 
-/* ---- 本原化：去整数容差 + 首项化正（dst 可 = src） ---- */
+/* 本原化：去整数容差 + 首项化正（dst 可 = src） */
 static void rat_primitive(int slot) {
     ac_int_t g = 0;
     int k;
@@ -192,7 +187,7 @@ static void rat_primitive(int slot) {
     }
 }
 
-/* ---- 伪除：f = q·g·s + r（s = lc(g)^m 标量），商/余都落栈上数组 ----
+/* 伪除：f = q·g·s + r（s = lc(g)^m 标量），商/余都落栈上数组
  * 整系数域的标准做法（A1 prem 同纪律）：每步 W ← lc·W − lfw·x^k·g，
  * 商同步 q ← lc·q + lfw·x^k；恒等式 f·lc^m = q·g + r。r = 0 时
  * q / lc^m = f / g（Gauss 引理：本原 g 整除 f ⇒ 商在 Z[x]）。 */
@@ -253,7 +248,7 @@ static int rat_pdivmod(const ac_int_t *f, const ac_int_t *g, int df, int dg,
     return 0;
 }
 
-/* ---- 解析：项 = [符号][系数][*]x[^n]，gb 解析器同风格 ----
+/* 解析：项 = [符号][系数][*]x[^n]，gb 解析器同风格
  * 同类项重复 → EPARSE（与 gb 对同变量重复报错的先例一致）；
  * 空串 / 非法字符 / 括号 / 分数 → EPARSE；|c| > 9999 → ECOEF；
  * 次数 > 8 → EDEG。返回 0 = 成功。 */
@@ -316,7 +311,7 @@ static int rat_parse(const char *s, int slot) {
             c = neg ? -1 : 1;
         } else {
             c = neg ? -c : c;           /* 纯常数项 */
-            e = 0;                      /* 常数落 x^0 —— e 的初值 1 只属于省略 ^ 的 x 项 */
+            e = 0;                      /* 常数落 x^0,e 的初值 1 只属于省略 ^ 的 x 项 */
         }
         if (seen[e]) { return AC_PRO_RAT_EPARSE; }
         seen[e] = 1;
@@ -337,7 +332,7 @@ static int rat_parse(const char *s, int slot) {
     return 0;
 }
 
-/* ---- "p/q" 拆分：恰一个顶层 '/'，两侧非空 ---- */
+/* "p/q" 拆分：恰一个顶层 '/'，两侧非空 */
 static int rat_split(const char *f, char *left, char *right) {
     const char *slash = strchr(f, '/');
     size_t ln;
@@ -354,7 +349,7 @@ static int rat_split(const char *f, char *left, char *right) {
     return 0;
 }
 
-/* ---- 输出缓冲追加 ---- */
+/* 输出缓冲追加 */
 static int rat_puts(char *buf, int cap, int *pos, const char *s) {
     while (*s != '\0') {
         if (*pos >= cap - 1) { return AC_PRO_RAT_EOVER; }
@@ -385,7 +380,7 @@ static int rat_puti(char *buf, int cap, int *pos, long long v) {
     return 0;
 }
 
-/* ---- 多项式降幂输出："3*x^2-x-1"，零多项式 → "0" ---- */
+/* 多项式降幂输出："3*x^2-x-1"，零多项式 → "0" */
 static int rat_emit_poly(int slot, char *buf, int cap, int *pos) {
     int d;
     int first = 1;
@@ -425,7 +420,7 @@ static int rat_emit_poly(int slot, char *buf, int cap, int *pos) {
     return 0;
 }
 
-/* ---- 数值三级 fmt（与 docs/contracts/ode-format-v23.md §5.1 同算法）----
+/* 数值三级 fmt（与 docs/contracts/ode-format-v23.md §5.1 同算法）
  * 整判 1e-9 → 整串；有理重建 q ≤ 1000 → "p/q"（分数间距 ≥ 1e-6 保证
  * 1e-9 邻域互不相交，重建对求根噪声不变）；否则定点 12 位（半连舍远离
  * 零，llround 语义），去尾零。根域 |x| ≤ 1+9999 保证 x·1e12 < 2^53。 */
@@ -541,7 +536,7 @@ static int rat_fmt(double x, char *out) {
     }
 }
 
-/* ---- 数值求值（Horner，升序系数） ---- */
+/* 数值求值（Horner，升序系数） */
 static double rat_eval_d(const double *c, int d, double x) {
     double acc = 0.0;
     int k;
@@ -551,7 +546,7 @@ static double rat_eval_d(const double *c, int d, double x) {
     return acc;
 }
 
-/* ==================== ac_pro_rat_gcd ==================== */
+/* ac_pro_rat_gcd */
 int ac_pro_rat_gcd(const char *f, const char *g, char *out, int out_len) {
     ac_int_t q[AC_PRO_RAT_MAX_DEG + 1];
     ac_int_t r[AC_PRO_RAT_MAX_DEG + 1];
@@ -593,7 +588,7 @@ int ac_pro_rat_gcd(const char *f, const char *g, char *out, int out_len) {
     return AC_PRO_RAT_OK;
 }
 
-/* ==================== ac_pro_rat_cancel ==================== */
+/* ac_pro_rat_cancel */
 int ac_pro_rat_cancel(const char *f, char *out, int out_len) {
     char left[RAT_SRC_MAX + 2];
     char right[RAT_SRC_MAX + 2];
@@ -722,7 +717,7 @@ int ac_pro_rat_cancel(const char *f, char *out, int out_len) {
     return AC_PRO_RAT_OK;
 }
 
-/* ==================== ac_pro_rat_apart ==================== */
+/* ac_pro_rat_apart */
 int ac_pro_rat_apart(const char *f, char *out, int out_len) {
     char left[RAT_SRC_MAX + 2];
     char right[RAT_SRC_MAX + 2];
@@ -763,7 +758,7 @@ int ac_pro_rat_apart(const char *f, char *out, int out_len) {
     if (dq < 1) { return AC_PRO_RAT_EDEG; }       /* 分母必须是真多项式 */
     if (dp >= dq) { return AC_PRO_RAT_EDOM; }     /* 假分式：先多项式除法（本版不做） */
 
-    /* 拷栈（此后 rat 视图不再读 —— deg 5..8 的 DK 写 nr 视图会覆写 union） */
+    /* 拷栈（此后 rat 视图不再读,deg 5..8 的 DK 写 nr 视图会覆写 union） */
     for (k = 0; k <= AC_PRO_RAT_MAX_DEG; k++) {
         pc[k] = rat_c(RAT_P)[k];
         qc[k] = rat_c(RAT_Q)[k];
@@ -897,7 +892,7 @@ int ac_pro_rat_apart(const char *f, char *out, int out_len) {
     return AC_PRO_RAT_OK;
 }
 
-/* ==================== ac_pro_rat_arith ====================
+/* ac_pro_rat_arith
  * 多项式四则的 + - *（公开入口；op ∈ '+', '-', '*'）。
  * 和/差次数 ≤ 8；积次数 = deg f + deg g ≤ 8，超限 EDEG。 */
 int ac_pro_rat_arith(const char *f, char op, const char *g,

@@ -1,22 +1,21 @@
-/* ============================================================
- * ApolloCalc-CAS · C 端 100 万次压测脚本
- *
- * 编译：mingw32-make -f bench-c-makefile KERNEL=../../C/<预算>/src
- * 运行：./bench-c.exe > result-c<预算>-1M.csv
- *
- * 输出：CSV，列名固定 stage,name,iterations,total_ms,us_per_op（与 JS 端逐字一致）
- *       尾部 SUMMARY 行 = 全 stage 汇总；STATIC 行 = 表达式池静态占用
- *
- * 池：  pool_c.h（由 tests/bench/gen_pool_c.py 从 pool.json 生成，编译期写死）
- *       C 端不解析 JSON：运行时零解析开销。is_128kb=1 的条目仅 128KB 接受。
- *
- * 版本：64KB / 128KB 共用本文件，编译期用 __has_include("ac_ratroot.h") 区分
- *       （该头文件是 C 128KB 独有；64KB 无 ac_ratroot.c / ac_calculus.c）。
- *
- * 迭代：每 stage 独立 100 万次，按池大小摊到每条的循环遍数：
- *       loops = ceil(totalIter / poolSize)，actualIter = loops * poolSize
- *       实际迭代数略高于 100 万（整遍对齐），CSV 的 iterations 列是真实值。
- * ============================================================ */
+/* ApolloCalc · bench-c.c — C 端 100 万次压测脚本
+
+   编译：mingw32-make -f bench-c-makefile KERNEL=../../C/<预算>/src
+   运行：./bench-c.exe > result-c<预算>-1M.csv
+
+   输出：CSV，列名固定 stage,name,iterations,total_ms,us_per_op（与 JS 端逐字一致）
+         尾部 SUMMARY 行 = 全 stage 汇总；STATIC 行 = 表达式池静态占用
+
+   池：  pool_c.h（由 tests/bench/gen_pool_c.py 从 pool.json 生成，编译期写死）
+         C 端不解析 JSON：运行时零解析开销。is_128kb=1 的条目仅 128KB 接受。
+
+   版本：64KB / 128KB 共用本文件，编译期用 __has_include("ac_ratroot.h") 区分
+         （该头文件是 C 128KB 独有；64KB 无 ac_ratroot.c / ac_calculus.c）。
+
+   迭代：每 stage 独立 100 万次，按池大小摊到每条的循环遍数：
+         loops = ceil(totalIter / poolSize)，actualIter = loops * poolSize
+         实际迭代数略高于 100 万（整遍对齐），CSV 的 iterations 列是真实值。
+*/
 
 #define _POSIX_C_SOURCE 199309L   /* clock_gettime / CLOCK_MONOTONIC */
 
@@ -31,7 +30,7 @@
 #include "ac_exact.h"
 #include "ac_math.h"
 
-/* ---- 版本判定：ac_ratroot.h 为 C 128KB 独有 ---- */
+/* 版本判定：ac_ratroot.h 为 C 128KB 独有 */
 #if defined(__has_include)
 #  if __has_include("ac_ratroot.h")
 #    define AC_IS_128KB 1
@@ -42,7 +41,7 @@
 #  define AC_IS_128KB 0
 #endif
 
-/* ---- v1.1.0 scratch overlay：ac_scratch.h 为 C 128KB 独有 ----
+/* v1.1.0 scratch overlay：ac_scratch.h 为 C 128KB 独有
  * 开启后 g_eval_stack / g_op_stack 变成 g_ac_stk 的宏视图，
  * g_lhs_token / g_rhs_token 被整块移除（原地切片），故静态占用统计
  * 必须改用 union 的尺寸，否则 sizeof(宏视图) 仍可编译但口径重复计数、
@@ -60,14 +59,14 @@
 
 #include "pool_c.h"
 
-/* ---- 计时工具（POSIX 单调时钟，不受系统时间跳变影响） ---- */
+/* 计时工具（POSIX 单调时钟，不受系统时间跳变影响） */
 static double now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
 }
 
-/* ---- 3 轮取中位数（与 JS 端同策略，抗抖动） ---- */
+/* 3 轮取中位数（与 JS 端同策略，抗抖动） */
 #define BENCH_RUNS 3
 #define WARMUP     1000
 
@@ -82,11 +81,11 @@ static double median_of(double *arr, int n) {
     return arr[n / 2];
 }
 
-/* ---- 汇总累加器 ---- */
+/* 汇总累加器 */
 static long long g_sum_ops = 0;
 static double    g_sum_ms  = 0.0;
 
-/* ==================== 池过滤（版本门控） ==================== */
+/* 池过滤（版本门控） */
 static const pool_entry_t *g_parse[POOL_MAX_N];
 static const pool_entry_t *g_eval[POOL_MAX_N];
 static const pool_entry_t *g_solve[POOL_MAX_N];
@@ -111,7 +110,7 @@ static int filter_into(const pool_entry_t *src, int n,
     return m;
 }
 
-/* ==================== 各 stage 的单次操作 ==================== */
+/* 各 stage 的单次操作 */
 static void parse_once(const pool_entry_t *e) {
     (void)ac_parse_expression(e->src);
 }
@@ -144,7 +143,7 @@ static void solve_once(const pool_entry_t *e) {
     }
 }
 
-/* ==================== 通用池式迭代 ==================== */
+/* 通用池式迭代 */
 typedef void (*per_iter_fn)(const pool_entry_t *);
 
 static void bench_pool(const char *stage, const pool_entry_t **items,
@@ -183,7 +182,7 @@ static void bench_pool(const char *stage, const pool_entry_t **items,
            stage, pool_size, actual_iter, med, med / (double)actual_iter * 1000.0);
 }
 
-/* ==================== 表达式池静态占用 ====================
+/* 表达式池静态占用
  * 仅统计本 bench 实际使用的表达式类池（编译期 sizeof 确定，确定性无波动）。
  * 不新增任何内核静态数组；整版 .bss 另见 BENCH-1M.md（size 口径）。
  *

@@ -1,18 +1,17 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB 结式 + 2 变量 Groebner 基测试
- * —— v2.4.0 功能 10(JS 侧)
- * 被测模块:src/core_groebner.js(ApolloGroebner)。
- * 对齐锚:C/128KB-ProTEXT/test/test_pro_groebner.c(GB-1..GB-12,期望串
- *   逐字搬运——reduced GB 在固定单项式序下唯一,node 独立核算锚定)与
- *   test_pro_multi.c 的 A3 结式用例(A3-1..A3-4)。
- * 【跨语言对拍】GB-1..GB-10 与 A3-1..A3-4 即 C 侧回归集,两侧一致用例
- *   在此内嵌;tests/polynomials.json 收口归收尾组(tests/ 本版冻结)。
- * 系数域边界:JS 无 int64,Float64 安全整数 |v| > 2^53−1 → EOVER 熔断
- *   (实现文件头成文);经典用例幅值远低于熔断线,两侧同码同串。
- * 运行:node test/test-groebner.js   (JS/128KB 目录下)
- * 全过输出:==== groebner: N pass, 0 fail ====
- * 注:不用 "use strict"——拼接体经 eval 装入(test-solvers.js 同款约定)。
- * ============================================================ */
+/* ApolloCalc · test-groebner.js — 结式 + 2 变量 Groebner 基测试(v2.4.0 功能 10,JS 侧)
+
+   被测模块:src/core_groebner.js(ApolloGroebner)。
+   对齐锚:C/128KB-ProTEXT/test/test_pro_groebner.c(GB-1..GB-12,期望串
+   逐字搬运——reduced GB 在固定单项式序下唯一,node 独立核算锚定)与
+   test_pro_multi.c 的 A3 结式用例(A3-1..A3-4)。
+   GB-1..GB-10 与 A3-1..A3-4 即 C 侧回归集,两侧一致用例在此内嵌;
+   tests/polynomials.json 收口归收尾组(tests/ 本版冻结)。
+   系数域边界:JS 无 int64,Float64 安全整数 |v| > 2^53−1 → EOVER 熔断
+   (实现文件头成文);经典用例幅值远低于熔断线,两侧同码同串。
+
+   运行:node test/test-groebner.js   (JS/128KB 目录下)
+   全过输出:==== groebner: N pass, 0 fail ====
+   注:不用 "use strict"——拼接体经 eval 装入(test-solvers.js 同款约定)。 */
 var fs = require("fs");
 var dir = __dirname + "/../src";
 var code = ["core_parser.js", "core_math_functions.js", "core_complex.js", "core_exact.js",
@@ -27,14 +26,14 @@ function ok(name, cond, detail) {
   if (cond) { pass++; }
   else { fail++; console.log("FAIL " + name + (detail !== undefined ? ": " + detail : "")); }
 }
-/* C gb_run 同款:rc = OK(1) 且基串逐字 */
+/* C gb_run 同款 */
 function checkGB(name, f, g, want) {
   var rc = ApolloGroebner.groebner(f, g);
   if (rc !== 1) { ok(name + "「<" + f + "," + g + ">」rc", false, "rc=" + rc); return; }
   var s = ApolloGroebner.getString();
   ok(name + "「<" + f + "," + g + ">」", s === want, "got=「" + s + "」 want=「" + want + "」");
 }
-/* C gb_check_reduced 同款:reduced GB 结构性质 */
+/* C gb_check_reduced 同款 */
 function checkReduced(name) {
   var count = ApolloGroebner.count();
   var i = 0;
@@ -65,7 +64,7 @@ function checkReduced(name) {
   }
 }
 
-/* ==================== 一、经典主干(C GB-1..GB-5,期望串逐字) ==================== */
+/* 经典主干(C GB-1..GB-5,期望串逐字) */
 checkGB("GB-1 任务书钦定", "x^2+y^2-1", "x^2-y", "x^2 - y | y^2 + y - 1");
 checkReduced("GB-1");
 checkGB("GB-2 深归约", "x^2+y^2-1", "x*y-1", "x + y^3 - y | y^4 - y^2 + 1");
@@ -74,7 +73,7 @@ checkGB("GB-3 线性对", "x+y", "x-y", "x | y");
 checkGB("GB-4 无交互变元", "x^2-1", "y^2-1", "x^2 - 1 | y^2 - 1");
 checkGB("GB-5 interreduce 主打", "x^2+x*y", "x*y+y^2", "x^2 - y^2 | x*y + y^2");
 
-/* ==================== 二、退化与消融(C GB-6..GB-10) ==================== */
+/* 退化与消融(C GB-6..GB-10) */
 checkGB("GB-6 冗余生成元", "x^2-y", "2*x^2-2*y", "x^2 - y");
 checkGB("GB-7 不相容→全环", "x^2+y^2-1", "x^2+y^2-2", "1");
 checkGB("GB-8 单变量公约数", "x^2-1", "x^3-1", "x - 1");
@@ -82,7 +81,7 @@ checkGB("GB-9a 常数生成元", "5", "x^2-y", "1");
 checkGB("GB-9b 零生成元", "0", "x^2-y", "x^2 - y");
 checkGB("GB-10 曲线交点形", "x^2-y", "y^2-x", "x - y^2 | y^4 - y");
 
-/* ==================== 三、访问器结构(C GB-11) ==================== */
+/* 访问器结构(C GB-11) */
 (function () {
   var rc = ApolloGroebner.groebner("x^2+y^2-1", "x*y-1");
   ok("GB-11 rc == 1", rc === 1, "rc=" + rc);
@@ -106,7 +105,7 @@ checkGB("GB-10 曲线交点形", "x^2-y", "y^2-x", "x - y^2 | y^4 - y");
      ApolloGroebner.count() === 2, "");
 })();
 
-/* ==================== 四、熔断与幂等(C GB-12) ==================== */
+/* 熔断与幂等(C GB-12) */
 ok("GB-12 x^5 → EDEG(-2)", ApolloGroebner.groebner("x^5", "y") === -2, "");
 ok("GB-12 x^3*y^3 → EDEG(-2)", ApolloGroebner.groebner("x^3*y^3", "y") === -2, "");
 ok("GB-12 尾随垃圾 → EARG(-1)", ApolloGroebner.groebner("x^2;", "y") === -1, "");
@@ -127,7 +126,7 @@ ok("GB-12 非字符串 → EARG(-1)", ApolloGroebner.groebner(null, "y") === -1,
      ApolloGroebner.count() === 0, "out=" + ApolloGroebner.getString());
 })();
 
-/* ==================== 五、结式(C A3-1..A3-4 逐条镜像) ==================== */
+/* 结式(C A3-1..A3-4 逐条镜像) */
 (function () {
   /* A3-1:Res_y(y²−x, y−1) @x=4 = f(1) = 1−4 = −3 */
   ApolloGroebner.reset();
@@ -173,7 +172,7 @@ ok("GB-12 非字符串 → EARG(-1)", ApolloGroebner.groebner(null, "y") === -1,
   ok("补充 不含 y → rc=0/error=2", rc === 0 && ApolloGroebner.getResultantError() === 2, "");
 })();
 
-/* ==================== 六、会话与审计 ==================== */
+/* 会话与审计 */
 (function () {
   ApolloGroebner.reset();
   ok("会话 1(reset 后串空)", ApolloGroebner.getString() === "", "");

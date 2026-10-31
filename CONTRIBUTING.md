@@ -107,7 +107,7 @@ nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wrap
 4. **边界值**：门禁类功能必须测「刚好通过」与「刚好拒绝」两侧（如 preCheck 的
    depth 6/7、funcs 4/5、vars 10/11）
 
-**不得为了让测试通过而修改测试期望值** —— 先怀疑实现。若确认是期望值算错，
+**不得为了让测试通过而修改测试期望值**，先怀疑实现。若确认是期望值算错，
 在 commit message 中说明推导过程。
 
 ## PR 流程

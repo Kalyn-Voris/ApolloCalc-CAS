@@ -1,39 +1,37 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_schur.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.4.0 功能 8:一般实矩阵的全部特征值(实/复共轭对)+ 可选实特征
- *   向量(反迭代)。算法:Householder 相似变换化 Hessenberg → Francis
- *   隐式双移 QR 迭代(bulge chasing)→ 2×2 块闭式解。非对称输入合法
- *   ——这正是本功能与 A5(ac_pro_eig.c,实对称 + Hotelling)的分界:
- *   ROADMAP.md:144 点名的「非对称返 -2」缺口(ac_pro.h:283-284)就此
- *   关闭;本文件的 -2 是「QR 迭代不收敛」,与 A5 的 -2 语义不同。
- *
- * 【算法边界 / Algorithm envelope】
- *   ① 幂 2 缩放:先按 max|a_ij| 用 frexp 取 2^e 做**精确**缩放(逐元素
- *      除以 2 的幂 = 纯指数加减,零舍入),把全部条目压进 [≈0.5, 1]。
- *      Francis 步中的 H² 项(条目平方)因此绝无溢出;特征值最后乘回。
- *   ② 次对角可忽略判据:|h[i][i-1]| ≤ 1e-12·(|h[i-1][i-1]|+|h[i][i]|),
- *      分母为 0 时退到 ‖H‖∞(再为 0 则次对角必为 0,直接 deflation)。
- *   ③ 每个特征值最多 50 轮 Francis 步,每 10 轮不 deflation 注入一次
- *      EISPACK 同款异常位移(s = 1.5·s0,t = −0.4375·s0²);50 轮仍不
- *      deflation → 返回 -2,**绝不返回未收敛的垃圾特征值**。
- *   ④ 实特征向量:对每个实特征值 λ 做 M = A − λI 的部分主元 LU +
- *      两步反迭代(零主元替换为 tiny,数值recipes 同款),残差
- *      ‖Av − λv‖∞ ≤ 1e-9·(1+‖A‖) 才接受;6 组 (扰动 × 初值) 全失败
- *      → 返回 -3。复特征值不产出向量(v 列全零,vector(k) 返回 NULL)
- *      —— 绝不硬凑复向量。亏损(Jordan)特征值按几何重数重复给出同
- *      一条特征向量,不做正交化修饰(那会产出非特征向量)。
- *
- * 【视图 / View】schur(2744 B ≤ 3848 吸收线,ac_pro_scratch.h)。
- *   调用方的 const a 在整个调用期间保持有效且只读:M = A − λI 每次从
- *   const 源重拷(与 A5 的 eig_build_deflated 同一技巧),省一个 n×n 缓冲。
- *
- * 【零存储纪律 / Zero-storage】
- *   零 static 对象、零 malloc、零 VLA、零递归;错误码走返回值
- *   (ac_pro.h eig 节论证:一个 static = TU 净 +32 B .bss)。Householder
- *   向量、2×2 位移标量全在栈/视图 work 槽。
- * ============================================================ */
+/* ApolloCalc · ac_pro_schur.c — 一般实矩阵全部特征值 + 可选实特征向量
+
+   v2.4.0 功能 8:全部特征值(实/复共轭对)与可选实特征向量(反迭代)。
+   算法:Householder 相似变换化 Hessenberg → Francis 隐式双移 QR 迭代
+   (bulge chasing)→ 2×2 块闭式解。非对称输入合法,这正是本功能与
+   A5(ac_pro_eig.c,实对称 + Hotelling)的分界:ROADMAP.md:144 点名的
+   「非对称返 -2」缺口(ac_pro.h:269-270)就此关闭;本文件的 -2 是
+   「QR 迭代不收敛」,与 A5 的 -2 语义不同。
+
+   幂 2 缩放:先按 max|a_ij| 用 frexp 取 2^e 做精确缩放(逐元素除以 2 的
+   幂 = 纯指数加减,零舍入),把全部条目压进 [≈0.5, 1]。Francis 步中的
+   H² 项(条目平方)因此绝无溢出,特征值最后乘回。
+
+   次对角可忽略判据:|h[i][i-1]| ≤ 1e-12·(|h[i-1][i-1]|+|h[i][i]|),
+   分母为 0 时退到 ‖H‖∞;两者皆 0 则次对角必为 0,直接 deflation。
+
+   每个特征值最多 50 轮 Francis 步,每 10 轮不 deflation 注入一次
+   EISPACK 同款异常位移(s = 1.5·s0,t = −0.4375·s0²);50 轮仍不收敛
+   → 返回 -2,绝不返回未收敛的垃圾特征值。
+
+   实特征向量:对每个实特征值 λ 做 M = A − λI 的部分主元 LU + 两步反
+   迭代(零主元替换为 tiny,数值 recipes 同款),残差
+   ‖Av − λv‖∞ ≤ 1e-9·(1+‖A‖) 才接受;6 组(扰动 × 初值)全失败 → 返回
+   -3。复特征值不产出向量(v 列全零,vector(k) 返回 NULL),绝不硬凑。
+   亏损(Jordan)特征值按几何重数重复给出同一条特征向量,不做正交化修饰,
+   那会产出非特征向量。
+
+   视图 schur(2744 B ≤ 3848 吸收线,ac_pro_scratch.h)。调用方的 const a
+   在整个调用期间保持有效且只读:M = A − λI 每次从 const 源重拷(与 A5
+   的 eig_build_deflated 同一技巧),省一个 n×n 缓冲。
+
+   零 static 对象、零 malloc、零 VLA、零递归;错误码走返回值(ac_pro.h
+   eig 节论证:一个 static = TU 净 +32 B .bss)。Householder 向量、2×2
+   位移标量全在栈/视图 work 槽。 */
 
 #include <math.h>
 
@@ -50,7 +48,7 @@
 #define PRO_SCHUR_VEC_RESID  1e-9   /* 实特征向量验收残差(相对 1+‖A‖) */
 #define PRO_SCHUR_VEC_TRIES  6      /* 反迭代尝试组数(扰动 × 初值) */
 
-/* ---- 单位 2-范数 Householder(3 元):u 单位向量,P = I − 2uuᵀ ----
+/* 单位 2-范数 Householder(3 元):u 单位向量,P = I − 2uuᵀ
  * P(x,y,z)ᵀ = (±‖·‖, 0, 0)ᵀ;全零向量返回 β = 0(调用方跳过变换)。
  * a = −sign(x)·‖·‖ 使 v₀ = x − a 无相消(LAPACK 同款)。 */
 static double sch_house3(double x, double y, double z, double *u) {
@@ -80,7 +78,7 @@ static double sch_house2(double x, double y, double *u) {
     return 2.0;
 }
 
-/* ---- 左乘 P:行 i0..i0+w-1,列 jlo..n-1,H ← H − β·u(uᵀH) ---- */
+/* 左乘 P:行 i0..i0+w-1,列 jlo..n-1,H ← H − β·u(uᵀH) */
 static void sch_apply_left(double *h, int n, int i0, int w, int jlo,
                            double beta, const double *u) {
     int j, t;
@@ -94,7 +92,7 @@ static void sch_apply_left(double *h, int n, int i0, int w, int jlo,
     }
 }
 
-/* ---- 右乘 P:行 ilo..ihi,列 i0..i0+w-1,H ← H − β·(Hu)uᵀ ---- */
+/* 右乘 P:行 ilo..ihi,列 i0..i0+w-1,H ← H − β·(Hu)uᵀ */
 static void sch_apply_right(double *h, int n, int i0, int w, int ilo, int ihi,
                             double beta, const double *u) {
     int i, t;
@@ -108,9 +106,9 @@ static void sch_apply_right(double *h, int n, int i0, int w, int ilo, int ihi,
     }
 }
 
-/* ---- Householder 化 Hessenberg:逐列 k = 0..n-3,反射器作用于
+/* Householder 化 Hessenberg:逐列 k = 0..n-3,反射器作用于
  * 行 k+1..n-1(左,列 k..n-1)与列 k+1..n-1(右,行 0..n-1)。
- * 变换后把该列显式置成 (a, 0, ..., 0),舍入残渣不留巢。 ---- */
+ * 变换后把该列显式置成 (a, 0, ..., 0),舍入残渣不留巢。 */
 static void sch_hessenberg(double *h, int n, double *u) {
     int k, i;
     for (k = 0; k + 2 < n; k++) {
@@ -138,7 +136,7 @@ static void sch_hessenberg(double *h, int n, double *u) {
     }
 }
 
-/* ---- 2×2 实块的闭式特征值(压缩映射稳定的 Vieta 形式) ---- */
+/* 2×2 实块的闭式特征值(压缩映射稳定的 Vieta 形式) */
 static void sch_eig2x2(double a, double b, double c, double d,
                        double *r1, double *i1, double *r2, double *i2) {
     double tr = a + d;
@@ -158,12 +156,12 @@ static void sch_eig2x2(double a, double b, double c, double d,
     }
 }
 
-/* ---- Francis 隐式双移一步(窗口 [l..q],位移和 s、位移积 t 显式传入,
+/* Francis 隐式双移一步(窗口 [l..q],位移和 s、位移积 t 显式传入,
  * 异常位移由调用方改写 s/t)。
  * 左乘列域:jlo = max(l, k−1)(k = l 时含 l−1,保持相似性对次对角
  * 残条的精确缩放);右乘行域 0..min(k+3, q)(窗口下方耦合条已被
  * deflation 显式清零,乘它恒等)。k ≥ l+1 的左乘之后把被零化的
- * 凸出条显式清零,不让舍入残渣存活。 ---- */
+ * 凸出条显式清零,不让舍入残渣存活。 */
 static void sch_francis(double *h, int n, int l, int q,
                         double s, double t, double *u) {
     double x = h[l * n + l] * h[l * n + l]
@@ -202,10 +200,10 @@ static void sch_francis(double *h, int n, int l, int q,
     }
 }
 
-/* ---- 反迭代:对实特征值 lam(缩放域)求 M = A_s − (lam+eps)I 的
+/* 反迭代:对实特征值 lam(缩放域)求 M = A_s − (lam+eps)I 的
  * 最小奇异方向。M 就地部分主元 LU(行交换记 piv),两步反迭代,
  * 残差过闸才接受。返回 1 = 成功(v 已归一化),0 = 本组失败。
- * h/piv/work 全是 schur 视图槽:特征值已全部提取,h 此时空闲。 ---- */
+ * h/piv/work 全是 schur 视图槽:特征值已全部提取,h 此时空闲。 */
 static int sch_inviter(const double *a, int n, int scale_exp, double lam_s,
                        int mode, double *v) {
     double *h = s_pro_schur_h;    /* M = A − λI 的就地 LU 工作副本(视图槽) */
@@ -324,7 +322,7 @@ static int sch_inviter(const double *a, int n, int scale_exp, double lam_s,
     return got;
 }
 
-/* ==================== 主入口 ==================== */
+/* 主入口 */
 int ac_pro_schur_all(const double *a, int n) {
     double u3[3];                 /* Francis 3 元反射器(栈) */
     double ure[AC_PRO_MATRIX_MAX_DIM];
@@ -339,7 +337,7 @@ int ac_pro_schur_all(const double *a, int n) {
 
     if (a == 0 || n < 1 || n > AC_PRO_MATRIX_MAX_DIM) { return -1; }
 
-    /* ---- 幂 2 缩放:条目压进 [0.5, 1],Francis 的 H² 项绝无溢出 ---- */
+    /* 幂 2 缩放:条目压进 [0.5, 1],Francis 的 H² 项绝无溢出 */
     for (i = 0; i < n && maxabs_zero; i++) {
         for (j = 0; j < n; j++) {
             if (a[i * n + j] != 0.0) { maxabs_zero = 0; break; }
@@ -368,10 +366,10 @@ int ac_pro_schur_all(const double *a, int n) {
         }
     }
 
-    /* ---- Householder 化 Hessenberg ---- */
+    /* Householder 化 Hessenberg */
     sch_hessenberg(s_pro_schur_h, n, s_pro_schur_work);
 
-    /* ---- Francis 隐式双移 QR(bulge chasing,自底向上 deflation)----
+    /* Francis 隐式双移 QR(bulge chasing,自底向上 deflation)。
      * 零矩阵:hnorm = 0,次对角全 0,判定式 0 ≤ 0 成立 → 逐位 1×1
      * deflation,特征值全 0,无需特例。 */
     q = n - 1;
@@ -434,7 +432,7 @@ int ac_pro_schur_all(const double *a, int n) {
         }
     }
 
-    /* ---- 单元化 + 排序:实值自成单元,复共轭对(相邻,结构保证)合成
+    /* 单元化 + 排序:实值自成单元,复共轭对(相邻,结构保证)合成
      * 一个单元(代表值 im ≥ 0);键 = (|λ|, re, im) 降序,稳定插入
      * (精确并列保持提取序 → 确定性)。展开回 wr/wi:共轭对相邻,+im 在前。 */
     nu = 0;
@@ -485,14 +483,14 @@ int ac_pro_schur_all(const double *a, int n) {
         }
     }
 
-    /* ---- 缩放还原(乘幂 2,精确) ---- */
+    /* 缩放还原(乘幂 2,精确) */
     for (k = 0; k < n; k++) {
         s_pro_schur_wr[k] *= scale;
         s_pro_schur_wi[k] *= scale;
     }
 
-    /* ---- 实特征向量:反迭代(缩放域;向量与缩放无关)。
-     * 复特征值列显式全零 —— 绝不硬凑复向量。 ---- */
+    /* 实特征向量:反迭代(缩放域;向量与缩放无关)。
+     * 复特征值列显式全零,绝不硬凑复向量。 */
     for (k = 0; k < n; k++) {
         if (s_pro_schur_wi[k] != 0.0) {
             for (i = 0; i < n; i++) { s_pro_schur_v[k * n + i] = 0.0; }
@@ -512,7 +510,7 @@ int ac_pro_schur_all(const double *a, int n) {
     return 1;
 }
 
-/* ==================== 结果读取 ==================== */
+/* 结果读取 */
 int ac_pro_schur_count(void) {
     int c = s_pro_schur_n;
     if (c < 0 || c > AC_PRO_MATRIX_MAX_DIM) { return 0; }

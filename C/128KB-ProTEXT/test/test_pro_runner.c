@@ -1,41 +1,33 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/test/test_pro_runner.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   ProTEXT 层闭环 runner：自带 main()，覆盖
- *     ① 上游回归（1..4 次精确路径、Zero-GC、parse/eval 链路）
- *     ② 阶段一：内存水位门禁重写 + 编译期尺寸校验
- *     ③ 阶段二 B1：五次及以上数值求根（7 例）
- *     ④ 阶段二 A4：LU 分解（6 例）
- *     ⑤ 阶段二 A6：隐函数求导（9 例，含 3 个负向）
- *     ⑥ 次数路由三态（1..4 精确 / 5..8 数值 / >8 拒绝）
- *     ⑦ v2.2.0 ⑥：2 变量 Groebner 基（test_pro_groebner.c，12 例）
- *
- * 【零静态存储纪律 / Zero static storage】
- *   除 Zero-GC 开关 s_kernel_live 外，本文件**不声明任何静态对象**；
- *   测试计数与失败数放在 main 的栈上，用 tally_t 传指针。
- *
- *   为什么这么较真 —— 下面这条规则是**实测钉死**的，不是猜的：
- *     - TU 完全不产生 .bss 段            -> 全程序 bss = 42608 B（内核口径）
- *     - TU 只要产生 .bss 段（哪怕只有
- *       一个 4 B 的 static int）          -> 全程序 bss = 42640 B（+32 B）
- *   增量恒为 32 B = 16 B（该 TU 的 .bss 段本身）+ 16 B（链接期对齐填充），
- *   与静态对象的**个数**无关。
- *
- *   本文件的 s_kernel_live 是**必需的**（Zero-GC 硬性校验的状态位，不能挪到
- *   栈上——它要跨 main 的整个生命周期，且 __wrap_* 在其它栈帧里读写它）。
- *   因此 runner 口径的门禁值是 **42640**，而账本的 42608 是
- *   **内核口径**（不链接本 TU），由 test/pro_kernel_main.c 单独构建校验。
- *   两个数都对，只是口径不同（详见 Makefile 的三层账本）。
- *
- * 【Zero-GC 硬性校验 / Hard zero-GC assertion】
- *   与上游 C/128KB/test/test_main.c 同语义：链接期用
- *   -Wl,--wrap=malloc -Wl,--wrap=free 把本文件里的 __wrap_malloc /
- *   __wrap_free 顶到 malloc/free 的位置；kernel 期（s_kernel_live=1）
- *   任何堆调用直接 abort。宿主 CRT 在 main 之前的合法分配转发给
- *   msvcrt 自己的分配器（运行时 GetProcAddress 解析，因此二进制里
- *   不会出现静态 malloc/free 符号）。
- * ============================================================ */
+/* ApolloCalc · test_pro_runner.c — ProTEXT 层闭环 runner，自带 main()
+
+   覆盖上游回归（1..4 次精确路径、Zero-GC、parse/eval 链路）。阶段一是内存
+   水位门禁重写 + 编译期尺寸校验。阶段二 B1 测五次及以上数值求根（7 例），
+   A4 测 LU 分解（6 例），A6 测隐函数求导（9 例，含 3 个负向）。另有次数
+   路由三态（1..4 精确 / 5..8 数值 / >8 拒绝）与 v2.2.0 ⑥ 的 2 变量
+   Groebner 基（test_pro_groebner.c，12 例）。
+
+   除 Zero-GC 开关 s_kernel_live 外，本文件不声明任何静态对象；测试计数
+   与失败数放在 main 的栈上，用 tally_t 传指针。
+
+   为什么这么较真：下面这条规则是实测钉死的，不是猜的。
+     - TU 完全不产生 .bss 段            -> 全程序 bss = 42608 B（内核口径）
+     - TU 只要产生 .bss 段（哪怕只有
+       一个 4 B 的 static int）          -> 全程序 bss = 42640 B（+32 B）
+   增量恒为 32 B = 16 B（该 TU 的 .bss 段本身）+ 16 B（链接期对齐填充），
+   与静态对象的个数无关。
+
+   本文件的 s_kernel_live 是必需的（Zero-GC 硬性校验的状态位，不能挪到
+   栈上，它要跨 main 的整个生命周期，且 __wrap_* 在其它栈帧里读写它）。
+   因此 runner 口径的门禁值是 42640，而账本的 42608 是内核口径（不链接
+   本 TU），由 test/pro_kernel_main.c 单独构建校验。两个数都对，只是口径
+   不同（详见 Makefile 的三层账本）。
+
+   与上游 C/128KB/test/test_main.c 同语义：链接期用
+   -Wl,--wrap=malloc -Wl,--wrap=free 把本文件里的 __wrap_malloc /
+   __wrap_free 顶到 malloc/free 的位置；kernel 期（s_kernel_live=1）任何
+   堆调用直接 abort。宿主 CRT 在 main 之前的合法分配转发给 msvcrt 自己的
+   分配器（运行时 GetProcAddress 解析，因此二进制里不会出现静态
+   malloc/free 符号）。 */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,7 +51,7 @@
 /* Pro 冒烟入口（src/ac_pro_smoke.c） */
 int ac_pro_smoke_run(void);
 
-/* ---------------- Zero-GC 开关与链接期包装 ----------------
+/* Zero-GC 开关与链接期包装
  * s_kernel_live 是本文件唯一的静态对象（4 B），它使本 TU 产生一个
  * 16 B 的 .bss 段，叠加 16 B 链接对齐后把全程序 .bss 从 42608 推到
  * 42640（详见头注的受控实验与 Makefile 三层账本）。这是必需开销：
@@ -131,11 +123,11 @@ void __wrap_free(void *ptr) {
 
 #endif /* _WIN32 */
 
-/* ---------------- 测试助手 ---------------- */
+/* 测试助手 */
 
 #define TOL 1e-9
 
-/* 计数走栈上结构体，刻意不用静态变量（见头注「零静态存储纪律」） */
+/* 计数走栈上结构体，刻意不用静态变量（见头注） */
 typedef struct {
     int checks;
     int failed;
@@ -151,8 +143,7 @@ static void check(tally_t *t, int cond, const char *name, const char *detail) {
     }
 }
 
-/* 与上游 test_solvers.c 的 solve_poly 同一流程：
-   reset -> parse -> 采样提取系数 -> 按次数求解 */
+/* 与上游 test_solvers.c 的 solve_poly 同一流程 */
 static int solve_quadratic_src(const char *src) {
     ac_solvers_reset();
     if (ac_parse_expression(src) != ERR_NONE) { return 0; }
@@ -184,7 +175,7 @@ static int has_conjugate_pair(double want_re, double want_im) {
     return hit_pos && hit_neg;
 }
 
-/* ==================== 数值求根助手 ====================
+/* 数值求根助手
  * 把根集合代回多项式，返回最大 |P(z)|。用来验证「找到的确实是根」，
  * 比逐根比对更稳健（复根的排序因算法而异，残差判据才是本质）。 */
 static double max_poly_residual(const double *coef, int degree) {
@@ -219,9 +210,9 @@ static int num_has_real_root(double want, double tol) {
     return 0;
 }
 
-/* ==================== 用例一~三：上游回归 ==================== */
+/* 上游回归 */
 
-/* 用例一：x^2 - 5x + 6 = 0 -> 两根 2 与 3 */
+/* x^2 - 5x + 6 = 0 -> 两根 2 与 3 */
 static void test_quadratic_real(tally_t *t) {
     printf("[case] x^2-5x+6=0  (expect 2 real roots: 2 and 3)\n");
     check(t, solve_quadratic_src("x^2-5x+6=0") == 1, "parse + extract coefficients", "parse/extract failed");
@@ -234,7 +225,7 @@ static void test_quadratic_real(tally_t *t) {
            g_root_count > 1 ? g_root_re[1] : 0.0);
 }
 
-/* 用例二：x^2 + 1 = 0 -> 两根 ±i */
+/* x^2 + 1 = 0 -> 两根 ±i */
 static void test_quadratic_complex(tally_t *t) {
     int i;
     printf("[case] x^2+1=0  (expect 2 complex roots: +i and -i)\n");
@@ -247,7 +238,7 @@ static void test_quadratic_complex(tally_t *t) {
     check(t, has_conjugate_pair(0.0, 1.0), "roots are +i and -i", "conjugate pair (0, +/-1) missing");
 }
 
-/* 用例三：Pro 层自检 */
+/* Pro 层自检 */
 static void test_pro_smoke(tally_t *t) {
     int rc;
     printf("[case] ac_pro_smoke_run()  (Pro layer self-check)\n");
@@ -256,7 +247,7 @@ static void test_pro_smoke(tally_t *t) {
     if (rc != 0) { printf("         smoke rc = %d\n", rc); }
 }
 
-/* ==================== 阶段一：尺寸与门禁 ==================== */
+/* 阶段一：尺寸与门禁 */
 
 static void test_sizes(tally_t *t) {
     printf("[case] compile-time sizes (v2.1.0: scratch 3848, peak view sparse)\n");
@@ -272,20 +263,17 @@ static void test_sizes(tally_t *t) {
            AC_PRO_STATIC_FOOTPRINT);
 }
 
-/* 阶段一①：内存水位门禁。
- * 设计说明 §9.5 的四条校验 + 门禁边界。
- *
- * 【满池值随账本走 / The full-pool figure follows the ledger】
- *   设计说明 §6.3 的算式是 `38672 + 6144 = 44816`，那是**上游口径**的
- *   静态基数。Pro 的门禁必须按 Pro 的真实静态足迹算（否则又回到
- *   「低估」的老毛病），所以（v2.1.0，sparse 视图 3848 定峰）：
- *       idle = 38672 + 80 + 3848 + 8 = 42608  = AC_PRO_TARGET_BSS
- *       full = 42608 + 512×8 + 256×8 = 42608 + 6144 = 48752
- *   两者差 3936（var_val 80 + sparse 视图 3848 + align_pad 8），正是
- *   Pro 增量本身。门禁边界随之下移 3936：
- *       触发阈值 extra > 114688 - 48752 = 65936
- *   测试把边界钉在 ±1000 内（boundary 由 used 动态推出，账本改动时
- *   校验自动跟随，不需要再手抄数字）。 */
+/* 内存水位门禁：设计说明 §9.5 的四条校验 + 门禁边界。
+ * 设计说明 §6.3 的算式是 `38672 + 6144 = 44816`，那是上游口径的静态
+ * 基数。Pro 的门禁必须按 Pro 的真实静态足迹算（否则又回到「低估」的
+ * 老毛病），所以（v2.1.0，sparse 视图 3848 定峰）：
+ *     idle = 38672 + 80 + 3848 + 8 = 42608  = AC_PRO_TARGET_BSS
+ *     full = 42608 + 512×8 + 256×8 = 42608 + 6144 = 48752
+ * 两者差 3936（var_val 80 + sparse 视图 3848 + align_pad 8），正是 Pro
+ * 增量本身。门禁边界随之下移 3936：
+ *     触发阈值 extra > 114688 - 48752 = 65936
+ * 测试把边界钉在 ±1000 内（boundary 由 used 动态推出，账本改动时校验
+ * 自动跟随，不需要再手抄数字）。 */
 static void test_memory_watermark(tally_t *t) {
     double base;
     double used;
@@ -300,11 +288,11 @@ static void test_memory_watermark(tally_t *t) {
     g_number_count = 0;
 
     base = ac_pro_memory_used(0.0);
-    /* 检查 1：used 必须 >= 38672（不再低估 g_ac_scratch + g_sym_nodes） */
+    /* used 必须 >= 38672（不再低估 g_ac_scratch + g_sym_nodes） */
     check(t, base >= 38672.0, "used >= 38672 (covers g_ac_scratch + g_sym_nodes)", "gate under-estimates");
-    /* 检查 1b：Pro 的静态足迹精确等于 AC_PRO_TARGET_BSS（v2.1.0: 42608） */
+    /* Pro 的静态足迹精确等于 AC_PRO_TARGET_BSS（v2.1.0: 42608） */
     check(t, base == (double)AC_PRO_TARGET_BSS, "used == AC_PRO_TARGET_BSS at idle (38672 + 80 + 3848 + 8)", "idle used != target");
-    /* 检查 2：满池时 used = 42608 + 6144 = 48752 < 114688 */
+    /* 满池时 used = 42608 + 6144 = 48752 < 114688 */
     g_token_count = TOKEN_POOL_SIZE;
     g_number_count = NUMBER_POOL_SIZE;
     used = ac_pro_memory_used(0.0);
@@ -312,7 +300,7 @@ static void test_memory_watermark(tally_t *t) {
     check(t, ac_pro_check_memory_watermark() == 0, "full pools still pass the gate", "full pools rejected");
     check(t, g_solve_error == 0, "g_solve_error == 0 after pass", "error code set on pass");
 
-    /* 检查 3：把边界精确钉在 114688 两侧（各差 1 B 级别的余量）。
+    /* 把边界精确钉在 114688 两侧（各差 1 B 级别的余量）。
        触发侧：extra = 114688 - 47600 + 1000 = 68088 -> 115688 > 114688
        放行侧：extra = 114688 - 47600 - 1000 = 66088 -> 113688 < 114688 */
     boundary = (double)AC_PRO_GATE_BSS - used;
@@ -326,8 +314,8 @@ static void test_memory_watermark(tally_t *t) {
     check(t, ac_pro_check_memory_watermark_ex(boundary) == 0, "inject exactly boundary -> passes (<= gate)", "off-by-one at gate");
     check(t, ac_pro_check_memory_watermark_ex(boundary + 1.0) == 1, "inject boundary+1 -> rejected", "off-by-one at gate");
 
-    /* 检查 4：上游那条死代码在任何输入下都不触发（对照证据）。
-       上游实现的上限是 17320 B，阈值 98304 B —— 这里钉住「上游门禁
+    /* 上游那条死代码在任何输入下都不触发（对照证据）。
+       上游实现的上限是 17320 B，阈值 98304 B,这里钉住「上游门禁
        返回 0 且 g_solve_error 保持 0」，作为它是死代码的运行时证据。 */
     g_token_count = TOKEN_POOL_SIZE;
     g_number_count = NUMBER_POOL_SIZE;
@@ -361,9 +349,9 @@ static void test_degree_route(tally_t *t) {
     check(t, ac_pro_degree_route(0) == -1, "route(0) == reject", "wrong route");
 }
 
-/* ==================== 阶段二 B1：数值求根 ==================== */
+/* 阶段二 B1：数值求根 */
 
-/* 例 1：x^5 - 1 = 0（五个单位根） */
+/* x^5 - 1 = 0（五个单位根） */
 static void test_nr_x5_minus_1(tally_t *t) {
     double c[6];
     printf("[case B1-1] x^5 - 1 = 0  (5 unit roots)\n");
@@ -376,7 +364,7 @@ static void test_nr_x5_minus_1(tally_t *t) {
     printf("         max residual = %.3e\n", max_poly_residual(c, 5));
 }
 
-/* 例 2：x^5 - x - 1 = 0（唯一实根 ≈ 1.1673039782614187） */
+/* x^5 - x - 1 = 0（唯一实根 ≈ 1.1673039782614187） */
 static void test_nr_x5_minus_x_minus_1(tally_t *t) {
     double c[6];
     printf("[case B1-2] x^5 - x - 1 = 0  (one real root ~1.1673)\n");
@@ -388,7 +376,7 @@ static void test_nr_x5_minus_x_minus_1(tally_t *t) {
     printf("         max residual = %.3e\n", max_poly_residual(c, 5));
 }
 
-/* 例 3：x^5 + 3x^4 - 2x^3 + 7x^2 - 5x + 11（设计说明 §4.1.2 里最难的一例） */
+/* x^5 + 3x^4 - 2x^3 + 7x^2 - 5x + 11（设计说明 §4.1.2 里最难的一例） */
 static void test_nr_dense_quintic(tally_t *t) {
     double c[6];
     printf("[case B1-3] x^5+3x^4-2x^3+7x^2-5x+11 = 0  (dense, no real roots)\n");
@@ -399,7 +387,7 @@ static void test_nr_dense_quintic(tally_t *t) {
     printf("         max residual = %.3e\n", max_poly_residual(c, 5));
 }
 
-/* 例 4：x^6 + x^3 - 1 = 0（六次） */
+/* x^6 + x^3 - 1 = 0（六次） */
 static void test_nr_x6_x3_minus_1(tally_t *t) {
     double c[7];
     printf("[case B1-4] x^6 + x^3 - 1 = 0  (degree 6)\n");
@@ -410,7 +398,7 @@ static void test_nr_x6_x3_minus_1(tally_t *t) {
     printf("         max residual = %.3e\n", max_poly_residual(c, 6));
 }
 
-/* 例 5：x^8 - 1 = 0（八次上限，八个单位根） */
+/* x^8 - 1 = 0（八次上限，八个单位根） */
 static void test_nr_x8_minus_1(tally_t *t) {
     double c[9];
     int i;
@@ -426,7 +414,7 @@ static void test_nr_x8_minus_1(tally_t *t) {
     printf("         max residual = %.3e\n", max_poly_residual(c, 8));
 }
 
-/* 例 6：重根 (x-1)^3 (x+2)^2（条件数最差的情形，设计说明 §4.1.3 已预警）
+/* 重根 (x-1)^3 (x+2)^2（条件数最差的情形，设计说明 §4.1.3 已预警）
  *
  * 展开（升幂，numpy.polymul 核验）：
  *     (x-1)^3 = x^3 - 3x^2 + 3x - 1
@@ -454,7 +442,7 @@ static void test_nr_repeated_roots(tally_t *t) {
     printf("         max residual = %.3e (repeated roots, condition-sensitive)\n", resid);
 }
 
-/* 例 7（负向）：次数 > 8 必须被拒绝，且不写根池 */
+/* 负向：次数 > 8 必须被拒绝，且不写根池 */
 static void test_nr_reject(tally_t *t) {
     double c[10];
     int i;
@@ -465,9 +453,9 @@ static void test_nr_reject(tally_t *t) {
     check(t, g_root_count == 0, "root count untouched", "root pool polluted");
 }
 
-/* ==================== 阶段二 A4：LU 分解 ==================== */
+/* 阶段二 A4：LU 分解 */
 
-/* 验证 P·A == L·U：对每个 (i,j) 比较 (P·A)[i][j] 与 (L·U)[i][j]。
+/* 验证 P·A == L·U。
  * P·A 的第 i 行 = A 的第 piv[i] 行。 */
 static double lu_reconstruct_error(const double *a, int n) {
     const double *L = ac_pro_lu_l();
@@ -521,7 +509,7 @@ static int lu_is_upper(int n) {
     return 1;
 }
 
-/* 例 1：3×3 需要换行的一般矩阵 */
+/* 3×3 需要换行的一般矩阵 */
 static void test_lu_3x3(tally_t *t) {
     double a[9];
     printf("[case A4-1] LU 3x3 (pivoting required)\n");
@@ -537,7 +525,7 @@ static void test_lu_3x3(tally_t *t) {
            (int)ac_pro_lu_piv()[0], (int)ac_pro_lu_piv()[1], (int)ac_pro_lu_piv()[2]);
 }
 
-/* 例 2：4×4 Hilbert 式病态矩阵（4 阶仍稳定） */
+/* 4×4 Hilbert 式病态矩阵（4 阶仍稳定） */
 static void test_lu_4x4(tally_t *t) {
     double a[16];
     int i;
@@ -555,7 +543,7 @@ static void test_lu_4x4(tally_t *t) {
     printf("         ||P*A - L*U||max = %.3e\n", lu_reconstruct_error(a, 4));
 }
 
-/* 例 3：对角矩阵（置换应为恒等，U == A，L == I） */
+/* 对角矩阵（置换应为恒等，U == A，L == I） */
 static void test_lu_diagonal(tally_t *t) {
     double a[9];
     const double *U;
@@ -576,7 +564,7 @@ static void test_lu_diagonal(tally_t *t) {
     check(t, lu_reconstruct_error(a, 3) < 1e-12, "P*A == L*U", "reconstruction mismatch");
 }
 
-/* 例 4：12×12 上限（对角占优，稳定） */
+/* 12×12 上限（对角占优，稳定） */
 static void test_lu_12x12(tally_t *t) {
     double a[144];
     int i;
@@ -594,7 +582,7 @@ static void test_lu_12x12(tally_t *t) {
     printf("         ||P*A - L*U||max = %.3e\n", lu_reconstruct_error(a, 12));
 }
 
-/* 例 5：奇异矩阵必须返回 0 */
+/* 奇异矩阵必须返回 0 */
 static void test_lu_singular(tally_t *t) {
     double a[9];
     printf("[case A4-5] LU singular matrix (rank 2 of 3)\n");
@@ -604,7 +592,7 @@ static void test_lu_singular(tally_t *t) {
     check(t, ac_mat_lu(a, 3) == 0, "singular -> returns 0", "singular accepted");
 }
 
-/* 例 6：与上游 ac_mat_det 交叉验证。
+/* 与上游 ac_mat_det 交叉验证。
  * det(A) = (-1)^swaps · Π U[i][i]，swaps 由置换的逆序数决定。 */
 static void test_lu_matches_det(tally_t *t) {
     double a[9];
@@ -632,7 +620,7 @@ static void test_lu_matches_det(tally_t *t) {
            det_up, det_lu, swaps);
 }
 
-/* ==================== 阶段二 A6：隐函数求导 ==================== */
+/* 阶段二 A6：隐函数求导 */
 
 static void test_implicit_circle(tally_t *t) {
     double dy = 0.0;
@@ -689,7 +677,7 @@ static void test_implicit_vs_numeric(tally_t *t) {
            dy, num, fabs(dy - num));
 }
 
-/* 负向 1：F_y = 0（圆在 (5,0) 处切线竖直）必须报 EFLAT */
+/* 负向：F_y = 0（圆在 (5,0) 处切线竖直）必须报 EFLAT */
 static void test_implicit_vertical(tally_t *t) {
     double dy = 12345.0;
     int rc;
@@ -699,7 +687,7 @@ static void test_implicit_vertical(tally_t *t) {
     check(t, dy == 12345.0, "output untouched on failure", "output was clobbered");
 }
 
-/* 负向 2：表达式不含 y -> 隐函数定理不适用 */
+/* 负向：表达式不含 y -> 隐函数定理不适用 */
 static void test_implicit_no_y(tally_t *t) {
     double dy = 0.0;
     int rc;
@@ -708,7 +696,7 @@ static void test_implicit_no_y(tally_t *t) {
     check(t, rc == AC_PRO_IMP_EPARSE, "returns EPARSE (1)", "wrong return code");
 }
 
-/* 负向 3：函数调用超出 v1.2 符号层边界 */
+/* 负向：函数调用超出 v1.2 符号层边界 */
 static void test_implicit_unsupported(tally_t *t) {
     double dy = 0.0;
     int rc;
@@ -744,7 +732,7 @@ static void test_var_tag_hole(tally_t *t) {
     check(t, AC_SYM_MAX_NODES * 24 == 12288, "arena still 12288 B", "arena grew");
 }
 
-/* ==================== 端到端：表达式 -> 5 次数值求根 ==================== */
+/* 端到端：表达式 -> 5 次数值求根 */
 static void test_end_to_end_quintic(tally_t *t) {
     int i;
     double c[6];
@@ -766,17 +754,14 @@ static void test_end_to_end_quintic(tally_t *t) {
 }
 
 
-/* ==================== v1.3 方向 A 测试（独立 TU） ====================
+/* v1.3 方向 A 测试（独立 TU）
  * 用例实现在 test/test_pro_multi.c，本文件只声明入口并汇总。
- *
- * 【接口为什么用「返回计数结构」而不是「传指针进去累加」】
- *   那个文件定义了自己的 pro_tally_t（不与本文件的 tally_t 共享类型），
- *   因此两个 TU 之间**没有类型依赖** —— 它可以单独编译、单独跑。
- *   代价是这里多写四行汇总代码，换来的是「测试文件可以独立验证」。
- *
- * 【为什么三个函数名不带 static】
- *   它们是跨 TU 的入口。C99 里 `void test_x(void);` 的声明隐含
- *   external linkage，与定义端一致。 */
+ * 接口用「返回计数结构」而不是「传指针进去累加」：那个文件定义了自己的
+ * pro_tally_t（不与本文件的 tally_t 共享类型），因此两个 TU 之间没有类型
+ * 依赖，它可以单独编译、单独跑。代价是这里多写四行汇总代码，换来的是
+ * 「测试文件可以独立验证」。
+ * 三个函数名不带 static，因为它们是跨 TU 的入口。C99 里
+ * `void test_x(void);` 的声明隐含 external linkage，与定义端一致。 */
 typedef struct {
     int checks;
     int failed;
@@ -786,7 +771,7 @@ pro_multi_tally_t test_multi_gcd(void);
 pro_multi_tally_t test_multi_factor(void);
 pro_multi_tally_t test_resultant(void);
 
-/* ==================== v1.3.5 测试（独立 TU） ====================
+/* v1.3.5 测试（独立 TU）
  * A5 实特征向量 + Hotelling 收缩：test/test_pro_eigen.c
  * B2 符号积分（表匹配 + 一层分部）：test/test_pro_integrate.c
  * 同样用「返回计数结构」的跨 TU 约定，本文件不感知其内部类型。 */

@@ -1,8 +1,10 @@
-/* 测试比对的是规范化后的输出字符串（形态契约）：降幂、±1 折叠、负号并项、
- * cancel 恒 "(P)/(Q)"、apart 按 r 降序 " + " 连接。错误码精确比较。
- *
- * 自带 pro_tally_t，不 include runner 的内部头（与 test_pro_integrate.c 同
- * 约定）。不声明静态对象：本 TU 的 .bss 必须是 0。 */
+/* ApolloCalc · test_pro_rational.c — 有理函数四则 / GCD / cancel / apart 的形态与错误码测试
+
+   测试比对的是规范化后的输出字符串（形态契约）：降幂、±1 折叠、负号并项、
+   cancel 恒 "(P)/(Q)"、apart 按 r 降序 " + " 连接。错误码精确比较。
+
+   自带 pro_tally_t，不 include runner 的内部头（与 test_pro_integrate.c 同
+   约定）。不声明静态对象：本 TU 的 .bss 必须是 0。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -38,7 +40,7 @@ static void expect_rat(pro_tally_t *t, int rc, const char *out,
     rcheck(t, 0, name, detail);
 }
 
-/* ---- [case RAT-1] 多项式四则（+ - *）与次数边界 ---- */
+/* 多项式四则（+ - *）与次数边界 */
 pro_tally_t test_rat_arith(void) {
     pro_tally_t t;
     char out[128];
@@ -69,7 +71,7 @@ pro_tally_t test_rat_arith(void) {
     return t;
 }
 
-/* ---- [case RAT-2] 欧几里得 GCD（本原化、互素、零元） ---- */
+/* 欧几里得 GCD（本原化、互素、零元） */
 pro_tally_t test_rat_gcd(void) {
     pro_tally_t t;
     char out[128];
@@ -100,7 +102,7 @@ pro_tally_t test_rat_gcd(void) {
     return t;
 }
 
-/* ---- [case RAT-3] cancel 约分（形态契约恒 "(P)/(Q)"） ---- */
+/* cancel 约分（形态契约恒 "(P)/(Q)"） */
 pro_tally_t test_rat_cancel(void) {
     pro_tally_t t;
     char out[128];
@@ -134,7 +136,7 @@ pro_tally_t test_rat_cancel(void) {
     return t;
 }
 
-/* ---- [case RAT-4] apart（deg ≤ 4 精确根路径）----
+/* apart（deg ≤ 4 精确根路径）
  * 「刚好拒绝」三连：重根 / 复根 / 假分式。 */
 pro_tally_t test_rat_apart_exact(void) {
     pro_tally_t t;
@@ -171,7 +173,7 @@ pro_tally_t test_rat_apart_exact(void) {
     return t;
 }
 
-/* ---- [case RAT-5] apart（deg 5 DK 数值路径 + 回乘验证）----
+/* apart（deg 5 DK 数值路径 + 回乘验证）
  * q = (x-1)(x-2)(x-3)(x-4)(x-5)，A_i = 2/q'(r_i) = 1/12, -1/3, 1/2, -1/3, 1/12。
  * DK 根的数值噪声被三级 fmt 的有理重建吸收（1e-9 邻域必命中同一分数）。 */
 pro_tally_t test_rat_apart_dk(void) {
@@ -193,7 +195,7 @@ pro_tally_t test_rat_apart_dk(void) {
     return t;
 }
 
-/* ---- [case RAT-6] apart 验证拒绝：验证不过即 EDOM ----
+/* apart 验证拒绝：验证不过即 EDOM
  * p 与 q 无公因子但分解残差超 1e-9 的情形由实现内部构造；这里测
  * 「本原域外」的系数越界与 deg 9。 */
 pro_tally_t test_rat_limits(void) {
@@ -217,7 +219,7 @@ pro_tally_t test_rat_limits(void) {
     return t;
 }
 
-/* ---- [case RAT-7] 输出缓冲不足 ---- */
+/* 输出缓冲不足 */
 pro_tally_t test_rat_buffer(void) {
     pro_tally_t t;
     char tiny[8];

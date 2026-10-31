@@ -1,13 +1,13 @@
-/* ============================================================
- * ApolloCalc-CAS · diff-smoke.js — C 64KB vs JS 64KB 冒烟比对（第 10 轮 Part C）
- * 读 tests/bench/c-smoke.csv 与 js-smoke.csv（同一组用例、同一格式），
- * 按 stage 分派列、按 name 对齐逐行比对：
- *   solve:    err、count 精确相等；12 个数值 |差| ≤ 1e-9
- *   precheck: err 精确相等
- *   exact:    err、valid 与三元组（valid=0 时已记 0）精确相等
- * 生成 tests/bench/SMOKE-DIFF.md；全部通过退出码 0，否则 1。
- * 运行：node tests/bench/diff-smoke.js
- * ============================================================ */
+/* ApolloCalc · diff-smoke.js — C 64KB vs JS 64KB 冒烟比对
+
+   读 tests/bench/c-smoke.csv 与 js-smoke.csv（同一组用例、同一格式），
+   按 stage 分派列、按 name 对齐逐行比对：
+     solve:    err、count 精确相等；12 个数值 |差| ≤ 1e-9
+     precheck: err 精确相等
+     exact:    err、valid 与三元组（valid=0 时已记 0）精确相等
+   生成 tests/bench/SMOKE-DIFF.md；全部通过退出码 0，否则 1。
+   运行：node tests/bench/diff-smoke.js
+*/
 "use strict";
 const fs = require("fs");
 const path = require("path");

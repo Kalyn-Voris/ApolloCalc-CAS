@@ -1,5 +1,4 @@
-/* ApolloCalc-CAS · JS/128KB · core_special.js
- * 高阶特殊函数：误差函数 erf、伽马函数 gamma、对数伽马 lgamma。自包含。
+/* ApolloCalc-CAS · JS/128KB · core_special.js — 高阶特殊函数：误差函数 erf、伽马函数 gamma、对数伽马 lgamma。自包含。
  *
  * 纯标量数值函数：无池、无寄存器、无递归；加载期与热路径分配均为 0
  * （Lanczos 级数与 A&S 系数全部手工展开为标量常量，无数组字面量）。
@@ -40,10 +39,10 @@ var ApolloSpecial = (function () {
   var LC7 = 9.9843695780195716e-6;
   var LC8 = 1.5056327351493116e-7;
 
-  var SQRT_2PI = 2.5066282746310002;      /* √(2π) */
-  var LN_SQRT_2PI = 0.9189385332046727;   /* ln √(2π) */
-  var LN_PI = 1.1447298858494002;         /* ln π */
-  var LANCZOS_G_HALF = 7.5;               /* g + 0.5，级数位移项 z + 7.5 */
+  var SQRT_2PI = 2.5066282746310002;
+  var LN_SQRT_2PI = 0.9189385332046727;
+  var LN_PI = 1.1447298858494002;
+  var LANCZOS_G_HALF = 7.5;               /* 级数位移项 z + 7.5 */
 
   function allocCount() { return _allocCount; }
   function getOpCount() { return _opCount; }

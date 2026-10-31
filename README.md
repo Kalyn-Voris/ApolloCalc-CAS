@@ -17,7 +17,7 @@
 > **双轨制口径（v2.2.0 起）**：「全局版本节点 (Global Tag)」是仓库级发布标签，对应根
 > [CHANGELOG.md](CHANGELOG.md) 的条目，一次发布可只覆盖部分组件；「组件版本
 > (Component Version)」记录在各组件目录的 `VERSION` 文件，按该组件自身变更独立
-> 递进 semver（C 侧 Pro 层新特性按 minor 递进）。**两者是两个口径，不必相等**——
+> 递进 semver（C 侧 Pro 层新特性按 minor 递进）。**两者是两个口径，不必相等**：
 > 本版 C/128KB-ProTEXT 即为全局 v2.4.0 / 组件 v1.6.0。未建轨道的组件标「—」
 > （仅 JS/64KB），沿革见根 CHANGELOG；C/64KB 与 C/128KB 的组件版本冻结于
 > v1.0.0 / v1.1.0，不再递进；组件级细分记录见各组件 `CHANGELOG.md`。
@@ -26,7 +26,7 @@
 两侧，主题「符号引擎 + 数值深度」（双 Git worktree 并行：`feat/c-eigen` /
 `feat/js-symbol`，square-free 契约先行冻结，收尾组串行收口）：
 
-- **C 侧（C/128KB-ProTEXT，组件 v1.5.0 → v1.6.0）**：两个新数学面——
+- **C 侧（C/128KB-ProTEXT，组件 v1.5.0 → v1.6.0）**：两个新数学面：
   **一般实矩阵全部特征值**（`ac_pro_schur.c`，Householder→Hessenberg→
   Francis 隐式双移 QR，非对称输入不再返 −2，可选反迭代实特征向量，
   不收敛绝不输出垃圾）；**单变量多项式 square-free 分解 (根,重数)**
@@ -41,13 +41,13 @@
   C + 固定两层分部）；**square-free (根,重数)**（`core_ratroot.js` 扩展，
   整题 ≥5 → EDEG 成文分叉）；**结式 + 2 变量 Groebner 基**（`core_groebner.js`，
   Sylvester ≤12 阶 + M4GB 1:1 移植；系数域收窄为 Float64 安全整数，
-  \|中间量\| > 2^53−1 即 EOVER 熔断——两侧能力边界不对等，不称「对等」）。
+  \|中间量\| > 2^53−1 即 EOVER 熔断；两侧能力边界不对等，不称「对等」）。
   压缩内核重建 49747 → **103325 B**（预算 131072 B，余量 27747 B），
   静态池 30112 → 167908 B（已超 ROADMAP 98304 B 水位口径；门禁函数
   只计基础内核池，后续 JS 功能落位前应重估水位）；20 测试文件
   **1183 pass, 0 fail**。
 - **跨语言契约**：[tests/polynomials.json](tests/polynomials.json) sqfree 区
-  （新建）——**70 个双侧实跑零分歧的 square-free 用例冻结**（契约 §10-1
+  （新建）：**70 个双侧实跑零分歧的 square-free 用例冻结**（契约 §10-1
   两层结构：双侧区 64 例 + C 侧区 6 例，整题 5..8 次仅 C 断言期望串、
   JS 断言 −2）；无 knownDeviations。v2.3.0 的
   [tests/ode-solutions.json](tests/ode-solutions.json) 3 条已知偏差仍待双组
@@ -64,14 +64,14 @@
 - **数值采样法**：多项式系数提取用采样 + 高斯消元，避免符号展开
 - **功能边界**：4 次以下方程（阿贝尔-鲁菲尼定理），6 元以下线性方程组
 - **编译器级内存重叠**（v1.1.0）：C 128KB 用 C99 `union` 把 20 个互斥 scratch 池折叠到同一块存储，
-  `.bss` 从 57.64 KiB 压到 **38.48 KiB（39.4 KB，−33.24%）**——零运行时开销、零 API 变更
+  `.bss` 从 57.64 KiB 压到 **38.48 KiB（39.4 KB，−33.24%）**：零运行时开销、零 API 变更
 
 ## 内存预算（实测 `.bss`）
 
 | 版本 | `.bss` | 水位门禁 | 占用率 |
 |:---|---:|---:|---:|
 | JS 64KB | —（TypedArray 静态池 5.4 KB） | 64KB | — |
-| JS 128KB | —（TypedArray 静态池 167908 B ≈ 164.0 KB，含 multivar/matrix pro/numtheory/ode/符号微分/符号积分/结式与 Groebner/sqfree；已超 ROADMAP 98304 B 水位口径——门禁函数只计基础内核池，见 CHANGELOG） | 128KB | — |
+| JS 128KB | —（TypedArray 静态池 167908 B ≈ 164.0 KB，含 multivar/matrix pro/numtheory/ode/符号微分/符号积分/结式与 Groebner/sqfree；已超 ROADMAP 98304 B 水位口径；门禁函数只计基础内核池，见 CHANGELOG） | 128KB | — |
 | C 64KB | **10576 B（10.33 KiB）** | 48 KB | 21.5% |
 | C 128KB | **39408 B（38.48 KiB / 39.4 KB）** | 96 KB | **40.1%** |
 | C 128KB-ProTEXT | **42608 B（41.61 KiB）** | 112 KiB | **37.15%** |
@@ -158,7 +158,7 @@ mingw32-make bss-check  # .bss 三门禁精确命中：42608 / 42640 / 39408
 
 ## 测试
 
-`tests/` 下的共享 JSON 用例是跨实现的一致性契约：`polynomials.json`（数值求根；v2.4.0 起增补 sqfree (根,重数) 契约区——70 例双侧实跑零分歧，含双侧区 64 + C 侧区 6）、`exact-forms.json`（精确形式）、`edge-cases.json`（边界与错误码）、`ode-solutions.json`（ODE 通解逐字契约，v2.3.0 新建，含 3 条 knownDeviations 如实上报）。任何语言、任何堆预算的实现都必须对同一输入给出一致结果。
+`tests/` 下的共享 JSON 用例是跨实现的一致性契约：`polynomials.json`（数值求根；v2.4.0 起增补 sqfree (根,重数) 契约区：70 例双侧实跑零分歧，含双侧区 64 + C 侧区 6）、`exact-forms.json`（精确形式）、`edge-cases.json`（边界与错误码）、`ode-solutions.json`（ODE 通解逐字契约，v2.3.0 新建，含 3 条 knownDeviations 如实上报）。任何语言、任何堆预算的实现都必须对同一输入给出一致结果。
 
 ## 性能
 
@@ -176,7 +176,7 @@ mingw32-make bss-check  # .bss 三门禁精确命中：42608 / 42640 / 39408
 - C 版比**同预算**的 JS 版快 **2–3×**（C64/JS64 为 2.0–2.1×；C128/JS128 为 2.0–2.9×，
   功能越复杂差距越大）
 - 128KB 的 solve/exact 慢是**为更强的精确形式付费**（五分量 vs 三分量）：JS 同族 +77% / +67%，
-  C 同族仅 +23% / +26%——C 版该开销明显更小
+  C 同族仅 +23% / +26%；C 版该开销明显更小
 - 解析与求值几乎不受版本影响（同族差异 ≤5.3%），池从 220 扩到 250 条对单次操作无可测影响
 
 **v1.1.0 内存压缩后无性能回归**（C 128KB，v1.0.0 → v1.1.0，同机同编译器，16 次采样中位数）：
@@ -196,7 +196,7 @@ mingw32-make bss-check  # .bss 三门禁精确命中：42608 / 42640 / 39408
 > 尚未纳入 100 万次压测口径，无实测数据即不列数字；C 侧 Pro 层带 `.bss` 精确
 > 相等门禁（当前 42608 B，见 [ACCEPTANCE.md](docs/ACCEPTANCE.md)）。
 
-> 口径：每 stage 独立 100 万次，池大小按版本门控——64KB 两版过滤掉 30 条 128KB 专属双曲条目，
+> 口径：每 stage 独立 100 万次，池大小按版本门控：64KB 两版过滤掉 30 条 128KB 专属双曲条目，
 > 故 parse/eval 为 220 条，128KB 两版为 250 条；solve 100 条、exact 50 条四版本相同。
 > 「求值」列为**解析 + 求值合计**（池内表达式各异，环内须重新解析），非纯求值耗时。
 

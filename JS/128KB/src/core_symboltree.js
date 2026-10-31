@@ -1,88 +1,87 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB · core_symboltree.js — 符号微分引擎
- * (v2.4.0 功能 6,JS 侧;补齐 C 侧 ac_symbolic + A6 隐函数求导)
- *
- * 职责:parseExpression 的 RPN token 流 → 扁平表达式树(Int32Array
- *   节点池,type/left/right/value 四字段)→ 符号求导 → 规范字符串渲染;
- *   多项式子树接 core_ratroot 输出因式列表(factor 语义,镜像 C 侧
- *   ac_sym_factor_poly 的 g_sym_factor_*);隐函数 dy/dx = −F_x/F_y
- *   对齐 C 侧 A6(ac_pro_symbolic_ext.c,错误码 0..4 逐值复刻)。
- *
- * ==================== preCheck 深度≤6 与树深的联动(先定义,后写码) ====================
- * preCheckExpression(core_solvers.js)的「深度 ≤6」只度量**括号嵌套**,
- * 函数 ≤4、变量 ≤10 各自独立计数。它不度量运算符链:纯数字链
- * "1+1+…+1" 无括号、无变量,preCheck 放行,而左结合 ADD 链的树深随
- * 项数线性增长。因此树侧自带两道上限,联动定义如下:
- *   1. build(src) 内部顺序:parseExpression → preCheckExpression
- *      (拒绝 → ST_EGUARD)→ toRPN → RPN 建树(逐节点跟踪树深);
- *   2. ST_MAX_TREE_NODES = 100:源树节点上限,超 → ST_EBUDGET。
- *      依据:导数节点数 ≤ 4×源树 + 8(C ac_symbolic.c:154 同式),
- *      100×4+8 = 408 < 512 池 → 求导**必然**可容纳,前置可证;
- *   3. ST_MAX_DEPTH = 48:树深上限,超 → ST_EDEPTH。依据:6 层括号
- *      × 每层 ~4 级运算 + 10 变量链的树深 ≤ ~40,48 留余量;
- *      两道上限任一触发即拒绝(preCheck 管括号嵌套,树深管运算链,
- *      必要不充分,不能互相替代)。
- * 隐函数通道(独立词法器,不经 preCheck——它读的是内核 tokenPool,
- * 不适用于 x/y 私有 token 流):token ≤ 128、树节点 ≤ 100、树深 ≤ 48,
- * 超限一律映射 EBUDGET(2),与 C A6 的 AC_PRO_SYM_NODE_CAP=256 →
- * AC_PRO_IMP_EBUDGET 同语义。
- *
- * ==================== 节点编码 ====================
- * _pool = Int32Array(512×4),节点 i 占 [i*4 .. i*4+3]:
- *   [type, left, right, value]。type ∈ ST_CONST..ST_FUN(0..5 与 C 侧
- *   NODE_CONST..NODE_POW 同值,6/7 为 JS 扩展);left/right 为子节点
- *   索引,叶子 −1;value:CONST = numberPool 索引(经 symConst 统一落
- *   内核池,输入常量与求导新生常量同源)、VAR = 变量标签(主通道恒
- *   0 = x,隐函数通道 0 = x / 1 = y,对齐 C A6 的填充洞标签)、
- *   FUN = F_* id、POW = 未用(指数走 right 子节点,支持任意指数)。
- * 会话语义与 tokenPool 同款:树在下次 build/implicitDyDx/reset 前有效;
- * implicitDyDx 自毁主树会话(独立管线的 C A6 同款隔离)。
- *
- * ==================== 错误码(getError) ====================
- *   0 ST_OK      成功
- *   1 ST_EPARSE  词法/RPN/建树失败(含 atan2、隐通道函数/除法/负指数)
- *   2 ST_EGUARD  preCheckExpression 拒绝(括号深/函数/变量超限)
- *   3 ST_EDEPTH  树深 > 48(联动定义第 3 条)
- *   4 ST_EBUDGET 节点 > 100、numberPool 溢出或导数预算不足
- *   5 ST_EOVER   渲染缓冲(1024 字符)溢出——常规输入不可达,防御位
- * 隐函数通道独立编码(返回值即错误码):0 OK / 1 EPARSE / 2 EBUDGET /
- *   3 EFLAT(F_y≈0)/ 4 EEVAL,与 C A6 逐值复刻,不经 getError。
- *   另一实现边界:常底 c ≤ 0 的 c^v 求导(ln(c) 非实)按预算失败路径
- *   返回 ST_EBUDGET,测试域不覆盖。
- *
- * ==================== 求导规则(C ac_symbolic.c 同款 + JS 扩展) ====================
- *   dmake 化简:0+x→x、x+0→x、x−0→x、0·x→0、1·x→x、常数×常数折叠
- *   与常数头左收(C integrate pro_int_mul 同款,输出 6*x 而非 3*(2*x))、
- *   SUB(0,x) 负号外提(迭代)、幂法则经 symPowInt 继承 u^1→u、u^0→1
- *   (d(x^1)/d(x^0) 直接坍缩,不残留 POW(x,0))。
- *   POW 三分支:常指数 → n·u^(n−1)·du(u 取原始基节点索引,支持负/
- *   分数常指数);常底 c(e 特判 ln e = 1)→ c^v·ln(c)·dv;
- *   一般 u^v → u^v·(dv·ln(u) + v·du/u)(复用原 POW 节点,append-only)。
- *   FUN 17 种单参函数全规则(sin..atanh + abs);atan2 建树期拒绝。
- *
- * ==================== factor 语义(镜像 ac_sym_factor_poly) ====================
- *   结构化多项式判定(clean/hasVar 两趟标记)→ 升幂系数提取
- *   (MUL/DIV 的无变量侧经求值折叠为标量乘子)→ 次数 1..4 → 写
- *   _coeffs → ratRootDescent(会改写 _coeffs,C 同款副作用)→ 有理根
- *   五分量精确形式 + 剩余多项式(dd=0 → 系数 [1],C「完全分解约定」)。
- *   非多项式/次数 > 4 → 错误码 1;非整系数由 descent 的快照复核诚实
- *   降级为 0 因式 + 原式剩余。
- *
- * 零 GC:20 组 TypedArray 加载期一次分配(allocCount=20,明细见各声明);
- *   全路径无对象/数组字面量、无递归(建树/求导/求值/渲染/取系数全部
- *   显式栈)、热路径零字符串操作;字符串只经 charCodeAt/
- *   String.fromCharCode 通道(core_ode 同款),渲染出口一次性拼接。
- * 依赖(内核拼接序):parseExpression/pushNumber/funcName(parser)、
- *   toRPN/_rpnToken/_evalError(evaluator)、preCheckExpression(solvers)、
- *   ratRootDescent/_coeffs(ratroot)、exactSetFraction(exact)、
- *   applyFunction(math_functions)。
- * 导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
+/* ApolloCalc · core_symboltree.js — 符号微分引擎
+   (v2.4.0 功能 6,JS 侧;补齐 C 侧 ac_symbolic + A6 隐函数求导)
+
+   职责:parseExpression 的 RPN token 流 → 扁平表达式树(Int32Array
+   节点池,type/left/right/value 四字段)→ 符号求导 → 规范字符串渲染;
+   多项式子树接 core_ratroot 输出因式列表(factor 语义,镜像 C 侧
+   ac_sym_factor_poly 的 g_sym_factor_*);隐函数 dy/dx = −F_x/F_y
+   对齐 C 侧 A6(ac_pro_symbolic_ext.c,错误码 0..4 逐值复刻)。
+
+   preCheck 深度≤6 与树深的联动(先定义,后写码)
+   preCheckExpression(core_solvers.js)的「深度 ≤6」只度量括号嵌套,
+   函数 ≤4、变量 ≤10 各自独立计数。它不度量运算符链:纯数字链
+   "1+1+…+1" 无括号、无变量,preCheck 放行,而左结合 ADD 链的树深随
+   项数线性增长。因此树侧自带两道上限,联动定义如下:
+     1. build(src) 内部顺序:parseExpression → preCheckExpression
+        (拒绝 → ST_EGUARD)→ toRPN → RPN 建树(逐节点跟踪树深);
+     2. ST_MAX_TREE_NODES = 100:源树节点上限,超 → ST_EBUDGET。
+        依据:导数节点数 ≤ 4×源树 + 8(C ac_symbolic.c:154 同式),
+        100×4+8 = 408 < 512 池 → 求导必然可容纳,前置可证;
+     3. ST_MAX_DEPTH = 48:树深上限,超 → ST_EDEPTH。依据:6 层括号
+        × 每层 ~4 级运算 + 10 变量链的树深 ≤ ~40,48 留余量;
+        两道上限任一触发即拒绝(preCheck 管括号嵌套,树深管运算链,
+        必要不充分,不能互相替代)。
+   隐函数通道(独立词法器,不经 preCheck——它读的是内核 tokenPool,
+   不适用于 x/y 私有 token 流):token ≤ 128、树节点 ≤ 100、树深 ≤ 48,
+   超限一律映射 EBUDGET(2),与 C A6 的 AC_PRO_SYM_NODE_CAP=256 →
+   AC_PRO_IMP_EBUDGET 同语义。
+
+   节点编码
+   _pool = Int32Array(512×4),节点 i 占 [i*4 .. i*4+3]:
+     [type, left, right, value]。type ∈ ST_CONST..ST_FUN(0..5 与 C 侧
+     NODE_CONST..NODE_POW 同值,6/7 为 JS 扩展);left/right 为子节点
+     索引,叶子 −1;value:CONST = numberPool 索引(经 symConst 统一落
+     内核池,输入常量与求导新生常量同源)、VAR = 变量标签(主通道恒
+     0 = x,隐函数通道 0 = x / 1 = y,对齐 C A6 的填充洞标签)、
+     FUN = F_* id、POW = 未用(指数走 right 子节点,支持任意指数)。
+   会话语义与 tokenPool 同款:树在下次 build/implicitDyDx/reset 前有效;
+   implicitDyDx 自毁主树会话(独立管线的 C A6 同款隔离)。
+
+   错误码(getError)
+     0 ST_OK      成功
+     1 ST_EPARSE  词法/RPN/建树失败(含 atan2、隐通道函数/除法/负指数)
+     2 ST_EGUARD  preCheckExpression 拒绝(括号深/函数/变量超限)
+     3 ST_EDEPTH  树深 > 48(联动定义第 3 条)
+     4 ST_EBUDGET 节点 > 100、numberPool 溢出或导数预算不足
+     5 ST_EOVER   渲染缓冲(1024 字符)溢出——常规输入不可达,防御位
+   隐函数通道独立编码(返回值即错误码):0 OK / 1 EPARSE / 2 EBUDGET /
+     3 EFLAT(F_y≈0)/ 4 EEVAL,与 C A6 逐值复刻,不经 getError。
+   另一实现边界:常底 c ≤ 0 的 c^v 求导(ln(c) 非实)按预算失败路径
+   返回 ST_EBUDGET,测试域不覆盖。
+
+   求导规则(C ac_symbolic.c 同款 + JS 扩展)
+     dmake 化简:0+x→x、x+0→x、x−0→x、0·x→0、1·x→x、常数×常数折叠
+     与常数头左收(C integrate pro_int_mul 同款,输出 6*x 而非 3*(2*x))、
+     SUB(0,x) 负号外提(迭代)、幂法则经 symPowInt 继承 u^1→u、u^0→1
+     (d(x^1)/d(x^0) 直接坍缩,不残留 POW(x,0))。
+     POW 三分支:常指数 → n·u^(n−1)·du(u 取原始基节点索引,支持负/
+     分数常指数);常底 c(e 特判 ln e = 1)→ c^v·ln(c)·dv;
+     一般 u^v → u^v·(dv·ln(u) + v·du/u)(复用原 POW 节点,append-only)。
+     FUN 17 种单参函数全规则(sin..atanh + abs);atan2 建树期拒绝。
+
+   factor 语义(镜像 ac_sym_factor_poly)
+     结构化多项式判定(clean/hasVar 两趟标记)→ 升幂系数提取
+     (MUL/DIV 的无变量侧经求值折叠为标量乘子)→ 次数 1..4 → 写
+     _coeffs → ratRootDescent(会改写 _coeffs,C 同款副作用)→ 有理根
+     五分量精确形式 + 剩余多项式(dd=0 → 系数 [1],C「完全分解约定」)。
+     非多项式/次数 > 4 → 错误码 1;非整系数由 descent 的快照复核诚实
+     降级为 0 因式 + 原式剩余。
+
+   零 GC:20 组 TypedArray 加载期一次分配(allocCount=20,明细见各声明);
+     全路径无对象/数组字面量、无递归(建树/求导/求值/渲染/取系数全部
+     显式栈)、热路径零字符串操作;字符串只经 charCodeAt/
+     String.fromCharCode 通道(core_ode 同款),渲染出口一次性拼接。
+   依赖(内核拼接序):parseExpression/pushNumber/funcName(parser)、
+     toRPN/_rpnToken/_evalError(evaluator)、preCheckExpression(solvers)、
+     ratRootDescent/_coeffs(ratroot)、exactSetFraction(exact)、
+     applyFunction(math_functions)。
+   导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
  */
 
 var ApolloSymboltree = (function () {
   "use strict";
 
-  /* ==================== 常量 ==================== */
+  /* 常量 */
   var ST_MAX_NODES = 512;        /* 节点池容量(C AC_SYM_MAX_NODES 同值) */
   var ST_MARK = 512;             /* 后序标记偏移(> 最大节点索引) */
   var ST_MAX_TREE_NODES = 100;   /* 源树节点上限(联动定义第 2 条) */
@@ -109,31 +108,31 @@ var ApolloSymboltree = (function () {
   var ST_EBUDGET = 4;
   var ST_EOVER = 5;
 
-  /* ==================== 池(加载期一次分配;allocCount = 20) ==================== */
-  var _pool = new Int32Array(ST_MAX_NODES * 4);      /* 1 节点池 8192 B */
-  var _buildStack = new Int32Array(ST_MAX_NODES);    /* 2 建树栈:idx | depth<<16 */
-  var _walk = new Int32Array(ST_WALK_CAP);           /* 3 遍历栈(求导/求值/标记共用) */
-  var _dmap = new Int32Array(ST_MAX_NODES);          /* 4 节点→导数节点(兼 factor clean 场) */
-  var _valStack = new Float64Array(128);             /* 5 求值栈 */
-  var _outBuf = new Int32Array(ST_OUT_CAP);          /* 6 渲染缓冲(charCode) */
-  var _workI = new Int32Array(24);                   /* 7 pushInt 位数字垫 */
-  var _facRat = new Int32Array(8);                   /* 8..12 因式列表五分量(镜像 g_sym_factor_*) */
-  var _facRadNum = new Int32Array(8);                /* 9 */
-  var _facRad = new Int32Array(8);                   /* 10 */
-  var _facDen = new Int32Array(8);                   /* 11 */
-  var _facExp = new Int32Array(8);                   /* 12 */
-  var _remCoeffs = new Float64Array(8);              /* 13 剩余多项式系数(升幂) */
-  var _fetchN = new Int32Array(ST_MAX_NODES);        /* 14 取系数栈:节点 */
-  var _fetchM = new Float64Array(ST_MAX_NODES);      /* 15 取系数栈:乘子 */
-  var _hasVar = new Int32Array(ST_MAX_NODES);        /* 16 无变量子树标记(factor) */
-  var _impTok = new Int32Array(ST_IMP_TOK_MAX);      /* 17 隐函数 token 流 */
-  var _impNum = new Float64Array(64);                /* 18 隐函数整常量池 */
-  var _renderStack = new Int32Array(1024);           /* 19 渲染栈:idx|mp<<16 或 -(char+1) */
-  var _polyC = new Float64Array(8);                  /* 20 多项式系数(升幂,factor) */
+  /* 池(加载期一次分配;allocCount = 20) */
+  var _pool = new Int32Array(ST_MAX_NODES * 4);      /* 节点池 8192 B */
+  var _buildStack = new Int32Array(ST_MAX_NODES);    /* 建树栈:idx | depth<<16 */
+  var _walk = new Int32Array(ST_WALK_CAP);           /* 遍历栈(求导/求值/标记共用) */
+  var _dmap = new Int32Array(ST_MAX_NODES);          /* 节点→导数节点(兼 factor clean 场) */
+  var _valStack = new Float64Array(128);             /* 求值栈 */
+  var _outBuf = new Int32Array(ST_OUT_CAP);          /* 渲染缓冲(charCode) */
+  var _workI = new Int32Array(24);                   /* pushInt 位数字垫 */
+  var _facRat = new Int32Array(8);                   /* 因式列表五分量(镜像 g_sym_factor_*) */
+  var _facRadNum = new Int32Array(8);
+  var _facRad = new Int32Array(8);
+  var _facDen = new Int32Array(8);
+  var _facExp = new Int32Array(8);
+  var _remCoeffs = new Float64Array(8);              /* 剩余多项式系数(升幂) */
+  var _fetchN = new Int32Array(ST_MAX_NODES);        /* 取系数栈:节点 */
+  var _fetchM = new Float64Array(ST_MAX_NODES);      /* 取系数栈:乘子 */
+  var _hasVar = new Int32Array(ST_MAX_NODES);        /* 无变量子树标记(factor) */
+  var _impTok = new Int32Array(ST_IMP_TOK_MAX);      /* 隐函数 token 流 */
+  var _impNum = new Float64Array(64);                /* 隐函数整常量池 */
+  var _renderStack = new Int32Array(1024);           /* 渲染栈:idx|mp<<16 或 -(char+1) */
+  var _polyC = new Float64Array(8);                  /* 多项式系数(升幂,factor) */
 
   var _allocCount = 20;
 
-  /* ==================== 会话态 ==================== */
+  /* 会话态 */
   var _count = 0;        /* 当前池节点数 */
   var _root = -1;        /* 源树根 */
   var _srcCount = 0;     /* 建树完成时节点数 */
@@ -143,7 +142,7 @@ var ApolloSymboltree = (function () {
   var _err = ST_OK;
   var _facK = 0;         /* 有理因式个数 */
   var _remDeg = 0;       /* 剩余多项式次数 */
-  var _dydx = 0.0;       /* 隐函数结果 */
+  var _dydx = 0.0;
   var _outLen = 0;       /* 渲染游标 */
 
   function allocCount() { return _allocCount; }
@@ -152,7 +151,7 @@ var ApolloSymboltree = (function () {
   function getSrcNodes() { return _srcCount; }
   function getNodeCount() { return _count; }
 
-  /* ==================== 节点构造 ==================== */
+  /* 节点构造 */
 
   function _alloc(type, l, r, v) {
     var b;
@@ -216,7 +215,7 @@ var ApolloSymboltree = (function () {
     return _alloc(ST_POW, base, symConst(n), 0);
   }
 
-  /* ==================== dmake:导数节点构造(C sym_dmake_* 同款 + 扩展) ==================== */
+  /* dmake:导数节点构造(C sym_dmake_* 同款 + 扩展) */
 
   /* 加法:0+x→x、x+0→x + 右侧 ADD 子树全展平成左结合扁平链
    * (C integrate pro_int_add 同款形态)。展平用先序收集(显式栈,
@@ -358,7 +357,7 @@ var ApolloSymboltree = (function () {
     return symDiv(num, den);
   }
 
-  /* ==================== 建树:RPN → 树(显式栈,逐节点跟踪树深) ==================== */
+  /* 建树:RPN → 树(显式栈,逐节点跟踪树深) */
 
   /* rpn:tokenPool 编码的 RPN 流;numSrc:T_NUM payload 的取值场;
    * implicit:1 = 隐函数通道(只认小写 x/y,拒绝函数/除法/负指数)。
@@ -491,7 +490,7 @@ var ApolloSymboltree = (function () {
     return _buildStack[0] & 65535;
   }
 
-  /* ==================== 主通道入口:build ==================== */
+  /* 主通道入口:build */
 
   function build(src) {
     var rc = 0;
@@ -535,7 +534,7 @@ var ApolloSymboltree = (function () {
     return ST_OK;
   }
 
-  /* ==================== 符号求导(显式栈后序,C ac_sym_derivative 同款) ==================== */
+  /* 符号求导(显式栈后序,C ac_sym_derivative 同款) */
 
   function diff() {
     var sp = 0;
@@ -563,7 +562,7 @@ var ApolloSymboltree = (function () {
       sp--;
       nd = _walk[sp];
       if (nd >= ST_MARK) {
-        /* ---- 后序:子节点导数已就绪 ---- */
+        /* 后序:子节点导数已就绪 */
         n = nd - ST_MARK;
         t = _type(n);
         if (t === ST_CONST) {
@@ -589,7 +588,7 @@ var ApolloSymboltree = (function () {
         if (d < 0) { _err = ST_EBUDGET; return _err; }
         _dmap[n] = d;
       } else {
-        /* ---- 先序:压标记 + 子节点(POW 常指数只导基) ---- */
+        /* 先序:压标记 + 子节点(POW 常指数只导基) */
         t = _type(nd);
         if (sp + 3 >= ST_WALK_CAP) { _err = ST_EBUDGET; return _err; }
         _walk[sp] = nd + ST_MARK;
@@ -750,7 +749,7 @@ var ApolloSymboltree = (function () {
     return -1;
   }
 
-  /* ==================== 求值(显式栈后序,C ac_sym_eval 同款) ====================
+  /* 求值(显式栈后序,C ac_sym_eval 同款)
    * VAR 标签 0 → xv,1 → yv(主通道标签恒 0)。返回 NaN = 失败。 */
 
   function evalNode(root, xv, yv) {
@@ -825,7 +824,7 @@ var ApolloSymboltree = (function () {
   function evalTree(x) { _err = ST_OK; return evalNode(_root, x, 0.0); }
   function evalDiff(x) { _err = ST_OK; return evalNode(_droot, x, 0.0); }
 
-  /* ==================== 规范字符串渲染(显式栈,优先级括号化) ====================
+  /* 规范字符串渲染(显式栈,优先级括号化)
    * 优先级:ADD/SUB=1、MUL/DIV/SUB(0,x)负形式=2、POW=3、原子/FUN=4;
    * ADD 右侧负形式合并 '+−'→'−'、MUL 右侧 DIV 摊平 a*b/c、SUB(0,x)
    * 渲染 '-child'、SUB(0,SUB(0,x)) 双重否定消去(C integrate
@@ -970,7 +969,7 @@ var ApolloSymboltree = (function () {
     return render(_view);
   }
 
-  /* ==================== factor:多项式子树 → 因式列表 ==================== */
+  /* factor:多项式子树 → 因式列表 */
 
   /* 两趟标记:clean(多项式干净子树)入 _dmap(与求导互斥,复用),
    * hasVar 入 _hasVar。显式栈后序;返回根是否 clean。 */
@@ -1204,7 +1203,7 @@ var ApolloSymboltree = (function () {
     return s;
   }
 
-  /* ==================== 隐函数 dy/dx = −F_x/F_y(A6 镜像) ====================
+  /* 隐函数 dy/dx = −F_x/F_y(A6 镜像)
    * 独立词法器(小写 x/y、整常量、+−*×/÷^、括号、一元负号、隐式乘法;
    * 函数名/小数/其它字母一律 EPARSE —— C pro_lex 逐条对齐)。
    * 返回值即错误码:0 OK / 1 EPARSE / 2 EBUDGET / 3 EFLAT / 4 EEVAL;
@@ -1450,7 +1449,7 @@ var ApolloSymboltree = (function () {
 
   function getDyDx() { return _dydx; }
 
-  /* ==================== 复位 ==================== */
+  /* 复位 */
   function reset() {
     _count = 0;
     _root = -1;

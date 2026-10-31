@@ -1,11 +1,13 @@
-/* 测试比对的是规范化后的输出字符串：结果差一个常数倍都合法，但本实现对每个
- * 输入有确定的输出形态（系数折叠、NEG 外提、DIV 展平），形态一变就是契约变了。
- *
- * 预算用例靠「调用前后 g_sym_count 不变」证明没写 arena：ac_pro_integrate 只
- * 读它做门禁，这比事后嗅探哨兵值更直接。
- *
- * 自带 pro_tally_t，不 include runner 的内部头，两个 TU 之间零类型依赖。
- * 不声明静态对象（static 函数不占 .bss）：本 TU 的 .bss 必须是 0。 */
+/* ApolloCalc · test_pro_integrate.c — 积分功能 B2 的输出形态、预算门禁与错误码测试
+
+   测试比对的是规范化后的输出字符串：结果差一个常数倍都合法，但本实现对每个
+   输入有确定的输出形态（系数折叠、NEG 外提、DIV 展平），形态一变就是契约变了。
+
+   预算用例靠「调用前后 g_sym_count 不变」证明没写 arena：ac_pro_integrate 只
+   读它做门禁，这比事后嗅探哨兵值更直接。
+
+   自带 pro_tally_t，不 include runner 的内部头，两个 TU 之间零类型依赖。
+   不声明静态对象（static 函数不占 .bss）：本 TU 的 .bss 必须是 0。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -221,7 +223,7 @@ pro_tally_t test_integrate_errors(void) {
     return t;
 }
 
-/* ---- v2.3.0 功能 4：128 项新表与固定两层分部 ---- */
+/* v2.3.0 功能 4：128 项新表与固定两层分部 */
 
 /* 二次核族（QUAD_L 线性内层 / QUAD_K 完全平方 k≥2 / XQUAD）。
  * 「刚好拒绝」：1/(x²+8) 的 8 非完全平方，诚实 ETABLE。 */

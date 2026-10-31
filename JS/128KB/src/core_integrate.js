@@ -1,65 +1,64 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB · core_integrate.js — 符号积分
- * (v2.4.0 功能 7,JS 侧;对齐 C/128KB-ProTEXT/src/ac_pro_integrate.c B2)
- *
- * 职责:积分表与 C 侧**逐项对齐**(128 项,kind 全 family:常数/幂/倒数/
- *   代数核/基本函数/函数幂/x^n·f(x)/二次核 QUAD_L·QUAD_K·XQUAD/倒数
- *   函数族/乘积恒等式/ln 核,anti 模板串与 kind/func/pow 三元组逐字搬运);
- *   分部积分对齐 C 侧**固定两层**(parts_left 2→1→0 关死,无同形自调用);
- *   错误码语义复刻 AC_PRO_INT_*(0/−1..−5 同值,返回值即错误码)。
- *
- * ==================== 管线(与 C 逐段对应) ====================
- *   parseExpression(C 侧自带 pro_int 词法器;JS 复用内核解析器,接受/
- *   拒绝差异见下)→ toRPN → RPN→IR 翻译(构造期归一)→ integrate 驱动
- *   (显式栈三阶段:线性展开/128 项表匹配/固定两层分部/多项式归一)
- *   → 预算复核(cap 256,分部 448)→ pro_int_emit 同款渲染。
- *
- * 构造期归一(C pro_int_add/sub/mul/div/neg/pow 逐条移植,全迭代):
- *   add/sub:常数折叠、0±x、右侧 ADD/SUB/NEG 子树摊平成左结合扁平链
- *     (项表收集 + 符号翻转循环,消 C 的 add/sub 尾递归);
- *   mul:负号外提(奇偶计数)、常数×常数折叠、常数头左收(≤1e6 钳制)、
- *     常数因子外提(wrap 栈回灌,消 C R5..R8 递归)、常数×和差分配展开
- *     (工作表,消 C R9/R10 递归);
- *   div:常数分母折叠/连除合并(尾环);pow:e∈[0,128]、u^0→1、u^1→u、
- *     常数底循环乘(≤1e6 钳制)。输出形态与 C 同为左结合扁平链。
- *
- * ==================== 与 C 的文法边界(如实成文) ====================
- *   1. 输入经内核 parseExpression(能力超集),翻译期对齐 C 拒绝项:
- *      非整常量(小数)→ EPARSE、π/裸 e → EPARSE、abs/atan2 → EPARSE、
- *      负指数(x^-1)→ EPARSE、指数 >96(非模板)→ EDEGREE、常量 >1e6
- *      → EDEGREE —— 共享用例上与 C 同输入同码。
- *   2. 已知超集偏差(JS 更宽,对拍用例避开):空白分隔数字("2 3")按
- *      内核隐式乘法接受(C EPARSE);e^(完整表达式) 按标准优先级读
- *      (C 的 e^ 只吃一个 pow 层,如 "e^(2x)" C 读作 exp(2)·x、JS 读作
- *      exp(2x));x^2^3 右结合读成 (x^2)^3(C 文法止于单指数 → EPARSE)。
- *   3. 模板解析走同一 toRPN + RPN→IR;模板词法器仅认模板子集:整常量、
- *      x/u/a/b/n/m、16 个函数名、e^、四则与幂括号;隐式乘法注入与 C
- *      pro_int 词法器同则(NUM 后 NUM 不注入 → EPARSE)。
- *
- * ==================== 预算(C 同值) ====================
- *   表匹配路径 ≤ 256 节点;分部固定两层每层 ≤ 96,总计 448 ≤ 池 512;
- *   超限 EBUDGET;池满同 EBUDGET。渲染缓冲 768 字符(C PRO_INT_OUTBUF
- *   同值)超限 → EOVER。
- *
- * ==================== 错误码(= AC_PRO_INT_*) ====================
- *   0 OK / −1 EPARSE(语法/空输入/非法字符/负指数/小数/π/裸 e)/
- *   −2 ETABLE(表+两层分部+多项式归一全未命中)/ −3 EBUDGET /
- *   −4 EOVER(渲染上限,常规输入不可达,防御位)/
- *   −5 EDEGREE(指数 >96、常量 >1e6)。失败时 getString() 恒 ""。
- *
- * 零 GC:28 组 TypedArray 加载期一次分配(allocCount=28,明细见声明);
- *   全路径无对象/数组字面量、无递归(归一化/匹配/线性判定/多项式归一/
- *   驱动/渲染全部显式栈或工作表)、热路径零字符串操作;积分表 128 条
- *   anti 模板存单条 \x01 分隔常量串 + 偏移表,kind/func/pow 存常量串
- *   加载期解析(等价 C 的 static const .rdata),加载期断言恰 128 项。
- * 依赖:parseExpression/toRPN/_rpnToken/_evalError、funcName(渲染名)。
- * 导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
+/* ApolloCalc · core_integrate.js — 符号积分
+   (v2.4.0 功能 7,JS 侧;对齐 C/128KB-ProTEXT/src/ac_pro_integrate.c B2)
+
+   职责:积分表与 C 侧逐项对齐(128 项,kind 全 family:常数/幂/倒数/
+   代数核/基本函数/函数幂/x^n·f(x)/二次核 QUAD_L·QUAD_K·XQUAD/倒数
+   函数族/乘积恒等式/ln 核,anti 模板串与 kind/func/pow 三元组逐字搬运);
+   分部积分对齐 C 侧固定两层(parts_left 2→1→0 关死,无同形自调用);
+   错误码语义复刻 AC_PRO_INT_*(0/−1..−5 同值,返回值即错误码)。
+
+   管线(与 C 逐段对应)
+   parseExpression(C 侧自带 pro_int 词法器;JS 复用内核解析器,接受/
+   拒绝差异见下)→ toRPN → RPN→IR 翻译(构造期归一)→ integrate 驱动
+   (显式栈三阶段:线性展开/128 项表匹配/固定两层分部/多项式归一)
+   → 预算复核(cap 256,分部 448)→ pro_int_emit 同款渲染。
+
+   构造期归一(C pro_int_add/sub/mul/div/neg/pow 逐条移植,全迭代):
+   add/sub:常数折叠、0±x、右侧 ADD/SUB/NEG 子树摊平成左结合扁平链
+     (项表收集 + 符号翻转循环,消 C 的 add/sub 尾递归);
+   mul:负号外提(奇偶计数)、常数×常数折叠、常数头左收(≤1e6 钳制)、
+     常数因子外提(wrap 栈回灌,消 C R5..R8 递归)、常数×和差分配展开
+     (工作表,消 C R9/R10 递归);
+   div:常数分母折叠/连除合并(尾环);pow:e∈[0,128]、u^0→1、u^1→u、
+     常数底循环乘(≤1e6 钳制)。输出形态与 C 同为左结合扁平链。
+
+   与 C 的文法边界(如实成文)
+   输入经内核 parseExpression(能力超集),翻译期对齐 C 拒绝项:
+   非整常量(小数)→ EPARSE、π/裸 e → EPARSE、abs/atan2 → EPARSE、
+   负指数(x^-1)→ EPARSE、指数 >96(非模板)→ EDEGREE、常量 >1e6
+   → EDEGREE —— 共享用例上与 C 同输入同码。
+   已知超集偏差(JS 更宽,对拍用例避开):空白分隔数字("2 3")按
+   内核隐式乘法接受(C EPARSE);e^(完整表达式) 按标准优先级读
+   (C 的 e^ 只吃一个 pow 层,如 "e^(2x)" C 读作 exp(2)·x、JS 读作
+   exp(2x));x^2^3 右结合读成 (x^2)^3(C 文法止于单指数 → EPARSE)。
+   模板解析走同一 toRPN + RPN→IR;模板词法器仅认模板子集:整常量、
+   x/u/a/b/n/m、16 个函数名、e^、四则与幂括号;隐式乘法注入与 C
+   pro_int 词法器同则(NUM 后 NUM 不注入 → EPARSE)。
+
+   预算(C 同值)
+   表匹配路径 ≤ 256 节点;分部固定两层每层 ≤ 96,总计 448 ≤ 池 512;
+   超限 EBUDGET;池满同 EBUDGET。渲染缓冲 768 字符(C PRO_INT_OUTBUF
+   同值)超限 → EOVER。
+
+   错误码(= AC_PRO_INT_*)
+   0 OK / −1 EPARSE(语法/空输入/非法字符/负指数/小数/π/裸 e)/
+   −2 ETABLE(表+两层分部+多项式归一全未命中)/ −3 EBUDGET /
+   −4 EOVER(渲染上限,常规输入不可达,防御位)/
+   −5 EDEGREE(指数 >96、常量 >1e6)。失败时 getString() 恒 ""。
+
+   零 GC:28 组 TypedArray 加载期一次分配(allocCount=28,明细见声明);
+   全路径无对象/数组字面量、无递归(归一化/匹配/线性判定/多项式归一/
+   驱动/渲染全部显式栈或工作表)、热路径零字符串操作;积分表 128 条
+   anti 模板存单条 \x01 分隔常量串 + 偏移表,kind/func/pow 存常量串
+   加载期解析(等价 C 的 static const .rdata),加载期断言恰 128 项。
+   依赖:parseExpression/toRPN/_rpnToken/_evalError、funcName(渲染名)。
+   导出三通道:Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
  */
 
 var ApolloIntegrate = (function () {
   "use strict";
 
-  /* ==================== 常量(C 同值) ==================== */
+  /* 常量(C 同值) */
   var POOL_NODES = 512;
   var BUDGET_TABLE = 256;
   var BUDGET_PARTS = 96;
@@ -128,35 +127,35 @@ var ApolloIntegrate = (function () {
   var EOVER = -4;
   var EDEGREE = -5;
 
-  /* ==================== 池(加载期一次分配;allocCount = 28) ==================== */
-  var _nOp = new Int32Array(POOL_NODES);           /* 1 IR op */
-  var _nA = new Int32Array(POOL_NODES);            /* 2 IR a */
-  var _nB = new Int32Array(POOL_NODES);            /* 3 IR b */
-  var _nIval = new Float64Array(POOL_NODES);       /* 4 IR ival(常数积可达 1e12,Float64 精确) */
-  var _wN = new Int32Array(2048);                  /* 5 驱动栈:节点 */
-  var _wMeta = new Int32Array(2048);               /* 6 驱动栈:phase|parts<<2|inner<<4 */
-  var _dmap = new Int32Array(POOL_NODES);          /* 7 输入节点 → 积分结果节点 */
-  var _opd = new Int32Array(POOL_NODES + 2);       /* 8 RPN→IR 操作数栈(−2 = e 底哨兵) */
-  var _tplTok = new Int32Array(96);                /* 9 模板 token 流 */
-  var _tplNum = new Float64Array(32);              /* 10 模板整常量池 */
-  var _outBuf = new Int32Array(OUTBUF);            /* 11 渲染缓冲(charCode) */
-  var _emitStack = new Int32Array(2048);           /* 12 渲染栈:idx|mp<<16 或 -(char+1) */
-  var _digits = new Int32Array(24);                /* 13 putn 位数字垫 */
-  var _linA = new Float64Array(POOL_NODES);        /* 14 线性判定斜率 memo */
-  var _linB = new Float64Array(POOL_NODES);        /* 15 线性判定截距 memo */
-  var _linStamp = new Int32Array(POOL_NODES);      /* 16 memo 时戳(正=ok 负=fail) */
-  var _linStack = new Int32Array(2048);            /* 17 线性判定栈(node|phase<<9) */
-  var _polyPool = new Int32Array(64 * (POLY_MAX + 1));  /* 18 多项式向量池(64×17) */
-  var _polySlot = new Int32Array(POOL_NODES);      /* 19 节点 → 池槽 */
-  var _polyFree = new Int32Array(64);              /* 20 槽空闲表(LIFO) */
-  var _polyStack = new Int32Array(4096);           /* 21 多项式归一栈(node|phase<<9|slot<<10) */
-  var _distC = new Int32Array(64);                 /* 22 分配工作表:常数节点 */
-  var _distT = new Int32Array(64);                 /* 23 分配工作表:项 */
-  var _distS = new Float64Array(64);               /* 24 分配工作表:符号 */
-  var _mWraps = new Int32Array(64);                /* 25 mul 常数外提 wrap 栈 */
-  var _addT = new Int32Array(POOL_NODES);          /* 26 add/sub 项表 */
-  var _addS = new Float64Array(POOL_NODES);        /* 27 add/sub 项符号(±1) */
-  var _tKFP = new Int32Array(384);                 /* 28 积分表 kind/func/pow(128×3) */
+  /* 池(加载期一次分配;allocCount = 28) */
+  var _nOp = new Int32Array(POOL_NODES);
+  var _nA = new Int32Array(POOL_NODES);
+  var _nB = new Int32Array(POOL_NODES);
+  var _nIval = new Float64Array(POOL_NODES);       /* IR ival(常数积可达 1e12,Float64 精确) */
+  var _wN = new Int32Array(2048);                  /* 驱动栈:节点 */
+  var _wMeta = new Int32Array(2048);               /* 驱动栈:phase|parts<<2|inner<<4 */
+  var _dmap = new Int32Array(POOL_NODES);          /* 输入节点 → 积分结果节点 */
+  var _opd = new Int32Array(POOL_NODES + 2);       /* RPN→IR 操作数栈(−2 = e 底哨兵) */
+  var _tplTok = new Int32Array(96);                /* 模板 token 流 */
+  var _tplNum = new Float64Array(32);              /* 模板整常量池 */
+  var _outBuf = new Int32Array(OUTBUF);            /* 渲染缓冲(charCode) */
+  var _emitStack = new Int32Array(2048);           /* 渲染栈:idx|mp<<16 或 -(char+1) */
+  var _digits = new Int32Array(24);                /* putn 位数字垫 */
+  var _linA = new Float64Array(POOL_NODES);        /* 线性判定斜率 memo */
+  var _linB = new Float64Array(POOL_NODES);        /* 线性判定截距 memo */
+  var _linStamp = new Int32Array(POOL_NODES);      /* memo 时戳(正=ok 负=fail) */
+  var _linStack = new Int32Array(2048);            /* 线性判定栈(node|phase<<9) */
+  var _polyPool = new Int32Array(64 * (POLY_MAX + 1));  /* 多项式向量池(64×17) */
+  var _polySlot = new Int32Array(POOL_NODES);      /* 节点 → 池槽 */
+  var _polyFree = new Int32Array(64);              /* 槽空闲表(LIFO) */
+  var _polyStack = new Int32Array(4096);           /* 多项式归一栈(node|phase<<9|slot<<10) */
+  var _distC = new Int32Array(64);                 /* 分配工作表:常数节点 */
+  var _distT = new Int32Array(64);                 /* 分配工作表:项 */
+  var _distS = new Float64Array(64);               /* 分配工作表:符号 */
+  var _mWraps = new Int32Array(64);                /* mul 常数外提 wrap 栈 */
+  var _addT = new Int32Array(POOL_NODES);          /* add/sub 项表 */
+  var _addS = new Float64Array(POOL_NODES);        /* add/sub 项符号(±1) */
+  var _tKFP = new Int32Array(384);                 /* 积分表 kind/func/pow(128×3) */
 
   var _allocCount = 28;
   var _count = 0;
@@ -183,7 +182,7 @@ var ApolloIntegrate = (function () {
   function allocCount() { return _allocCount; }
   function getString() { return _result; }
 
-  /* ==================== 积分表(128 项,C s_pro_int_table 逐项搬运) ==================== */
+  /* 积分表(128 项,C s_pro_int_table 逐项搬运) */
 
   /* kind/func/pow 三元组,顺序与 C 完全一致(条目 1..128) */
   var _T_SPEC =
@@ -319,7 +318,7 @@ var ApolloIntegrate = (function () {
     if (cnt !== 128) { throw new Error("integrate table " + cnt + " != 128 entries"); }
   })();
 
-  /* ==================== IR 基元 ==================== */
+  /* IR 基元 */
 
   function isConst(i) {
     return i >= 0 && i < _count && _nOp[i] === OP_CONST;
@@ -369,7 +368,7 @@ var ApolloIntegrate = (function () {
   }
   function xpow(e) { return ipow(varX(), e); }
 
-  /* ==================== add/sub:项表摊平(消 C 尾递归) ====================
+  /* add/sub:项表摊平(消 C 尾递归)
    * a ⊕s b 的右操作数子树(ADD/SUB/NEG)展平成带符号项表,再左结合
    * 折叠 —— 与 C pro_int_add/sub 的旋转恒等式逐条等价:
    *   a+(x±y)=(a±x)±y、a−(x±y)=(a∓x)±y、a±(−x)=a∓x。 */
@@ -385,7 +384,7 @@ var ApolloIntegrate = (function () {
     var sgn = s0;
 
     if (a < 0 || b < 0) { return -1; }
-    /* 项表 [0..idx):节点;收集栈 [top..cap) —— 双端复用 _addT/_addS。
+    /* 项表 [0..idx):节点;收集栈 [top..cap):双端复用 _addT/_addS。
      * 种子 b 压入栈侧(idx 从 0 起,专归项表) */
     var top = cap;
     top--;
@@ -443,7 +442,7 @@ var ApolloIntegrate = (function () {
   function iadd(a, b) { return iaddsub(a, b, 1); }
   function isub(a, b) { return iaddsub(a, b, -1); }
 
-  /* ==================== mul(C pro_int_mul 全规则;wrap 栈 + 分配工作表) ==================== */
+  /* mul(C pro_int_mul 全规则;wrap 栈 + 分配工作表) */
 
   /* 常数 cnode × 项 t(t 非 ADD/SUB/NEG —— 分配工作表已消化) */
   function imulConstLeaf(cnode, t) {
@@ -480,7 +479,7 @@ var ApolloIntegrate = (function () {
     var dist = 0;
 
     for (;;) {
-      /* ---- 归一化(C 规则按原次序;退出时 t 恒定形) ---- */
+      /* 归一化(C 规则按原次序;退出时 t 恒定形) */
       dist = 0;
       for (;;) {
         t = -1;
@@ -568,7 +567,7 @@ var ApolloIntegrate = (function () {
         if (t < 0) { return -1; }
       }
 
-      /* ---- 分配展开(dist=1 时 t = 和差节点) ---- */
+      /* 分配展开(dist=1 时 t = 和差节点) */
       if (dist === 1) {
         _distC[0] = cnode;
         _distT[0] = t;
@@ -603,7 +602,7 @@ var ApolloIntegrate = (function () {
         t = acc;
       }
 
-      /* ---- wrap 回灌(外提的常数因子乘回已定形的 t) ---- */
+      /* wrap 回灌(外提的常数因子乘回已定形的 t) */
       if (wrapsLen > 0) {
         wrapsLen--;
         a = _mWraps[wrapsLen];
@@ -639,12 +638,12 @@ var ApolloIntegrate = (function () {
     return put(OP_DIV, a, b, 0);
   }
 
-  /* ==================== 模板词法器(C pro_int_next 子集) ==================== */
+  /* 模板词法器(C pro_int_next 子集) */
 
   /* 函数名表(最长前缀优先;16 个,无 abs/atan2 —— 与 C s_pro_int_fns 一致) */
   function tplMatchFunc(s, i, end) {
     if (i + 5 <= end && s.charCodeAt(i) === 97) {          /* a… */
-      if (s.charCodeAt(i + 1) === 115 && s.charCodeAt(i + 2) === 105 && s.charCodeAt(i + 3) === 110 && s.charCodeAt(i + 4) === 104) { return 16 | (5 << 10); }  /* asinh: 16 | 5<<10 */
+      if (s.charCodeAt(i + 1) === 115 && s.charCodeAt(i + 2) === 105 && s.charCodeAt(i + 3) === 110 && s.charCodeAt(i + 4) === 104) { return 16 | (5 << 10); }  /* asinh */
       if (s.charCodeAt(i + 1) === 99 && s.charCodeAt(i + 2) === 111 && s.charCodeAt(i + 3) === 115 && s.charCodeAt(i + 4) === 104) { return 17 | (5 << 10); }  /* acosh */
       if (s.charCodeAt(i + 1) === 116 && s.charCodeAt(i + 2) === 97 && s.charCodeAt(i + 3) === 110 && s.charCodeAt(i + 4) === 104) { return 18 | (5 << 10); }  /* atanh */
     }
@@ -765,7 +764,7 @@ var ApolloIntegrate = (function () {
     return cnt;
   }
 
-  /* ==================== RPN → IR(主输入与模板共用;bind 代换) ==================== */
+  /* RPN → IR(主输入与模板共用;bind 代换) */
 
   /* 返回根;失败 −1 且置 _errCode。E 底哨兵 −2:e^x → exp(x)。 */
   var _errCode = OK;
@@ -873,7 +872,7 @@ var ApolloIntegrate = (function () {
     return _opd[0];
   }
 
-  /* ==================== 匹配辅助(C 同款) ==================== */
+  /* 匹配辅助(C 同款) */
 
   function isOne(i) { return isConst(i) && _nIval[i] === 1; }
 
@@ -1051,7 +1050,7 @@ var ApolloIntegrate = (function () {
     return 1;
   }
 
-  /* ==================== 表匹配(C pro_int_match_entry 逐 case 移植) ====================
+  /* 表匹配(C pro_int_match_entry 逐 case 移植)
    * 命中 1(bind 出参已填),未命中 0,池满 −1。 */
 
   function matchEntry(k, r) {
@@ -1410,7 +1409,7 @@ var ApolloIntegrate = (function () {
     return 0;
   }
 
-  /* ==================== 多项式归一(C pro_int_poly_fetch/poly_integrate) ==================== */
+  /* 多项式归一(C pro_int_poly_fetch/poly_integrate) */
 
   function polyAlloc() {
     if (_pfFreeTop <= 0) { return -1; }
@@ -1606,7 +1605,7 @@ var ApolloIntegrate = (function () {
     return 1;
   }
 
-  /* ==================== 分部积分(C pro_int_try_parts,固定两层) ==================== */
+  /* 分部积分(C pro_int_try_parts,固定两层) */
 
   /* r = MUL(x^n, f) / MUL(f, x^n),f ∈ {EXP,COS,SIN,SINH,COSH} 且实参=x。
    * 命中:构造 inner = (n−1) 次幂 × 反函数,压 (r, phase2, inner) 续体,
@@ -1655,7 +1654,7 @@ var ApolloIntegrate = (function () {
     return 1;
   }
 
-  /* ==================== 驱动(C pro_int_integrate_rec 显式栈化) ==================== */
+  /* 驱动(C pro_int_integrate_rec 显式栈化) */
 
   function drive(root) {
     var e = 0;
@@ -1824,7 +1823,7 @@ var ApolloIntegrate = (function () {
         continue;
       }
 
-      /* ---- 叶:128 项表 ---- */
+      /* 叶:128 项表 */
       hit = 0;
       for (k = 0; k < 128; k++) {
         var mh = matchEntry(k, r);
@@ -1867,14 +1866,14 @@ var ApolloIntegrate = (function () {
       }
       if (hit === 1) { continue; }
 
-      /* ---- 固定两层分部 ---- */
+      /* 固定两层分部 */
       if (parts > 0) {
         var pp = tryPartsPush(r, parts);
         if (pp < 0) { return EBUDGET; }
         if (pp === 1) { continue; }
       }
 
-      /* ---- 多项式归一 ---- */
+      /* 多项式归一 */
       if (polyIntegrate(r) === 1) {
         _dmap[r] = _pfOut;
         continue;
@@ -1885,7 +1884,7 @@ var ApolloIntegrate = (function () {
     return _dmap[root];
   }
 
-  /* ==================== 渲染(C pro_int_emit 显式栈化) ==================== */
+  /* 渲染(C pro_int_emit 显式栈化) */
 
   function emitPrec(i) {
     var op = _nOp[i];
@@ -2000,7 +1999,7 @@ var ApolloIntegrate = (function () {
     return OK;
   }
 
-  /* ==================== 主入口 ==================== */
+  /* 主入口 */
 
   function integrate(expr) {
     var rc = 0;

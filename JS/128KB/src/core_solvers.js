@@ -1,5 +1,4 @@
-/* ============================================================
- * ApolloCalc · core_solvers.js — 方程求解器（文件 6/9）
+/* ApolloCalc · core_solvers.js — 方程求解器（文件 6）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：二次/三次/四次多项式求根、线性方程组高斯消元（12 元）、残差回验、
  *       OOM 安全防护（深度/函数数/变量数/次数/多元非线性/内存水位）
@@ -9,52 +8,48 @@
  *       文件 5 evalEquationAt（残差回验）
  *       文件 9 ratRootDescent / ratRootFinish（三次/四次有理根快路径，跨文件提升）
  * 铁律：热路径零堆分配、零字符串操作、零递归、零对象/数组字面量
- *       全部中间量为函数内 var 标量，求解过程不产生任何临时 JS 堆对象
- * ============================================================ */
+ *       全部中间量为函数内 var 标量，求解过程不产生任何临时 JS 堆对象 */
 
-/* ==================== 文件 6 专属全局变量（唯一声明处） ====================
+/* 文件 6 专属全局变量（唯一声明处）
  * 根结果池 12 槽：多项式至多 4 根，线性方程组至多 12 元（12 元解须完整落池，
  * 4 槽时代 n>4 的越界写会被 TypedArray 静默丢弃） */
-var _rootCount = 0;                       /* 当前根数量（0..12） */
-var _rootRe = new Float64Array(12);       /* 各根实部 */
-var _rootIm = new Float64Array(12);       /* 各根虚部 */
-var _rootExactRat = new Float64Array(12); /* 精确形式有理部分子 */
-var _rootExactRadNum = new Float64Array(12); /* 精确形式根式部系数（0=无根式） */
-var _rootExactRad = new Float64Array(12); /* 精确形式根号内数（无平方因子） */
-var _rootExactDen = new Float64Array(12); /* 精确形式分母（恒为正） */
-var _rootExactExp = new Float64Array(12); /* 精确形式科学计数法指数（10^exp） */
-var _rootExactValid = new Int32Array(12); /* 各根精确形式有效标志（1=支持 0=不支持） */
+var _rootCount = 0;
+var _rootRe = new Float64Array(12);
+var _rootIm = new Float64Array(12);
+var _rootExactRat = new Float64Array(12);
+var _rootExactRadNum = new Float64Array(12); /* 0=无根式 */
+var _rootExactRad = new Float64Array(12); /* 无平方因子 */
+var _rootExactDen = new Float64Array(12); /* 恒为正 */
+var _rootExactExp = new Float64Array(12); /* 10^exp */
+var _rootExactValid = new Int32Array(12); /* 1=支持 0=不支持 */
 var _solveError = 0;                      /* 0=OK 1=次数过高 2=多元非线性拒绝 3=求解失败 4=内存水位过高 */
 var _residualMax = 0.0;                   /* 残差回验最大相对误差（UI 层决定是否告警） */
 
 /* 精确系统分量上限（2^53-1，与文件 4 保持一致） */
 var SOLVER_INT_MAX = 9007199254740991;
 
-/* ==================== 内联助手：带符号立方根 ====================
+/* 内联助手：带符号立方根
  * Math.cbrt 在 JerryScript 上不保证可用，用 pow(1/3) 手工实现
- * 零分配：纯标量
- */
+ * 零分配：纯标量 */
 function cbrtSigned(x) {
   if (x === 0.0) { return 0.0; }
   if (x > 0.0) { return Math.pow(x, 1.0 / 3.0); }
   return -Math.pow(-x, 1.0 / 3.0);
 }
 
-/* ==================== 模块一：二次方程求解器 ====================
+/* 模块一：二次方程求解器
  * 输入 _coeffs[0..2] = [c, b, a]，即 ax² + bx + c = 0
  * D ≥ 0：两实根，精确形式经 exactFromDiscriminant(D) 组装
  * D < 0：共轭复根，精确形式置无效
  * 退化 a=0：降为线性（单根，整数系数时保留精确分数）
- * 返回 _solveError（0 = 成功）
- */
+ * 返回 _solveError（0 = 成功） */
 function solveQuadratic() {
   _rootCount = 0;
   _solveError = 0;
 
-  /* 多元非线性门禁(ROADMAP §二:v2.3.0 把死代码「接入」求解管线——唯一可行
-   * 方向,函数名被红线测试与构建导出契约引用,不可删):≥2 变量且含非线性
-   * 运算(^ 或函数调用)→ _solveError = 2 拒绝;线性多元组不在此拦,
-   * 交 solveLinearSystem(守卫语义本就不拦线性多元)。 */
+  /* 多元非线性门禁:ROADMAP §二 v2.3.0 把死代码接入求解管线,是唯一可行方向;
+   * 函数名被红线测试与构建导出契约引用,不可删。≥2 变量且含非线性运算(^ 或函数调用)
+   * → _solveError = 2 拒绝;线性多元组不在此拦,交 solveLinearSystem(守卫语义本就不拦线性多元)。 */
   if (guardMultivariateNonlinear() === 1) { return _solveError; }
 
   var c = _coeffs[0];
@@ -62,7 +57,7 @@ function solveQuadratic() {
   var a = _coeffs[2];
   if (!isFinite(a) || !isFinite(b) || !isFinite(c)) { _solveError = 3; return _solveError; }
 
-  /* ---- 退化：a = 0 → 线性方程 bx + c = 0 ---- */
+  /* 退化：a = 0 → 线性方程 bx + c = 0 */
   if (a === 0.0) {
     if (b === 0.0) {
       if (c === 0.0) { _solveError = 3; return _solveError; }  /* 恒等式：无穷多根无法枚举 */
@@ -94,7 +89,7 @@ function solveQuadratic() {
   var twoA = 2.0 * a;
 
   if (D >= 0.0) {
-    /* ---- 两实根：x = (-b ± √D) / 2a ---- */
+    /* 两实根：x = (-b ± √D) / 2a */
     var sq = Math.sqrt(D);
     _rootRe[0] = (-b + sq) / twoA;
     _rootRe[1] = (-b - sq) / twoA;
@@ -102,7 +97,7 @@ function solveQuadratic() {
     _rootIm[1] = 0.0;
     _rootCount = 2;
 
-    /* ---- 精确形式组装（五分量混合形式） ----
+    /* 精确形式组装（五分量混合形式）
      * √D = (exactRat + exactRadNum·√exactRad)/exactDen（D 有理数时两者至多一个非零）
      * 根 x = (−b ± √D)/(2a) = ((−b·exactDen ± exactRat) ± exactRadNum·√exactRad) / (2a·exactDen)
      * 内存策略：三分量模型无法表达的有理部+根式部混合（如黄金比例
@@ -114,8 +109,8 @@ function solveQuadratic() {
     } else if (a === Math.floor(a) && b === Math.floor(b) &&
                a <= SOLVER_INT_MAX && a >= -SOLVER_INT_MAX &&
                b <= SOLVER_INT_MAX && b >= -SOLVER_INT_MAX) {
-      var n = exactRadNum;                     /* √D 的根式部系数 */
-      var dr = exactRat;                       /* √D 的有理部分（D 为完全平方时非零） */
+      var n = exactRadNum;
+      var dr = exactRat;                       /* D 为完全平方时非零 */
       var rr = exactRad;
       var dd = exactDen;
       /* 溢出预检：|b·dd| ≤ 2^53-1；|a| ≤ 2^52 保证 2a 精确；|2a·dd| ≤ 2^53-1 */
@@ -168,7 +163,7 @@ function solveQuadratic() {
       _rootExactValid[1] = 0;
     }
   } else {
-    /* ---- 共轭复根：x = (-b ± i√|D|) / 2a ---- */
+    /* 共轭复根：x = (-b ± i√|D|) / 2a */
     var sqI = Math.sqrt(-D);
     var reC = -b / twoA;
     var imC = sqI / twoA;
@@ -183,7 +178,7 @@ function solveQuadratic() {
   return 0;
 }
 
-/* ==================== 模块二：三次方程求解器（有理根快路径 + 卡尔达诺 + 三角切换） ====================
+/* 模块二：三次方程求解器（有理根快路径 + 卡尔达诺 + 三角切换）
  * 输入 _coeffs[0..3] = [d, c, b, a]，即 ax³ + bx² + cx + d = 0
  * 有理根快路径：整系数时枚举 p/q 候选（p|d、q|a）综合除法验证，
  *   迭代降次（显式栈，无递归）；全有理直接填根（精确形式 exactSetFraction），
@@ -193,8 +188,7 @@ function solveQuadratic() {
  *        不产生复数中间量，cSqrt/cPowInt 在本路径无调用点）
  * Δ = 0：三实根（含重根）
  * Δ < 0：不可约情形，必须切换三角法（卡尔达诺会因复数中间量丢失精度）
- * skipRational：四次预解式复用本函数时传 1（预解式系数为派生浮点量，跳过整系数枚举）
- */
+ * skipRational：四次预解式复用本函数时传 1（预解式系数为派生浮点量，跳过整系数枚举） */
 function solveCubic(skipRational) {
   _rootCount = 0;
   _solveError = 0;
@@ -234,7 +228,7 @@ function solveCubic(skipRational) {
   var tolD = 1e-14 * (Math.abs(qh * qh) + Math.abs(p3c));
 
   if (dlt > tolD) {
-    /* ---- Δ > 0：卡尔达诺 ----
+    /* Δ > 0：卡尔达诺
      * 内存策略：u/v 为带符号实立方根标量，无复数对象 */
     var sD = Math.sqrt(dlt);
     var u = cbrtSigned(-qh + sD);
@@ -249,7 +243,7 @@ function solveCubic(skipRational) {
     _rootIm[2] = -imS;
     _rootCount = 3;
   } else if (dlt >= -tolD) {
-    /* ---- Δ = 0：三实根（y1 = 2∛(−q/2) 单根，y2 = y3 = −∛(−q/2) 二重根） ---- */
+    /* Δ = 0：三实根（y1 = 2∛(−q/2) 单根，y2 = y3 = −∛(−q/2) 二重根） */
     var t0 = cbrtSigned(-qh);
     _rootRe[0] = 2.0 * t0 + off;
     _rootRe[1] = -t0 + off;
@@ -259,7 +253,7 @@ function solveCubic(skipRational) {
     _rootIm[2] = 0.0;
     _rootCount = 3;
   } else {
-    /* ---- Δ < 0 不可约：三角法 ----
+    /* Δ < 0 不可约：三角法
      * y_k = 2√(−p/3)·cos(θ − 2πk/3)，θ = acos((3q)/(2p)·√(−3/p))/3
      * 内存策略：纯标量，acos 入参钳位到 [−1,1] 防浮点越界 */
     var mm = 2.0 * Math.sqrt(-p3);
@@ -284,7 +278,7 @@ function solveCubic(skipRational) {
   return 0;
 }
 
-/* ==================== 模块三：四次方程求解器（有理根快路径 + 笛卡尔分解法） ====================
+/* 模块三：四次方程求解器（有理根快路径 + 笛卡尔分解法）
  * 输入 _coeffs[0..4] = [e, d, c, b, a]，即 ax⁴ + bx³ + cx² + dx + e = 0
  * 有理根快路径：整系数时枚举 p/q 候选综合除法验证，迭代降次（显式栈，无递归）；
  *   全有理直接填根；部分有理降次后按剩余次数委托二次/三次（预解式路径跳过枚举）；
@@ -297,8 +291,7 @@ function solveCubic(skipRational) {
  *   保证存在非负实根），α=√(2m)，β=m+p/2−q/(2α)，γ=m+p/2+q/(2α)，
  *   两个二次因式的 4 个 y 根合成后平移回 x
  * 注意：预解/因式二次复用 _coeffs 传参（原系数已缓存为局部标量），
- *       求解完成后 _coeffs 不再是原四次系数
- */
+ *       求解完成后 _coeffs 不再是原四次系数 */
 function solveQuartic() {
   _rootCount = 0;
   _solveError = 0;
@@ -336,7 +329,7 @@ function solveQuartic() {
   var i = 0;
 
   if (Math.abs(q) < qTol) {
-    /* ---- 双二次退化路径：z² + pz + r = 0，z = y² ----
+    /* 双二次退化路径：z² + pz + r = 0，z = y²
      * 内存策略：z 根先缓存为局部标量再展开写回，避免读写区重叠；
      * 每个 z 用 cSqrt 开方（负 z 自动落到正虚部分支），正负两根就地取反 */
     _coeffs[0] = r;
@@ -364,7 +357,7 @@ function solveQuartic() {
     _rootIm[3] = -_tmpIm;
     _rootCount = 4;
   } else {
-    /* ---- 一般路径：预解三次 → 待定系数分解 ----
+    /* 一般路径：预解三次 → 待定系数分解
      * 内存策略：m/α/β/γ 全为标量；两因式根用 _rootRe[0..3] 就地接力
      * （因式1 根暂存 [2..3]，因式2 根落 [0..1]），零临时数组 */
     _coeffs[0] = -q * q / 8.0;
@@ -410,7 +403,7 @@ function solveQuartic() {
     _rootCount = 4;
   }
 
-  /* ---- 平移回 x = y + off；四次方程不支持精确形式 ---- */
+  /* 平移回 x = y + off；四次方程不支持精确形式 */
   for (i = 0; i < 4; i++) {
     _rootRe[i] = _rootRe[i] + off;
     _rootExactValid[i] = 0;
@@ -418,12 +411,11 @@ function solveQuartic() {
   return 0;
 }
 
-/* ==================== 模块四：线性方程组求解器（列主元高斯消元） ====================
+/* 模块四：线性方程组求解器（列主元高斯消元）
  * 输入 matrixPool 前 n·(n+1) 个元素：增广矩阵（行主序，1 ≤ n ≤ 12）
  * 列主元选取 → 行交换 → 消元 → 回代，结果写 _rootRe[0..n-1]
  * 主元 |·| < 1e-12 → 奇异，_solveError = 3
- * 内存策略：原地作用于 matrixPool（156 = 12×13），零复制零分配
- */
+ * 内存策略：原地作用于 matrixPool（156 = 12×13），零复制零分配 */
 function solveLinearSystem(n) {
   _rootCount = 0;
   _solveError = 0;
@@ -487,14 +479,13 @@ function solveLinearSystem(n) {
   return 0;
 }
 
-/* ==================== 模块五：残差回验 ====================
+/* 模块五：残差回验
  * 对每个实根（_rootIm[i] === 0）代回原方程 f(x)（evalEquationAt，基于 tokenPool）
  * 相对残差 = |f(root)| / max(|f(root−δ)|, |f(root+δ)|, 1e-300)，
  * δ = |root| > 10 时取 0.1·|root| 否则 1 —— 邻域值自然反映系数整体量级，
  * 采样拟合失真（如 sin(x)=0 被拟合成二次）时邻域值 O(1) 而残差 O(1)，比值近 1；
  * 真 根时残差为浮点噪声，比值 ~1e-12
- * 只记录 _residualMax 不拦截，UI 层据 > 1e-6 决定是否提示"结果可能不准确"
- */
+ * 只记录 _residualMax 不拦截，UI 层据 > 1e-6 决定是否提示"结果可能不准确" */
 function verifyRoots() {
   _residualMax = 0.0;
   var i = 0;
@@ -530,9 +521,8 @@ function verifyRoots() {
   }
 }
 
-/* ==================== 模块六：OOM 安全防护与异常拦截 ====================
- * 求解前置门禁：全部只读扫描 tokenPool，零分配
- */
+/* 模块六：OOM 安全防护与异常拦截
+ * 求解前置门禁：全部只读扫描 tokenPool，零分配 */
 
 /* Token 流体检：括号嵌套 ≤ 6、函数调用 ≤ 4、变量出现 ≤ 10（64KB 版阈值翻倍，128KB 宽容度）
  * 返回 0 = 通过；1 = 拒绝（_solveError = 2） */
@@ -645,7 +635,7 @@ function checkMemoryWatermark() {
   return 0;
 }
 
-/* ==================== 模块七：复位 ====================
+/* 模块七：复位
  * 每轮求解前调用（内存策略：只清标量与预分配数组，零分配；
  * 根结果池 12 槽全覆盖，避免上一轮线性方程组的解残留） */
 function solversReset() {

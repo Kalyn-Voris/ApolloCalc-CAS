@@ -1,8 +1,8 @@
-/* ApolloCalc-CAS · JS/128KB 矩阵基础运算测试
- * 被测模块：src/core_matrix.js（自包含，不依赖既有 core）
- * 运行：node test/test-matrix.js   （JS/128KB 目录下）
- * 全过输出：==== matrix: N pass, 0 fail ====
- */
+/* ApolloCalc · test-matrix.js — 矩阵基础运算测试
+
+   被测模块：src/core_matrix.js（自包含，不依赖既有 core）
+   运行：node test/test-matrix.js   （JS/128KB 目录下）
+   全过输出：==== matrix: N pass, 0 fail ==== */
 "use strict";
 
 var M = require("../src/core_matrix.js");
@@ -19,7 +19,7 @@ function ok(name, cond, detail) {
   else { fail++; console.log("FAIL " + name + (detail !== undefined ? ": " + detail : "")); }
 }
 
-/* 写入 A 寄存器的助手：data 按行主序展开。仅测试期使用，不在被测热路径。 */
+/* data 按行主序展开；仅测试期使用，不在被测热路径 */
 function setAMat(rows, cols, data) {
   var i;
   for (i = 0; i < rows * cols; i++) {
@@ -35,7 +35,7 @@ function setBMat(rows, cols, data) {
   return 0;
 }
 
-/* 一、乘法 */
+/* 乘法 */
 setAMat(2, 2, [1, 2, 3, 4]);
 setBMat(2, 2, [5, 6, 7, 8]);
 ok("2x2 乘法状态", M.mul() === 1 && M.getError() === 0);
@@ -44,27 +44,24 @@ ok("2x2 乘法 R[0][1]=22", approx(M.getR(0, 1), 22));
 ok("2x2 乘法 R[1][0]=43", approx(M.getR(1, 0), 43));
 ok("2x2 乘法 R[1][1]=50", approx(M.getR(1, 1), 50));
 
-/* A(2x3) · B(3x2)：内维消去 → 2x2 */
 setAMat(2, 3, [1, 2, 3, 4, 5, 6]);
 setBMat(3, 2, [7, 8, 9, 10, 11, 12]);
 ok("2x3·3x2 状态", M.mul() === 1);
 ok("2x3·3x2 R[1][1]=154", approx(M.getR(1, 1), 154), M.getR(1, 1));
 ok("2x3·3x2 形状 2x2", M.getRRows() === 2 && M.getRCols() === 2);
 
-/* 单位阵乘法 */
 setAMat(3, 3, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
 setBMat(3, 3, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 M.mul();
 ok("单位阵 × B = B", approx(M.getR(1, 2), 6) && approx(M.getR(2, 0), 7));
 
-/* 乘法错误：内维不匹配 / 维度超界 */
 setAMat(2, 3, [1, 2, 3, 4, 5, 6]);
 setBMat(2, 2, [1, 2, 3, 4]);
 ok("内维不匹配拒绝", M.mul() === -1 && M.getError() === 2);
 ok("维度超 3 拒绝", M.setA(4, 4, 0, 1) === -1 && M.getError() === 1);
 ok("下标越界拒绝", M.setA(2, 2, 4, 1) === -1 && M.getError() === 1);
 
-/* 二、转置 */
+/* 转置 */
 setAMat(2, 3, [1, 2, 3, 4, 5, 6]);
 ok("转置状态", M.transpose() === 1);
 ok("转置形状 3x2", M.getRRows() === 3 && M.getRCols() === 2);
@@ -76,7 +73,7 @@ M.transpose();
 ok("对称阵转置 = 自身",
    approx(M.getR(0, 1), 1) && approx(M.getR(1, 0), 1) && approx(M.getR(2, 2), 4));
 
-/* 三、行列式 */
+/* 行列式 */
 setAMat(1, 1, [7]);
 ok("det 1x1 = 7", M.det() === 7);
 setAMat(2, 2, [1, 2, 3, 4]);
@@ -88,7 +85,7 @@ ok("det 奇异阵 = 0", M.det() === 0, M.det());
 setAMat(2, 3, [1, 2, 3, 4, 5, 6]);
 ok("det 非方阵 → NaN + err 3", M.det() !== M.det() && M.getError() === 3);
 
-/* 四、逆矩阵 */
+/* 逆矩阵 */
 setAMat(2, 2, [4, 7, 2, 6]);
 ok("inv 2x2 状态", M.inv() === 1 && M.getError() === 0);
 ok("inv 2x2 R[0][0]=0.6", approx(M.getR(0, 0), 0.6), M.getR(0, 0));
@@ -100,7 +97,7 @@ M.inv();
 ok("inv 3x3 对角 R[1][1]=0.25", approx(M.getR(1, 1), 0.25) &&
    approx(M.getR(2, 2), 0.125), M.getR(2, 2));
 
-/* 一般 3x3：inv 后 A·A⁻¹ ≈ I（把 R 逐元素搬回 B，再乘） */
+/* 一般 3x3：inv 后把 R 逐元素搬回 B 再乘，验证 A·A⁻¹ ≈ I */
 setAMat(3, 3, [3, 0, 2, 0, 1, 4, 5, 1, 2]);
 M.inv();
 var invOK = M.getError() === 0;
@@ -121,7 +118,7 @@ ok("inv 奇异拒绝", M.inv() === -1 && M.getError() === 4);
 setAMat(2, 3, [1, 2, 3, 4, 5, 6]);
 ok("inv 非方阵拒绝", M.inv() === -1 && M.getError() === 3);
 
-/* 五、寄存器独立性与边界 */
+/* 寄存器独立性与边界 */
 setAMat(2, 2, [1, 2, 3, 4]);
 M.det();
 setBMat(2, 2, [0, 0, 0, 0]);
@@ -131,7 +128,7 @@ M.reset();
 ok("reset 后维度清零", M.getRRows() === 0 && M.getError() === 0);
 ok("reset 后 mul 无效输入拒绝", M.mul() === -1 && M.getError() === 1);
 
-/* 六、零 GC：加载期 3 个 TypedArray，热循环分配计数不变 */
+/* 零 GC：加载期 3 个 TypedArray，热循环分配计数不变 */
 ok("加载期分配 = 3（3 个 Float64Array）", M.allocCount() === 3, M.allocCount());
 ok("池为 TypedArray", M.aBuffer() instanceof Float64Array &&
    M.rBuffer() instanceof Float64Array && M.rBuffer().length === 9);

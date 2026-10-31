@@ -1,5 +1,5 @@
 stage,js64_us_per_op,js128_us_per_op,c64_us_per_op,c128_us_per_op,js128_over_js64,c64_over_js64,c128_over_js64,js64_pool,js128_pool,c64_pool,c128_pool
-parse,0.0400,0.0398,0.0192,0.0189,0.99,0.48,0.47,pool220,pool250,pool220,pool250
-eval,0.1262,0.1217,0.0628,0.0595,0.96,0.50,0.47,pool220,pool250,pool220,pool250
-solve,0.6920,1.2266,0.3532,0.4353,1.77,0.51,0.63,pool100,pool100,pool100,pool100
-exact,0.3972,0.6640,0.1999,0.2517,1.67,0.50,0.63,pool50,pool50,pool50,pool50
+parse,0.0402,0.0435,0.0194,0.0192,1.08,0.48,0.48,pool220,pool250,pool220,pool250
+eval,0.1267,0.1178,0.0638,0.0681,0.93,0.50,0.54,pool220,pool250,pool220,pool250
+solve,0.6980,1.2375,0.3566,0.4374,1.77,0.51,0.63,pool100,pool100,pool100,pool100
+exact,0.3998,0.6676,0.2023,0.2497,1.67,0.51,0.62,pool50,pool50,pool50,pool50

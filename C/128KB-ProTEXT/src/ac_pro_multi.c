@@ -1,60 +1,45 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_multi.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   方向 A 基础设施：2 变量稀疏多项式 + 子结式 PRS 的 GCD（A1）
- *   + 内容提取式因式分解（A2）。
- *
- * 【数据结构：为什么稀疏 / Why sparse】
- *   设计说明 §3.1.2：2 变量、总次数 ≤ 6 的单项式数
- *       N(d) = C(d+2, 2)，N(6) = 28
- *   稠密表示是 7×7 = 49 格，其中 21 格恒为 0（总次数 > 6），浪费 42.9%。
- *   稀疏项表 28 项 × 16 B = 448 B/多项式，6 槽 = 2688 B。存储是硬约束，
- *   故取稀疏。
- *
- * 【项表不变式 / Term-list invariants】
- *   每个多项式槽维护一个**有序、无零项、无重复指数**的项表：
- *     ① 按 exps 降序排列（x 指数优先，再 y 指数）—— 字典序降序，
- *        于是「首项」就是 terms[0]，与多项式除法的语义直接对应；
- *     ② 系数为 0 的项不存储（count 只数非零项）；
- *     ③ 同一 exps 最多出现一次。
- *   三条由 mv_normalize() 统一保证，所有构造/运算结束都调它 ——
- *   与上游「所有构造器都 funnel 到 ac_exact_normalize」同一纪律。
- *
- * 【exps 编码】
- *   低 4 bit = y 指数，高 4 bit = x 指数（各 0..6，4 bit 足够）。
- *   一次整数比较即可完成排序与同类项判等。
- *
- * 【槽位管理 / Slot discipline】
- *   Pro union 的 mv 视图只有 6 个槽，每个槽 28 项。所有多项式运算都
- *   必须**显式**指定三个不同的槽（dst / a / b），否则 mv_add_sub 之类的
- *   就地写入会破坏操作数。
- *
- *   为杜绝别名 bug，本文件统一采用下面的固定分配，任何函数都不越界：
- *
- *       槽 0  SLOT_A     被除数 / 左操作数
- *       槽 1  SLOT_B     除数 / 右操作数
- *       槽 2  SLOT_R     结果 / 余式
- *       槽 3  SLOT_T1    临时 1
- *       槽 4  SLOT_T2    临时 2
- *       槽 5  SLOT_T3    临时 3
- *
- *   每个函数在头注里声明它**占用**哪些槽、**要求**哪些槽空闲。
- *   mv_assert_slots() 在 debug 构建里检查三槽互异（release 下编译掉，
- *   零开销）。这条纪律比「小心别写错」可靠 —— 实测第一版就是因为
- *   prem 里三处同槽别名而算错，改成固定分配后一次通过。
- *
- * 【溢出防护 / Overflow discipline】
- *   设计说明 §3.1.3 硬要求：系数运算一律走 ac_safe_mul / ac_safe_add /
- *   ac_safe_sub（ac_exact.h:40-42），溢出即 g_solve_error 中止，
- *   **绝不返回错值**。本文件所有系数 + − × 都经 mv_safe_* 包装，
- *   任一失败置 g_solve_error = 5 并让当前运算返回失败。
- *
- * 【Zero-GC】
- *   无 malloc、无 VLA、无递归。子结式 PRS 的欧几里得主循环是 while
- *   迭代（次数严格下降，必然终止）；插入排序是双循环，无递归。
- *   所有项池落 Pro union 的 mv 视图（2688 B）。
- * ============================================================ */
+/* ApolloCalc · ac_pro_multi.c — 2 变量稀疏多项式 + 子结式 PRS 的 GCD(A1) + 内容提取式因式分解(A2)
+
+   方向 A 基础设施。设计说明 §3.1.2:2 变量,总次数 ≤ 6 的单项式数
+       N(d) = C(d+2, 2),N(6) = 28
+   稠密表示是 7×7 = 49 格,其中 21 格恒为 0(总次数 > 6),浪费 42.9%。
+   稀疏项表 28 项 × 16 B = 448 B/多项式,6 槽 = 2688 B。存储是硬约束,
+   故取稀疏。
+
+   每个多项式槽维护一个有序,无零项,无重复指数的项表:按 exps 降序排列
+   (x 指数优先,再 y 指数),即字典序降序,于是「首项」就是 terms[0],
+   与多项式除法的语义直接对应;系数为 0 的项不存储(count 只数非零项);
+   同一 exps 最多出现一次。三条由 mv_normalize() 统一保证,所有构造/运算
+   结束都调它,与上游「所有构造器都 funnel 到 ac_exact_normalize」同一纪律。
+
+   exps 低 4 bit = y 指数,高 4 bit = x 指数(各 0..6,4 bit 足够)。
+   一次整数比较即可完成排序与同类项判等。
+
+   Pro union 的 mv 视图只有 6 个槽,每个槽 28 项。所有多项式运算都必须
+   显式指定三个不同的槽(dst / a / b),否则 mv_add_sub 之类的就地写入会
+   破坏操作数。为杜绝别名 bug,本文件统一采用下面的固定分配,任何函数
+   都不越界:
+
+      槽 0  SLOT_A     被除数 / 左操作数
+      槽 1  SLOT_B     除数 / 右操作数
+      槽 2  SLOT_R     结果 / 余式
+      槽 3  SLOT_T1    临时 1
+      槽 4  SLOT_T2    临时 2
+      槽 5  SLOT_T3    临时 3
+
+   每个函数在头注里声明它占用哪些槽,要求哪些槽空闲。mv_assert_slots()
+   在 debug 构建里检查三槽互异(release 下编译掉,零开销)。这条纪律比
+   「小心别写错」可靠,实测第一版就是因为 prem 里三处同槽别名而算错,
+   改成固定分配后一次通过。
+
+   设计说明 §3.1.3 硬要求:系数运算一律走 ac_safe_mul / ac_safe_add /
+   ac_safe_sub(ac_exact.h:40-42),溢出即 g_solve_error 中止,绝不返回错值。
+   本文件所有系数 + − × 都经 mv_safe_* 包装,任一失败置 g_solve_error = 5
+   并让当前运算返回失败。
+
+   无 malloc,无 VLA,无递归。子结式 PRS 的欧几里得主循环是 while 迭代
+   (次数严格下降,必然终止);插入排序是双循环,无递归。所有项池落 Pro
+   union 的 mv 视图(2688 B)。 */
 
 #include <math.h>
 #include <stdio.h>
@@ -67,13 +52,13 @@
 
 #if AC_PRO_ACTIVE
 
-/* ==================== 错误码 ====================
+/* 错误码
  * 复用 g_solve_error 的 0..4（与上游同码），新增 5 = 多变量溢出。
  * 上游 0=OK 1=degree 2=precheck 3=singular 4=mem；5 在 Pro 侧独占，
  * 不会与上游冲突（上游从不写 5）。 */
 #define PRO_MV_ERR_OVERFLOW 5
 
-/* ==================== exps 编码 / 解码 ====================
+/* exps 编码 / 解码
  * 低 4 bit = y 指数，高 4 bit = x 指数。一次整数比较即可排序与判等。
  * 三个 inline 函数必须早于任何使用者定义（C99 无隐式声明）。 */
 static int32_t mv_exps(int xdeg, int ydeg) {
@@ -87,7 +72,7 @@ static int mv_ydeg(int32_t exps) {
     return (int)(exps & AC_PRO_MV_EXP_MASK);
 }
 
-/* ==================== 固定槽位分配 ==================== */
+/* 固定槽位分配 */
 #define SLOT_A   0
 #define SLOT_B   1
 #define SLOT_R   2
@@ -96,7 +81,7 @@ static int mv_ydeg(int32_t exps) {
 #define SLOT_T3  5
 
 /* 多项式句柄：槽号 + 项数。槽池在 union 里，句柄本身是栈上 8 B。
- * 用句柄而不是指针，是为了让「视图失效」在类型层面可见 —— 指针会诱使
+ * 用句柄而不是指针，是为了让「视图失效」在类型层面可见，指针会诱使
  * 调用方在别的 API 调用之后继续解引用。 */
 typedef struct {
     int slot;
@@ -116,7 +101,7 @@ static int mv_slots_distinct(int s0, int s1, int s2) {
     return (s0 != s1) && (s0 != s2) && (s1 != s2);
 }
 
-/* ==================== 安全算术包装 ====================
+/* 安全算术包装
  * 设计说明 §3.1.3 的硬要求。任一失败即置 g_solve_error = 5 并返回 0。 */
 static int mv_safe_mul(ac_int_t a, ac_int_t b, ac_int_t *out) {
     if (!ac_safe_mul(a, b, out)) { g_solve_error = PRO_MV_ERR_OVERFLOW; return 0; }
@@ -127,13 +112,13 @@ static int mv_safe_add(ac_int_t a, ac_int_t b, ac_int_t *out) {
     return 1;
 }
 
-/* ==================== 项表基础操作 ==================== */
+/* 项表基础操作 */
 
 static void mv_clear(mv_poly_t *p) { p->count = 0; }
 
 /* 追加一项（不排序、不去重）；返回 0 = 成功，-1 = 项池满。 */
 static int mv_push(mv_poly_t *p, ac_int_t c, int32_t exps) {
-    if (c == 0) { return 0; }                       /* 零项不入表（不变式 ②） */
+    if (c == 0) { return 0; }                       /* 零项不入表（count 只数非零项） */
     if (p->count >= AC_PRO_MV_TERMS) { return -1; }
     mv_terms(p->slot)[p->count].c = c;
     mv_terms(p->slot)[p->count].exps = exps;
@@ -145,7 +130,7 @@ static int mv_push(mv_poly_t *p, ac_int_t c, int32_t exps) {
 /* 归一化：排序（exps 降序）+ 合并同类项 + 删除零项。
  *
  * 排序用插入排序：28 项上限下最坏 378 次比较，比快排的递归开销更划算，
- * 且**无递归**（Zero-GC 红线 R4）。排序键是 exps 整数，降序 ——
+ * 且无递归（Zero-GC 红线 R4）。排序键是 exps 整数，降序，
  * 让 terms[0] 成为首项（字典序最大）。
  *
  * 合并：排序后相邻同 exps 的项用 ac_safe_add 累加；和为零则整组丢弃。
@@ -157,7 +142,7 @@ static int mv_normalize(mv_poly_t *p) {
     int j;
     int out;
 
-    /* ---- 插入排序（exps 降序）---- */
+    /* 插入排序（exps 降序） */
     for (i = 1; i < p->count; i++) {
         ac_pro_term_t key = t[i];
         j = i - 1;
@@ -168,7 +153,7 @@ static int mv_normalize(mv_poly_t *p) {
         t[j + 1] = key;
     }
 
-    /* ---- 合并相邻同类项 ---- */
+    /* 合并相邻同类项 */
     out = 0;
     i = 0;
     while (i < p->count) {
@@ -193,11 +178,11 @@ static int mv_normalize(mv_poly_t *p) {
 
 /* 深拷贝。dst 与 src 同槽时是 no-op（count 不变）。
  *
- * 【为什么先清 dst->count 再拷贝】
+ * 为什么先清 dst->count 再拷贝
  *   mv_poly_t 是栈上句柄，调用方可能只设了 slot 没设 count（例如
  *   `mv_poly_t r; r.slot = SLOT_R;`）。若拷贝前不归零，一旦 src 的
  *   拷贝在中途失败（项池满 / 溢出），dst->count 会停留在垃圾值，
- *   后续 mv_normalize 就会扫到未初始化的项 —— 这是实测踩过的坑
+ *   后续 mv_normalize 就会扫到未初始化的项,这是实测踩过的坑
  *   （表现为访问冲突或「结果看起来合理但错」）。
  *   归零的代价是一次赋值，收益是任何失败路径下 dst 都处于「零多项式」
  *   这个合法状态。 */
@@ -237,7 +222,7 @@ static int mv_total_degree(const mv_poly_t *p) {
     return best;
 }
 
-/* ==================== 多项式算术 ====================
+/* 多项式算术
  * 全部要求 dst / a / b 三槽互异（由调用方保证，mv_slots_distinct 检查）。 */
 
 /* dst = a + sign·b，sign ∈ {+1, -1} */
@@ -250,7 +235,7 @@ static int mv_add_sub(mv_poly_t *dst, const mv_poly_t *a, const mv_poly_t *b, in
 
     mv_clear(dst);
     /* 先把 a、b 的项快照到栈上（≤ 28 项 × 16 B = 448 B，栈上可接受），
-       避免 dst 写入时与 a/b 同槽的隐患 —— 虽然上面已校验互异，但
+       避免 dst 写入时与 a/b 同槽的隐患，虽然上面已校验互异，但
        快照让「追加到一半失败」的回滚更简单。 */
     na = a->count;
     nb = b->count;
@@ -270,7 +255,7 @@ static int mv_add_sub(mv_poly_t *dst, const mv_poly_t *a, const mv_poly_t *b, in
 
 /* dst = a × b
  *
- * 【用栈上累加缓冲，不边算边 push】
+ * 用栈上累加缓冲，不边算边 push
  *   与 mv_mul_y_coef 同一个理由：项池满时「先归一化再重试」会让项表
  *   处于「前半有序、后半无序」的混合态，后续 normalize 会错误合并。
  *   这里先在栈上按指数累加（最多 28 个不同指数），最后一次性写入。 */
@@ -374,15 +359,15 @@ static int mv_div_exact(mv_poly_t *dst, const mv_poly_t *a, const mv_poly_t *d) 
     return 1;
 }
 
-/* ==================== 真实多项式长除法 ====================
+/* 真实多项式长除法
  *
- * 【与 mv_div_exact 的区别 —— 两者用途完全不同，别混用】
+ * 与 mv_div_exact 的区别，两者用途完全不同，别混用
  *
- *   mv_div_exact（上一节）：**逐项整除**。要求 a 的每一项都能被 d 的
+ *   mv_div_exact（上一节）：逐项整除。要求 a 的每一项都能被 d 的
  *       首项整除，任一除不尽就返回 0。用于「整除性验证」和 A2 的
  *       因式重构校验。
  *
- *   mv_div_remainder（本节）：**真实长除法**。用字典序首项反复消去，
+ *   mv_div_remainder（本节）：真实长除法。用字典序首项反复消去，
  *       余式次数逐次下降，直到余式的首项除不动为止。用于欧几里得
  *       GCD 的余式序列。
  *
@@ -390,19 +375,19 @@ static int mv_div_exact(mv_poly_t *dst, const mv_poly_t *a, const mv_poly_t *d) 
  *       mv_div_exact     : 1 = 整除（商写入 dst）；0 = 不整除；-1 = 错误
  *       mv_div_remainder : 1 = 成功（商与余式都写入）；-1 = 错误
  *
- * 【为什么长除法需要「系数是整数」这个前提】
- *   本项目的多变量层是**整系数**的（ac_int_t）。长除法每一步要算
+ * 为什么长除法需要「系数是整数」这个前提
+ *   本项目的多变量层是整系数的（ac_int_t）。长除法每一步要算
  *   「余式首项系数 / 除式首项系数」，在整数上不一定整除。
- *   本实现采用**伪长除法**（pseudo-division）：不除，而是把余式乘以
- *   除式首项系数再减 —— 这样始终保持整数，代价是商多一个常数倍。
+ *   本实现采用伪长除法（pseudo-division）：不除，而是把余式乘以
+ *   除式首项系数再减，这样始终保持整数，代价是商多一个常数倍。
  *   对 GCD 而言常数倍无影响（最终会被 primitive 归一化掉）。
  *
  *   具体：R = a；商 q 用「精确整除的那些步」累积，除不尽时把整个
  *   余式乘以除式首项系数（记录到 *out_scale）后继续。
- *   本函数只保证「余式次数严格下降」，不保证商是真实商 ——
+ *   本函数只保证「余式次数严格下降」，不保证商是真实商，
  *   对 GCD 足够，对 A2 的整除性验证不够（那里用 mv_div_exact）。
  *
- * 【槽位】dst_q / dst_r 必须与 a、d 互异，且彼此互异。
+ * 槽位 dst_q / dst_r 必须与 a、d 互异，且彼此互异。
  *   内部用 SLOT_T1 作余式工作区。 */
 static int mv_div_remainder(mv_poly_t *dst_r, const mv_poly_t *a, const mv_poly_t *d,
                             int scratch_slot) {
@@ -554,7 +539,7 @@ static int mv_common_monomial(mv_poly_t *dst, const mv_poly_t *f, const mv_poly_
     return mv_normalize(dst) == 0 ? 1 : -1;
 }
 
-/* ==================== 内容与原始部分 ==================== */
+/* 内容与原始部分 */
 
 static ac_int_t mv_content(const mv_poly_t *p) {
     int i;
@@ -577,7 +562,7 @@ static int mv_primitive_part(mv_poly_t *dst, const mv_poly_t *p, ac_int_t conten
     return mv_normalize(dst);
 }
 
-/* ==================== 单变量塌缩（A2 接口） ====================
+/* 单变量塌缩（A2 接口）
  * 只处理「退化为单变量」的情形：多项式只含 x（或只含 y）。
  * 返回：1 = 是单变量且已写入 out[0..*out_deg]；0 = 不适用。 */
 static int mv_to_univariate(const mv_poly_t *p, int which_var,
@@ -610,10 +595,10 @@ static int mv_to_univariate(const mv_poly_t *p, int which_var,
     return 1;
 }
 
-/* ==================== A1 核心：主变量分层 + 多变量伪余式 ====================
+/* A1 核心：主变量分层 + 多变量伪余式
  *
- * 【为什么必须分层 / Why we must layer by a main variable】
- *   上一版把多项式当成**扁平项表**（每项一个 x^a·y^b），伪余式用
+ * 为什么必须分层
+ *   上一版把多项式当成扁平项表（每项一个 x^a·y^b），伪余式用
  *   「字典序首项」做除法判据。这在同维度时能跑，但一旦两个多项式的
  *   首项落在不同变量上就失效：
  *
@@ -621,11 +606,11 @@ static int mv_to_univariate(const mv_poly_t *p, int which_var,
  *       dx = 1 - 0 = 1, dy = 0 - 1 = -1   ->  dy < 0，无法消去
  *
  *   数学上这不算错（x+y 确实不能被 −2y 整除），但欧几里得主循环
- *   因此永远不收敛 —— 实测 gcd(x−y, x+y) 死循环。
+ *   因此永远不收敛,实测 gcd(x−y, x+y) 死循环。
  *
- *   正确做法是常规的：**选定一个主变量**，把多项式写成
+ *   正确做法是常规的：选定一个主变量，把多项式写成
  *       f(x, y) = a_n(y)·x^n + a_{n-1}(y)·x^{n-1} + ... + a_0(y)
- *   即「系数是另一个变量的多项式」的一元多项式。伪余式在**这个**
+ *   即「系数是另一个变量的多项式」的一元多项式。伪余式在这个
  *   一元多项式环上做，判据变成「x 次数严格下降」，与 y 无关。
  *   于是 prem(x+y, −2y) 先把两者看成 x 的多项式：
  *       f = 1·x + y      (deg_x = 1)
@@ -634,10 +619,10 @@ static int mv_to_univariate(const mv_poly_t *p, int which_var,
  *       R = lc(g)·f − lc(f)·x^(1−0)·g = (−2y)(x+y) − 1·x·(−2y) = −2y²
  *   deg_x(R) = 0 < 1，收敛。R 的内容 2y 提出后得 −y²，PRS 继续。
  *
- * 【分层表示 / Layered representation】
+ * 分层表示
  *   不引入新存储类型：仍然用扁平项表，但所有运算按「x 的次数分组」。
  *   一个「系数 a_i(y)」就是项表里所有 xdeg == i 的项构成的子表。
- *   好处是**不需要额外项池**，6 槽设计不变。
+ *   好处是不需要额外项池，6 槽设计不变。
  *
  *   关键操作：
  *     mv_xdeg_of(p)          最大 x 次数
@@ -645,13 +630,13 @@ static int mv_to_univariate(const mv_poly_t *p, int which_var,
  *     mv_shift_x(dst, p, k)  p · x^k（支持原地）
  *     mv_mul_y_coef(dst,p,q) p 的每个 x 系数乘以 q（q 是纯 y 多项式）
  *
- * 【主变量选择】
+ * 主变量选择
  *   取「f 与 g 都出现过」的最高变量（x 优先）。若只有 y 是共同变量，
- *   先交换 x/y 角色、按 x 处理，最后再交换回来 —— 这样算法只有一套。
+ *   先交换 x/y 角色、按 x 处理，最后再交换回来，这样算法只有一套。
  *   若两者无共同变量（f 只含 x、g 只含 y），主变量取 x：此时
  *   deg_x(g)=0，伪除法退化为「不断乘 lc(g)」，仍正确收敛。
  *
- * 【伪余式的定义与实现】
+ * 伪余式的定义与实现
  *       prem(f, g) = lc(g)^(deg_x f − deg_x g + 1) · f  mod  g
  *   迭代实现（避免显式求幂，逐次乘 lc(g)）：
  *       R = f
@@ -659,17 +644,16 @@ static int mv_to_univariate(const mv_poly_t *p, int which_var,
  *           R = lc(g)·R − lc(R)·x^Δ·g,   Δ = deg_x(R) − deg_x(g)
  *   每次迭代 R 的 x 次数严格下降 1，至多 deg_x(f) 次。
  *
- * 【溢出防护】
  *   所有系数 + − × 走 mv_safe_*（内部是上游 ac_safe_mul/add/sub）。
- *   溢出置 g_solve_error = 5 并立即失败 —— 绝不返回静默错值。
+ *   溢出置 g_solve_error = 5 并立即失败,绝不返回静默错值。
  *
- * 【内容归一化 / Primitive part】
+ * 内容归一化
  *   每轮伪余式后把 R 的系数除以它们的整数 GCD。这不等于 β 归一化
  *   （会留常数倍膨胀），但在 2 变量 ≤ 6 次的规模下实测系数位宽
  *   < 40 bit，int64 有 2× 余量。扩到 4 变量/8 次时再换标准子结式
  *   β 归一化；届时接口不变，只换内部实现。
  *
- * 【槽位契约 / Slot contract】
+ * 槽位契约
  *   6 槽全部用上，任何一处的别名都是「结果看起来合理但错」：
  *       SLOT_A  f      被除式（prem 期间只读）
  *       SLOT_B  g      除式（prem 期间只读）
@@ -677,11 +661,10 @@ static int mv_to_univariate(const mv_poly_t *p, int which_var,
  *       SLOT_T1 t1     临时 1
  *       SLOT_T2 t2     临时 2（同时存 lcg）
  *       SLOT_T3 t3     临时 3（同时存 lcr）
- *   每个函数在入口显式检查「六槽互异」，失败即返回 -1 ——
- *   这比依赖注释可靠：实测第一版就是靠它定位到三处别名。
- */
+ *   每个函数在入口显式检查「六槽互异」，失败即返回 -1，
+ *   这比依赖注释可靠：实测第一版就是靠它定位到三处别名。 */
 
-/* ---- 分层操作 ---- */
+/* 分层操作 */
 
 /* 多项式的 x 次数（最大 xdeg）；零多项式返回 -1 */
 static int mv_xdeg_of(const mv_poly_t *p) {
@@ -735,7 +718,7 @@ static int mv_shift_x(mv_poly_t *dst, const mv_poly_t *p, int shift) {
 
 /* dst = p × q，其中 q 是纯 y 的多项式（所有项 xdeg == 0）。
  *
- * 这是伪余式里最关键的一步：R = lc(g)·R 中 lc(g) 是 **y 的多项式**，
+ * 这是伪余式里最关键的一步：R = lc(g)·R 中 lc(g) 是 y 的多项式，
  * 不是整数标量，所以不能用 mv_scale（那只能乘整数）。
  *
  * 实现：p 的项 (c, (i,j)) 与 q 的项 (d, (0,m)) 相乘得 (c·d, (i, j+m))。
@@ -751,18 +734,18 @@ static int mv_mul_y_coef(mv_poly_t *dst, const mv_poly_t *p, const mv_poly_t *q)
     mv_clear(dst);
     if (p->count == 0 || q->count == 0) { return 0; }
 
-    /* 【为什么用栈上累加缓冲，而不是边算边 push】
+    /* 为什么用栈上累加缓冲，而不是边算边 push
      *   上一版在项池满时「先 mv_normalize 再重试 push」。这是错的：
-     *   mv_normalize 会排序并合并**已经写入的部分项**，而循环还在
-     *   继续 push 新的未排序项 —— 于是项表处于「前半段有序、后半段
+     *   mv_normalize 会排序并合并已经写入的部分项，而循环还在
+     *   继续 push 新的未排序项,于是项表处于「前半段有序、后半段
      *   无序」的混合状态，后续 normalize 把无序段也当有序段合并，
      *   产生错乱（实测出现 [6 x1 y0]、[-71 x0 y2] 这种垃圾项）。
      *
-     *   正确做法：先在**栈上**累加全部 p.count × q.count 个乘积
+     *   正确做法：先在栈上累加全部 p.count × q.count 个乘积
      *   （最多 28 × 28 = 784 项，但同类项会大量重合，实际去重后远小
-     *   于 28；这里用「插入式累加」——对每个乘积在缓冲区里线性查找
+     *   于 28；这里用「插入式累加」,对每个乘积在缓冲区里线性查找
      *   同指数项，找到就加、找不到就追加），最后一次性写进 dst。
-     *   缓冲区 784 × 16 B = 12.5 KB 太大，所以改用「边算边在**小**
+     *   缓冲区 784 × 16 B = 12.5 KB 太大，所以改用「边算边在小
      *   缓冲里合并」：缓冲容量取 AC_PRO_MV_TERMS（28），因为乘积的
      *   不同指数个数受总次数 ≤ 6 限制，最多 28 个。 */
     {
@@ -818,15 +801,15 @@ static int mv_mul_y_coef(mv_poly_t *dst, const mv_poly_t *p, const mv_poly_t *q)
 /* 选主变量：返回 0 = x，1 = y。
  *
  * 规则（按优先级）：
- *   ① 两者都含 x  -> x（字典序优先）
- *   ② 两者都含 y  -> y
- *   ③ f 含 x、g 只含 y（或反之）：此时没有共同变量，**取次数更高的
- *      那个变量**做主变量 —— 取错了会让 deg_x(g)==0，伪除法退化成
+ *   两者都含 x  -> x（字典序优先）
+ *   两者都含 y  -> y
+ *   f 含 x、g 只含 y（或反之）：此时没有共同变量，取次数更高的
+ *      那个变量做主变量，取错了会让 deg_x(g)==0，伪除法退化成
  *      「每轮乘一次 lc(g)」，系数迅速膨胀且 x 次数不降，最终撞上
  *      guard 报错（实测踩过：gcd(x²+y²−1, x²−y) 与 gcd(2x²−2y²,
  *      4x²−4xy) 都栽在这条路径）。
  *
- *      正确的判据是「主变量必须在**两个**多项式里都出现，否则就用
+ *      正确的判据是「主变量必须在两个多项式里都出现，否则就用
  *      另一个」。若两个都不共同（例如 f 只含 x、g 只含 y），则二者
  *      必然互素（不同变量的多项式在 Q[x,y] 里没有公因式），
  *      直接返回 1 由调用方处理。 */
@@ -863,7 +846,7 @@ static int mv_swap_xy(mv_poly_t *dst, const mv_poly_t *p) {
     return mv_normalize(dst);
 }
 
-/* ==================== 多变量伪余式 prem ====================
+/* 多变量伪余式 prem
  * 前提：f、g 已按主变量 x 分层（主变量若为 y，调用方先交换）。
  *
  * 每轮用到的中间量：R、lcg、lcr、A=lcg·R、B=lcr·x^Δ·g。
@@ -884,7 +867,7 @@ static int mv_prem_full(mv_poly_t *dst, const mv_poly_t *f, const mv_poly_t *g,
 
     if (g->count == 0) { return 0; }
 
-    /* 六槽互异自检 —— 别名的表现是「结果合理但错」，必须显式拦住 */
+    /* 六槽互异自检，别名的表现是「结果合理但错」，必须显式拦住 */
     if (dst->slot == f->slot || dst->slot == g->slot) { return -1; }
     if (t1->slot == f->slot || t1->slot == g->slot || t1->slot == dst->slot) { return -1; }
     if (t2->slot == f->slot || t2->slot == g->slot || t2->slot == dst->slot ||
@@ -901,20 +884,20 @@ static int mv_prem_full(mv_poly_t *dst, const mv_poly_t *f, const mv_poly_t *g,
     dg = mv_xdeg_of(g);
     if (dg < 0) { return 0; }
 
-    /* 【dg == 0 的特殊处理 —— 这里曾经两次判断错】
+    /* dg == 0 的特殊处理,这里曾经两次判断错
      *   dg == 0 表示 g 关于主变量 x 是常数（它可能仍是 y 的多项式，
      *   例如 gcd(x−y, x+y) 第 1 轮后的 g = −2y）。
      *
      *   此时伪除法「R = lcg·R − lcr·x^Δ·g」里的 lcg 不是常数而是
      *   y 的多项式，每轮乘上去会让次数不降反升（实测 −2y² 变
-     *   4y³−4y² …），永远撞 guard —— 这是第一版的行为。
+     *   4y³−4y² …），永远撞 guard，这是第一版的行为。
      *
-     *   第二版改成「返回零多项式」，等价于宣称 g | f —— 但 −2y 并
+     *   第二版改成「返回零多项式」，等价于宣称 g | f，但 −2y 并
      *   不整除 x+y，于是 gcd 被错报成 y（实测）。
      *
-     *   正确的语义：**余式就是被除式本身**。因为「对关于 x 的常数
+     *   正确的语义：余式就是被除式本身。因为「对关于 x 的常数
      *   除式取余」在 x 方向上没有意义，余式的 x 次数无法再降。
-     *   返回 f 让主循环继续以 (g, f) 为下一对 —— 这正好是欧几里得
+     *   返回 f 让主循环继续以 (g, f) 为下一对,这正好是欧几里得
      *   算法「除不动就交换」的自然行为，且保证每次迭代至少把
      *   (deg_x f, deg_x g) 这对非负整数按字典序严格减小，必然终止。 */
 
@@ -928,12 +911,12 @@ static int mv_prem_full(mv_poly_t *dst, const mv_poly_t *f, const mv_poly_t *g,
         /* lcr = coef_x(R, df) */
         if (mv_coef_at(&lcr, dst, df) != 0) { return -1; }
 
-        /* 【本轮三步的顺序是本函数最容易写错的地方，必须写清】
+        /* 本轮三步的顺序是本函数最容易写错的地方，必须写清
          *
          * 目标：  dst = lcg·dst − lcr·x^Δ·g
          *
-         * 陷阱：step 1 算 lcg·dst 时需要把 dst 的**旧值**暂存，而
-         * step 2 算 lcr·x^Δ·g 也需要一个槽 —— 若两者共用 t1，
+         * 陷阱：step 1 算 lcg·dst 时需要把 dst 的旧值暂存，而
+         * step 2 算 lcr·x^Δ·g 也需要一个槽，若两者共用 t1，
          * step 2 会把 step 1 的暂存覆盖掉。上一版正是这么错的：
          * 表现为 gcd(x²−y², x−y) 返回 x−y（把除式当成了余式）。
          *
@@ -945,31 +928,31 @@ static int mv_prem_full(mv_poly_t *dst, const mv_poly_t *f, const mv_poly_t *g,
          *   t3 已被 lcr 占用 → B 需要第三个槽：把 t1 乘到 t1 不行，
          *        所以先把 t1 拷到 dst 之外的地方 …
          *
-         * 更干净的做法：**先把 B 算完存进 t1，再算 A 存进 dst**，
+         * 更干净的做法：先把 B 算完存进 t1，再算 A 存进 dst，
          * 最后 dst −= t1。这样只需要 t1 一个额外槽：
          *   t1  = x^Δ·g             （原地平移，支持同槽）
          *   B   = t1 × lcr          （同槽不允许 → 借 t2 的 lcg 槽）
          *   但 lcg 还要用 …
          *
-         * 最终方案：把 lcg、lcr 都算出来之后，它们**只各用一次**，
+         * 最终方案：把 lcg、lcr 都算出来之后，它们只各用一次，
          * 因此可以按「先 A 后 B」严格串行，每次只借一个已释放的槽：
          *   step A:  t1 = dst;  dst = t1 × lcg;      // lcg 用完，t2 释放
          *   step B:  t2 = x^Δ·g;  t1 = t2 × lcr;     // t2 已释放，可复用
          *   step C:  dst = dst − t1;                 // 三槽互异
-         * 这条路径只用 t1、t2 两个临时槽，t3 完全不碰 —— 更少的槽
+         * 这条路径只用 t1、t2 两个临时槽，t3 完全不碰，更少的槽
          * 意味着更少的别名机会。 */
-        /* ---- step A: dst = lcg · dst ---- */
+        /* step A: dst = lcg · dst */
         if (mv_copy(t1, dst) != 0) { return -1; }
         if (mv_mul_y_coef(dst, t1, &lcg) != 0) { return -1; }
 
-        /* ---- step B: t1 = lcr · x^Δ · g ----
-         * t2 此刻存放 lcg，但 lcg 已在 step A 用完 —— 可以安全复用。
+        /* step B: t1 = lcr · x^Δ · g
+         * t2 此刻存放 lcg，但 lcg 已在 step A 用完，可以安全复用。
          * 注意：不能直接 mv_mul_y_coef(t1, t1, &lcr)（同槽），
          * 所以走「t2 = x^Δ·g；t1 = t2 × lcr」。 */
         if (mv_shift_x(t2, g, df - dg) != 0) { return -1; }
         if (mv_mul_y_coef(t1, t2, &lcr) != 0) { return -1; }
 
-        /* ---- step C: dst = dst − t1 ---- */
+        /* step C: dst = dst − t1 */
         /* dst = dst - t1.
          * mv_add_sub rejects aliasing between dst and its operands, so the
          * subtraction always goes through t2 as a scratch copy. Writing
@@ -984,32 +967,32 @@ static int mv_prem_full(mv_poly_t *dst, const mv_poly_t *f, const mv_poly_t *g,
     return 1;
 }
 
-/* ==================== 中间步骤的内容归一化 ====================
+/* 中间步骤的内容归一化
  *
- * 【三次试错的完整记录】
+ * 三次试错的完整记录
  *
  *   试错 1（只提整数 GCD）：gcd(x²−y², x²+2xy+y²) 得到 y⁴。
  *
  *   试错 2（整数 GCD + 公共单项式，中间与最终都提）：
- *       gcd(xy+x, xy+x) 返回 y+1 —— 把答案本身的 x 也提走了。
+ *       gcd(xy+x, xy+x) 返回 y+1,把答案本身的 x 也提走了。
  *       原因：最终归一化也调了同一个函数。
  *
  *   试错 3（中间提单项式、最终只提整数）：仍错。
  *       跟踪显示 gcd(x²−y², x²+2xy+y²) 第 1 轮余式 −2xy−2y²
- *       被「提取 x 因子」变成 −2y−2y² —— **x 次数从 1 掉到 0**，
+ *       被「提取 x 因子」变成 −2y−2y²，x 次数从 1 掉到 0，
  *       而伪除法的收敛条件是「x 次数严格小于除式」，这一提等于
  *       跳过了该有的消元步骤，后续 PRS 全部错位。
  *
- *   结论：**中间步骤也绝不能提取单项式**。
+ *   结论：中间步骤也绝不能提取单项式。
  *       伪余式 prem 的定义要求余式的 x 次数 = deg_x(f) − 1（每次
  *       只降一阶），提取 x 因子会破坏这条不变量。整数 content 则
- *       安全 —— 它是常数倍，不影响任何次数。
+ *       安全，它是常数倍，不影响任何次数。
  *
  *   那系数膨胀怎么办？实测（2 变量 ≤ 6 次、项数 ≤ 28）整数 content
  *   归一化后，系数位宽始终 < 45 bit，int64 有 1.4× 余量，足够。
  *   若将来扩到 8 次或 4 变量，再引入标准子结式 β 归一化。
  *
- *   本函数因此**只做两件事**：整数 content 归一 + 首项符号规范。 */
+ *   本函数因此只做两件事：整数 content 归一 + 首项符号规范。 */
 static int mv_make_primitive(mv_poly_t *p, mv_poly_t *tmp) {
     ac_int_t c;
     if (p->count == 0) { return 1; }
@@ -1027,19 +1010,19 @@ static int mv_make_primitive(mv_poly_t *p, mv_poly_t *tmp) {
     return 1;
 }
 
-/* ==================== A1 的 GCD 主循环 ====================
+/* A1 的 GCD 主循环
  *
- * 【本实现是 Python 基准 tools/ref_prs.py 的逐条移植】
+ * 本实现是 Python 基准 tools/ref_prs.py 的逐条移植
  *
  *   那个脚本用精确有理数把算法钉死，12 个用例全部通过之后才移植到
  *   这里。之前 6 轮 C 侧盲试失败，根本原因是没有可信基准：每次修
  *   一处、坏一处，无法判断是算法错还是实现错。
  *
- * 【算法（与 ref_prs.py 完全一致）】
+ * 算法（与 ref_prs.py 完全一致）
  *
  *   gcd_2var(f, g):
  *       gcd_pass(x 轴)
- *       若退化 -> 用**当前对** (cf, cg) 换到 y 轴再跑
+ *       若退化 -> 用当前对 (cf, cg) 换到 y 轴再跑
  *       若两轴都退化 -> 取公共单项式因子
  *
  *   gcd_pass(f, g):
@@ -1052,7 +1035,7 @@ static int mv_make_primitive(mv_poly_t *p, mv_poly_t *tmp) {
  *           f, g = g, R
  *       return f
  *
- * 【四条踩过的坑，写在这里防止回退】
+ * 四条踩过的坑，写在这里防止回退
  *
  *   坑 1：把 prem(f,g)==0 当成「g | f」。
  *       多变量 prem 在 K(y)[x] 上工作，返回零只说明在该域里整除，
@@ -1060,32 +1043,31 @@ static int mv_make_primitive(mv_poly_t *p, mv_poly_t *tmp) {
  *       但 −2xy−2y² 不整除 x²+2xy+y²（商 = −(x+y)/(2y)）。
  *       => 必须用真实长除法验证。
  *
- *   坑 2：退化时用**原始输入**重跑另一轴。
+ *   坑 2：退化时用原始输入重跑另一轴。
  *       那会丢掉第一轴已约化掉的因子。
- *       => 必须用**当前对** (cf, cg)。
+ *       => 必须用当前对 (cf, cg)。
  *
  *   坑 3：公共单项式用「最大次数」算。
  *       f = x²y + x 的 min y 指数是 0（+x 项无 y），用 deg_y 会误判
  *       出 y 因子。
- *       => 用**所有项指数的最小值**（mv_common_monomial 已按此实现）。
+ *       => 用所有项指数的最小值（mv_common_monomial 已按此实现）。
  *
  *   坑 4：中间归一化提单项式因子。
  *       那会改变 deg_x，破坏 prem「每轮降 1 阶」的不变量。
  *       => 中间只提整数 content（mv_make_primitive 已如此）。
  *
- * 【槽位】f=A、g=B、R=R、临时 T1/T2/T3 —— 6 槽全用。
- */
+ * 槽位 f=A、g=B、R=R、临时 T1/T2/T3,6 槽全用。 */
 
 static int mv_gcd_pass(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb,
                        int *out_degraded, mv_poly_t *out_cf, mv_poly_t *out_cg);
 static int mv_strip_spurious(mv_poly_t *dst, const mv_poly_t *cand,
                              const mv_poly_t *f, const mv_poly_t *g);
 
-/* ==================== Euclid 兜底 ====================
+/* Euclid 兜底
  * prem 返回零但不真实整除时调用。此时 (f, g) 已被 PRS 约化到很小的
  * 规模，普通欧几里得几轮就收敛。
  *
- * 结果必须对**原始** f0、g0 校验（循环会改写工作副本），因为一个只
+ * 结果必须对原始 f0、g0 校验（循环会改写工作副本），因为一个只
  * 整除当前 f 的因子未必整除 f0。
  *
  * 槽位：工作副本用 T1/T2/T3，dst 接收最终结果。
@@ -1145,9 +1127,9 @@ static int mv_euclid_gcd(mv_poly_t *dst, const mv_poly_t *f, const mv_poly_t *g)
     return mv_strip_spurious(dst, &x, f, g);
 }
 
-/* ==================== 剥掉不整除输入的因子 ====================
+/* 剥掉不整除输入的因子
  * 候选 cand 可能带多余因子（典型是某个操作数没有的 y 的幂）。
- * 在 cand 的所有「除以单项式」的商里，找**项数最多**且同时整除
+ * 在 cand 的所有「除以单项式」的商里，找项数最多且同时整除
  * f 与 g 的那个。
  *
  * 实测：cand = y(x+y) 时，cand/y = x+y 整除两个输入，而 cand 本身
@@ -1217,8 +1199,7 @@ static int mv_strip_spurious(mv_poly_t *dst, const mv_poly_t *cand,
  * Returns 1 = success (result in *dst, *out_degraded = 0)
  *         0 = degraded (*out_cf / *out_cg hold the CURRENT pair)
  *        -1 = error
- * Slots: f=A, g=B, r=R, and T1/T2/T3 for prem and primitive.
- */
+ * Slots: f=A, g=B, r=R, and T1/T2/T3 for prem and primitive. */
 static int mv_gcd_pass(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb,
                        int *out_degraded, mv_poly_t *out_cf, mv_poly_t *out_cg) {
     mv_poly_t f;
@@ -1261,7 +1242,7 @@ static int mv_gcd_pass(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb,
         if (mv_prem_full(&r, &f, &g, &t1, &t2, &t3) != 1) { return -1; }
 
         if (mv_is_zero(&r)) {
-            /* prem 返回零 —— 必须做真实整除验证 */
+            /* prem 返回零,必须做真实整除验证 */
             if (mv_divides(&g, &f)) {
                 return mv_copy(dst, &g) == 0 ? 1 : -1;
             }
@@ -1294,10 +1275,9 @@ static int mv_gcd_pass(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb,
     return mv_copy(dst, &f) == 0 ? 1 : -1;
 }
 
-/* ==================== A1 final validation (stack-based) ====================
+/* A1 final validation (stack-based)
  *
  * WHY A SEPARATE STACK IMPLEMENTATION
- * -----------------------------------
  * The PRS / degradation / Euclid pipelines each own the six union slots at
  * different moments. Bolting a validation pass onto them caused a long chain
  * of slot-aliasing bugs: every fix exposed the next collision, because
@@ -1310,8 +1290,7 @@ static int mv_gcd_pass(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb,
  * with any union slot.
  *
  * Invariant: the two original inputs are snapshotted once at the top of
- * mv_gcd_prs, before any slot is reused.
- */
+ * mv_gcd_prs, before any slot is reused. */
 
 typedef struct {
     ac_pro_term_t t[AC_PRO_MV_TERMS];
@@ -1542,8 +1521,7 @@ static int sp_euclid(mv_sp_t *dst, const mv_sp_t *f, const mv_sp_t *g);
  * divisibility in Z[x,y] (measured: f = x^2+2xy+y^2, g = y(x+y) gives
  * remainder 0 over K(y)[x] but g does not divide f). So the result is always
  * validated against the ORIGINAL f and g, and reduced by searching monomial
- * quotients until a real common divisor is found.
- */
+ * quotients until a real common divisor is found. */
 static int sp_euclid(mv_sp_t *dst, const mv_sp_t *f, const mv_sp_t *g) {
     mv_sp_t x;
     mv_sp_t y;
@@ -1689,9 +1667,9 @@ static int sp_strip_spurious(mv_sp_t *dst, const mv_sp_t *cand,
     return sp_euclid(dst, f, g);
 }
 
-/* 【边界保护】sp_* 层的项表容量就是 AC_PRO_MV_TERMS，任何 sp_from_* /
+/* 边界保护 sp_* 层的项表容量就是 AC_PRO_MV_TERMS，任何 sp_from_* /
  * sp_push 都在这个上限上截断或失败。这里再守一道门，让畸形候选（上游漏
- * 出来的坏结果、快照被写坏）**安全失败**，而不是在 sp_* 里被静默截断后
+ * 出来的坏结果、快照被写坏）安全失败，而不是在 sp_* 里被静默截断后
  * 拿去比较。
  *
  * 上限必须取 AC_PRO_MV_TERMS（28），不能收紧到 8：2 变量、总次数 <= 6 的
@@ -1699,7 +1677,7 @@ static int sp_strip_spurious(mv_sp_t *dst, const mv_sp_t *cand,
  * gcd(x^4+x^3y+x^2y^2+xy^3+y^4+x^3+x^2y+xy^2+y^3, x^2+xy+y^2) 这类用例
  * 误判为失败（实测 rc=-1）。安全性由「不超 mv_sp_t 物理容量」保证。
  *
- * 同理不缩小 mv_sp_t 本身 —— 它必须与 mv_snap_t 同形（28 项），否则
+ * 同理不缩小 mv_sp_t 本身，它必须与 mv_snap_t 同形（28 项），否则
  * mv_gcd_prs 快照下来的原始输入装不下，校验就失去参照物。 */
 #define MV_VALIDATE_MAX_TERMS AC_PRO_MV_TERMS
 
@@ -1718,12 +1696,12 @@ static int mv_validate_gcd(mv_poly_t *dst, const mv_snap_t *sf, const mv_snap_t 
 
     if (mv_is_zero(dst)) { return 1; }
 
-    /* ---- 边界保护：项数超限直接安全失败，绝不越界写 ---- */
+    /* 边界保护：项数超限直接安全失败，绝不越界写 */
     if (dst->count < 0 || dst->count > MV_VALIDATE_MAX_TERMS) { return -1; }
     if (sf->n < 0 || sf->n > MV_VALIDATE_MAX_TERMS) { return -1; }
     if (sg->n < 0 || sg->n > MV_VALIDATE_MAX_TERMS) { return -1; }
 
-    /* ---- 全量清零：杜绝未初始化栈值参与比较 ---- */
+    /* 全量清零：杜绝未初始化栈值参与比较 */
     memset(&cand, 0, sizeof(mv_sp_t));
     memset(&f, 0, sizeof(mv_sp_t));
     memset(&g, 0, sizeof(mv_sp_t));
@@ -1784,13 +1762,13 @@ static int mv_gcd_prs(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb) 
     if (mv_copy(&g, fb) != 0) { return -1; }
     if (mv_normalize(&f) != 0 || mv_normalize(&g) != 0) { return -1; }
 
-    /* 【零操作数必须在 pick_main_var 之前判】
+    /* 零操作数必须在 pick_main_var 之前判
      *   gcd(f, 0) = f，gcd(0, g) = g，gcd(0, 0) = 0，都是定义上的恒等式。
-     *   而空多项式**没有任何变量**，mv_pick_main_var 会把它看成「两者没有
+     *   而空多项式没有任何变量，mv_pick_main_var 会把它看成「两者没有
      *   公共变量」，从而短路返回 2（互素 -> 1）。
      *   实测（修复前）：A1-5 gcd(x^2-y^2, "0") 返回 "1"。
      *   根因其实在解析层（"0" 曾被解析成常数 10），但解析修好后 "0" 会
-     *   正确地变成空多项式，于是这条顺序缺陷就暴露出来了 —— 两处都得修。 */
+     *   正确地变成空多项式，于是这条顺序缺陷就暴露出来了，两处都得修。 */
     if (mv_is_zero(&f) || mv_is_zero(&g)) {
         if (mv_is_zero(&f) && mv_is_zero(&g)) {
             mv_clear(dst);
@@ -1828,7 +1806,7 @@ static int mv_gcd_prs(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb) 
         }
 
         if (degraded) {
-            /* 换到 y 轴，用**当前对** (cf, cg) 继续 */
+            /* 换到 y 轴，用当前对 (cf, cg) 继续 */
             mv_poly_t fs;
             mv_poly_t gs;
             mv_poly_t res2;
@@ -1878,7 +1856,7 @@ static int mv_gcd_prs(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb) 
      * really divides both, working entirely on stack copies. */
     if (mv_validate_gcd(dst, &snap_f, &snap_g) != 1) { return -1; }
 
-    /* 最终归一化：整数 content + 首项符号（**不**提单项式） */
+    /* 最终归一化：整数 content + 首项符号（不提单项式） */
     if (!mv_is_zero(dst)) {
         ac_int_t c = mv_content(dst);
         if (c > 1) {
@@ -1893,22 +1871,22 @@ static int mv_gcd_prs(mv_poly_t *dst, const mv_poly_t *fa, const mv_poly_t *fb) 
     return 1;
 }
 
-/* ==================== 对外：解析多项式字符串 ====================
+/* 对外：解析多项式字符串
  * 语法（刻意窄）：项用 + / - 分隔，每项形如
  *      [系数][*] x[^n][*] y[^m]      或     [系数][*] y[^m][*] x[^n]
  * 系数缺省为 1；变量可缺省（纯常数项）；指数缺省为 1。
- * 不支持括号、除法、负指数 —— 多变量层只做「多项式」，不做表达式。
+ * 不支持括号、除法、负指数，多变量层只做「多项式」，不做表达式。
  *
- * 为什么不用上游解析器：上游 ac_parse_expression 产出的是**求值用**的
+ * 为什么不用上游解析器：上游 ac_parse_expression 产出的是求值用的
  * token 流（T_NUM/T_VAR/T_OP），且 T_VAR 的 payload 在 v1.2 里被 Pro
  * 复用成变量 ID 但上游仍恒为 0；把 token 流反解成多项式需要额外一层
  * 求值-采样，精度与次数都不可控。多变量层直接解析字符串，是设计说明
  * §3.1.1 指出的「合规做法」的同一条思路（Pro 自己扫描原始字符串）。 */
 static int mv_parse_term(const char **ps, ac_int_t *coef, int *xd, int *yd) {
     const char *s = *ps;
-    /* 【必须从 0 起累加，不能从 1 起】
+    /* 必须从 0 起累加，不能从 1 起
      *   系数循环是 c = c*10 + digit。若初值为 1，"1" 会算成 11、"2" 算成
-     *   12、"8" 算成 18、"12" 算成 112、"0" 算成 10 —— 每一个显式写出的
+     *   12、"8" 算成 18、"12" 算成 112、"0" 算成 10,每一个显式写出的
      *   整数系数都被加上了一个隐含的前导 1。
      *   隐式系数 1 的默认值由下面 `if (!saw_coef) { c = 1; }` 单独负责，
      *   两者不能混为一谈。
@@ -1928,10 +1906,10 @@ static int mv_parse_term(const char **ps, ac_int_t *coef, int *xd, int *yd) {
     if (*s == '-') { neg = 1; s++; }
     else if (*s == '+') { s++; }
 
-    /* 【符号后必须再跳一次空白】
+    /* 符号后必须再跳一次空白
      *   实测 bug：输入 "- 1"（减号后有空格）时，若不跳过，下面的
      *   系数循环看到的是 ' ' 而不是数字，saw_coef 保持 0、c 退化成 1，
-     *   变量循环也立刻退出 —— 于是这一项被当成「-1·x^0·y^0」但指针
+     *   变量循环也立刻退出,于是这一项被当成「-1·x^0·y^0」但指针
      *   停在了 '1' 上，外层再把 '1' 当成非法分隔符，整个解析失败。
      *   表现：所有「带负常数项」的多项式都解析不了
      *   （x*y - 1、x^2 + y^2 - 1、2*x^2 - 2*y^2 ...）。 */
@@ -1963,13 +1941,13 @@ static int mv_parse_term(const char **ps, ac_int_t *coef, int *xd, int *yd) {
             exp = 0;
             while (*s >= '0' && *s <= '9') { exp = exp * 10 + (*s - '0'); s++; }
         }
-        /* 【这里只守 exps 的编码上限，不守业务次数上限】
+        /* 这里只守 exps 的编码上限，不守业务次数上限
          *   exps 用两个 4-bit 字段存 x/y 指数，单变量指数最大 15；
          *   超过 15 会溢出到相邻字段，必须在这里当成语法错误拒掉。
-         *   而「总次数 ≤ 6」是**语义**约束，由 ac_pro_multi_var_gcd 的
+         *   而「总次数 ≤ 6」是语义约束，由 ac_pro_multi_var_gcd 的
          *   preCheck（mv_total_degree > AC_PRO_MV_MAX_DEG -> g_solve_error = 1）
          *   与 A3 的 df+dg 阶数门禁负责。
-         *   修复前这里误用 AC_PRO_MV_MAX_DEG，导致 x^7 在**词法层**就被判成
+         *   修复前这里误用 AC_PRO_MV_MAX_DEG，导致 x^7 在词法层就被判成
          *   语法错误（rc = 0 -> g_solve_error = 2），语义门禁永远跑不到，
          *   A1-8 / A3-4 要的 g_solve_error == 1 自然拿不到。 */
         if (exp > AC_PRO_MV_EXP_MASK) { return -1; }
@@ -1981,13 +1959,13 @@ static int mv_parse_term(const char **ps, ac_int_t *coef, int *xd, int *yd) {
         while (*s == ' ' || *s == '\t') { s++; }
     }
 
-    /* 【单次项的总次数不在这里拦】
-     *   nx + ny 的上限是**语义**问题（设计说明 §6.4：总次数 ≤ 6），交给
+    /* 单次项的总次数不在这里拦
+     *   nx + ny 的上限是语义问题（设计说明 §6.4：总次数 ≤ 6），交给
      *   ac_pro_multi_var_gcd 的 preCheck（g_solve_error = 1）和 A3 的
      *   df + dg ≤ 12 门禁去判。词法层只保证 x/y 各自能被 exps 的 4-bit
      *   字段容纳（上面已逐个检查过），多出来的次数让语义层报「次数过高」。
      *   修复前这里直接 return -1，把 x^7+y / y^7+x 这类输入打成语法错误，
-     *   语义门禁成了不可达代码 —— A1-8、A3-4 的错误码错就错在这。 */
+     *   语义门禁成了不可达代码,A1-8、A3-4 的错误码错就错在这。 */
     *coef = neg ? -c : c;
     *xd = nx;
     *yd = ny;
@@ -2015,14 +1993,14 @@ static int mv_parse(mv_poly_t *p, const char *src) {
     return 1;
 }
 
-/* ==================== 对外：格式化输出 ====================
+/* 对外：格式化输出
  * 把多项式槽写成规范字符串，例如 "x^2*y + 2*x - 3"。
  * 规则：
- *   ① 项按 exps 降序（与项表一致）；
- *   ② 系数 1 / -1 且带变量时省略系数（写 "x" 而非 "1*x"）；
- *   ③ 指数 1 省略（写 "x" 而非 "x^1"）；指数 0 省略变量；
- *   ④ 项之间用 " + " / " - " 连接（负系数转成减号 + 绝对值）；
- *   ⑤ 零多项式写 "0"。
+ *   项按 exps 降序（与项表一致）；
+ *   系数 1 / -1 且带变量时省略系数（写 "x" 而非 "1*x"）；
+ *   指数 1 省略（写 "x" 而非 "x^1"）；指数 0 省略变量；
+ *   项之间用 " + " / " - " 连接（负系数转成减号 + 绝对值）；
+ *   零多项式写 "0"。
  * 不产生 malloc：直接用 snprintf 追加到调用方缓冲，并做长度检查。 */
 static int mv_format(const mv_poly_t *p, char *out, int out_len) {
     int i;
@@ -2096,9 +2074,9 @@ static int mv_format(const mv_poly_t *p, char *out, int out_len) {
     return 0;
 }
 
-/* ==================== 对外：把多项式解析进指定槽 ====================
+/* 对外：把多项式解析进指定槽
  * A3（ac_pro_resultant.c）需要「解析到槽 0/1 并读回项表」的能力，
- * 但 mv_poly_t 是本文件的私有类型。所以这里暴露一个**只认槽号**的
+ * 但 mv_poly_t 是本文件的私有类型。所以这里暴露一个只认槽号的
  * 窄接口：
  *
  *     int ac_pro_multi_parse_into(const char *src, int slot);
@@ -2109,7 +2087,7 @@ static int mv_format(const mv_poly_t *p, char *out, int out_len) {
  * 一旦两边对「谁占哪槽」的理解不一致，就是最难查的那类 bug。
  * 只暴露槽号 + 项表指针，A3 只知道「我要 0 号和 1 号槽」，简单。
  *
- * 注意：这个接口**不**做 g_solve_error 清零 —— 由调用方负责，
+ * 注意：这个接口不做 g_solve_error 清零，由调用方负责，
  * 因为它可能在一个更大的事务里（A3 的解析 + 构造）。 */
 int ac_pro_multi_parse_into(const char *src, int slot) {
     mv_poly_t p;
@@ -2136,7 +2114,7 @@ int ac_pro_multi_slot_degree(int slot) {
     return mv_total_degree(&p);
 }
 
-/* ==================== 对外：A1 多变量 GCD ====================
+/* 对外：A1 多变量 GCD
  * 契约（写进 ac_pro.h）：
  *   输入两个字符串形式的多项式（2 变量、总次数 ≤ 6、项数 ≤ 28）。
  *   输出：d = gcd(f, g)，归一化为「原始部分 + 首项系数为正」。
@@ -2147,7 +2125,7 @@ int ac_pro_multi_slot_degree(int slot) {
  * 结果归一化：设计说明没规定 GCD 的常数倍，本实现取
  *     primitive part（系数 GCD 归一）+ 首项系数为正
  * 这样 gcd(2x+2, 4x+4) 返回 x+1，与「首一」只差一个常数因子，
- * 但保持整系数 —— 整系数是本项目的硬约束。 */
+ * 但保持整系数,整系数是本项目的硬约束。 */
 int ac_pro_multi_var_gcd(const char *fsrc, const char *gsrc, char *out, int out_len) {
     mv_poly_t g;
     /* 槽位规划（6 槽刚好够 GCD + 归一化）：
@@ -2156,7 +2134,7 @@ int ac_pro_multi_var_gcd(const char *fsrc, const char *gsrc, char *out, int out_
      *   （SLOT_T1/SLOT_T2）+ content 归一化需要 1 个（SLOT_T3）。
      *
      *   矛盾点：gcd_core 的 dst 不能与 f/g 同槽，否则 mv_copy 会互踩；
-     *   而 6 槽里 f/g 占 2，dst 占 1，prem 占 2，归一化占 1 —— 正好 6。
+     *   而 6 槽里 f/g 占 2，dst 占 1，prem 占 2，归一化占 1，正好 6。
      *   所以 dst 必须用 SLOT_R，且 SLOT_T3 留给归一化。
      *   下面的 gcd_core 调用把 f/g 直接当 x/y 用（原地演进），
      *   dst = SLOT_R，三槽 A/B/R 互异，prem 用 T1/T2，归一化用 T3。 */
@@ -2189,7 +2167,7 @@ int ac_pro_multi_var_gcd(const char *fsrc, const char *gsrc, char *out, int out_
     if (mv_gcd_prs(&d, &f, &g) != 1) { return -1; }
 
     /* 归一化：原始部分 + 首项系数为正。
-       此时 f/g 的槽已不被需要，可以安全地把 SLOT_A 当临时槽用 ——
+       此时 f/g 的槽已不被需要，可以安全地把 SLOT_A 当临时槽用，
        这样连 SLOT_T3 都不用占，留给后续扩展。 */
     if (!mv_is_zero(&d)) {
         ac_int_t c = mv_content(&d);
@@ -2212,7 +2190,7 @@ int ac_pro_multi_var_gcd(const char *fsrc, const char *gsrc, char *out, int out_
     return 1;
 }
 
-/* ==================== A2 的整除性自证 ====================
+/* A2 的整除性自证
  * 设计说明 §9.4 列的「Pro 多变量自对拍」：f mod g == 0。
  *
  * 做法：把「内容 c × Π(den_i·x − num_i) × 余式」重构回一个多项式，
@@ -2220,7 +2198,7 @@ int ac_pro_multi_var_gcd(const char *fsrc, const char *gsrc, char *out, int out_
  *
  * 为什么值得多花一次 O(28) 除法：A2 的失败模式是「因子写错一个符号或
  * 一个常数」，这种错在格式化输出里看不出来（字符串是自洽的），但对拍
- * 立刻暴露 —— 除不尽就是错。这与设计说明「整除性验证（f mod g == 0）」
+ * 立刻暴露,除不尽就是错。这与设计说明「整除性验证（f mod g == 0）」
  * 的验收口径完全一致。
  *
  * 占槽：SLOT_A 保留原始 f（调用方传入），本函数用 SLOT_B/T1/T2/T3。
@@ -2277,25 +2255,25 @@ static int mv_selfcheck_factor(const mv_poly_t *f, ac_int_t c, int k, int rd) {
     return 1;
 }
 
-/* ==================== 对外：A2 多变量因式分解 ====================
- * 设计说明 §3.1.4：**只做「内容提取 + 单变量因子」**。
+/* 对外：A2 多变量因式分解
+ * 设计说明 §3.1.4：只做「内容提取 + 单变量因子」。
  *
  * 流程：
- *   ① 内容提取：c = gcd(所有系数)，f = c · primitive(f)
- *   ② 若 primitive(f) 退化为单变量（只含 x 或只含 y）且次数 ≤ 4：
- *      把系数搬到 g_coeffs（**独立全局，不在任何 union 里**），
+ *   内容提取：c = gcd(所有系数)，f = c · primitive(f)
+ *   若 primitive(f) 退化为单变量（只含 x 或只含 y）且次数 ≤ 4：
+ *      把系数搬到 g_coeffs（独立全局，不在任何 union 里），
  *      再调上游 ac_rat_root_descent 做有理根降次。
- *   ③ 否则报告「非单变量，超出 v1.3 边界」。
+ *   否则报告「非单变量，超出 v1.3 边界」。
  *
- * 【调用纪律（设计说明 §3.1.4 的警告）】
- *   mv 视图（Pro union）与 ratroot 视图（上游 ac_scratch）在**物理上**
+ * 调用纪律（设计说明 §3.1.4 的警告）
+ *   mv 视图（Pro union）与 ratroot 视图（上游 ac_scratch）在物理上
  *   是两块不同的内存，严格说不冲突。但「一次只持有 一个视图」的纪律
- *   仍然要求：调用 ratroot 之前，把降维系数**落盘到 g_coeffs**，
+ *   仍然要求：调用 ratroot 之前，把降维系数落盘到 g_coeffs，
  *   之后不再碰 mv 视图。本实现的顺序是：
  *       mv 视图里解析/归一化 -> 提取到 g_coeffs -> 调 ratroot -> 读结果
  *   第 2 步之后 mv 视图的数据就当它已经失效，不再读写。
  *   （g_coeffs 是上游 extern 会话态，判据 3 明确禁止入 union，正好
- *   用它做中转 —— 这不是巧合，是设计说明 §3.1.4 点名的那条路径。）
+ *   用它做中转，这不是巧合，是设计说明 §3.1.4 点名的那条路径。）
  *
  * 返回：1 = 成功；0 = 超出边界（非单变量 / 次数 > 4）；-1 = 错误。
  * 结果写 *content（整数内容）与 out（因式分解的字符串形式）。 */
@@ -2318,14 +2296,14 @@ int ac_pro_multi_var_factor(const char *src, char *out, int out_len,
     if (mv_parse(&f, src) != 1) { g_solve_error = 2; return -1; }
     if (mv_total_degree(&f) > AC_PRO_MV_MAX_DEG) { g_solve_error = 1; return -1; }
 
-    /* ① 内容提取 */
+    /* 内容提取 */
     c = mv_content(&f);
     if (content != (ac_int_t *)0) { *content = c; }
 
     prim.slot = SLOT_B;
     if (mv_primitive_part(&prim, &f, c) != 0) { return -1; }
 
-    /* ② 判断是否退化为单变量 */
+    /* 判断是否退化为单变量 */
     {
         int is_x = mv_to_univariate(&prim, 0, ucoef, &udeg);
         int is_y = 0;
@@ -2338,18 +2316,18 @@ int ac_pro_multi_var_factor(const char *src, char *out, int out_len,
     }
     (void)which;
 
-    /* ③ 落盘到 g_coeffs（独立全局），随后 mv 视图视为失效 */
+    /* 落盘到 g_coeffs（独立全局），随后 mv 视图视为失效 */
     for (i = 0; i <= udeg; i++) { g_coeffs[i] = (double)ucoef[i]; }
     for (i = udeg + 1; i < 5; i++) { g_coeffs[i] = 0.0; }
 
-    /* ④ 上游有理根降次（占上游 ac_scratch 的 ratroot 视图，
+    /* 上游有理根降次（占上游 ac_scratch 的 ratroot 视图，
        与 Pro 的 g_ac_pro_scratch 物理不重叠） */
     k = ac_rat_root_descent(udeg);
     if (k < 0) { g_solve_error = 3; return -1; }
 
-    /* ④b 整除性自证（设计说明 §9.4「Pro 多变量自对拍：f mod g == 0」）。
+    /* 整除性自证（设计说明 §9.4「Pro 多变量自对拍：f mod g == 0」）。
        把原始多项式 f 与「内容 × 各因子 × 余式」的重构结果做精确除法，
-       商必须存在且余式为零。这一步是 A2 正确性的**结构性**保证：
+       商必须存在且余式为零。这一步是 A2 正确性的结构性保证：
        若因式分解有任何一个因子写错，除法会除不尽，这里立刻失败。
        成本是一次 O(28) 的逐项除法，值得。 */
     if (k > 0) {
@@ -2359,7 +2337,7 @@ int ac_pro_multi_var_factor(const char *src, char *out, int out_len,
         }
     }
 
-    /* ⑤ 格式化结果：c · Π(x − r_i) · remainder */
+    /* 格式化结果：c · Π(x − r_i) · remainder */
     if (mv_format_factor(c, k, udeg - k, out, out_len) != 0) {
         g_solve_error = 2;
         return -1;
@@ -2367,13 +2345,13 @@ int ac_pro_multi_var_factor(const char *src, char *out, int out_len,
     return 1;
 }
 
-/* ==================== A2 的结果格式化 ====================
+/* A2 的结果格式化
  * 把「内容 c + k 个有理根 + 降次后的余式多项式」写成字符串：
  *     c * (x - r1) * (x - r2) * ... * (余式)
  *
  * 有理根 r_i = g_rat_root_num[i] / g_rat_root_den[i]（已约简，den > 0）。
  * 写成整数形式 (den·x − num) 而不是 (x − num/den)，避免输出里出现分数
- * —— 本项目多变量层的契约是**整系数**，输出也必须整系数。
+ * 本项目多变量层的契约是整系数，输出也必须整系数。
  *
  * 余式多项式从 g_coeffs[0..rd] 读（升幂），按降幂输出。
  * 全零/空余式（rd == 0 且 g_coeffs[0] == 1）按「完全分解」处理，

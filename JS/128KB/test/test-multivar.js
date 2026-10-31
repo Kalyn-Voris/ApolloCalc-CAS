@@ -1,8 +1,8 @@
-/* ApolloCalc-CAS · JS/128KB 多变量多项式 + 高阶三角/复数补充 测试
- * 被测模块：src/core_multivar.js（自包含，不依赖既有 9 个 core）
- * 运行：node test/test-multivar.js   （JS/128KB 目录下）
- * 全过输出：==== multivar: N pass, 0 fail ====
- */
+/* ApolloCalc · test-multivar.js — 多变量多项式 + 高阶三角/复数补充 测试
+
+   被测模块：src/core_multivar.js（自包含，不依赖既有 9 个 core）
+   运行：node test/test-multivar.js   （JS/128KB 目录下）
+   全过输出：==== multivar: N pass, 0 fail ==== */
 "use strict";
 
 var M = require("../src/core_multivar.js");
@@ -20,7 +20,7 @@ function ok(name, cond, detail) {
   else { fail++; console.log("FAIL " + name + (detail !== undefined ? ": " + detail : "")); }
 }
 
-/* 一、TypedArray 指数编码（低4bit=y 高4bit=x） */
+/* TypedArray 指数编码（低4bit=y 高4bit=x） */
 ok("编码 x^2y -> exps=33", M.encodeExps(2, 1) === 33, "got " + M.encodeExps(2, 1));
 ok("编码 x^1y^1 -> exps=17", M.encodeExps(1, 1) === 17, "got " + M.encodeExps(1, 1));
 ok("编码 x^1 -> exps=16", M.encodeExps(1, 0) === 16, "got " + M.encodeExps(1, 0));
@@ -33,7 +33,7 @@ ok("常量 MAX_EXP=6 / MAX_TOTAL_DEG=6 / MAX_TERMS=28",
    M.MAX_EXP === 6 && M.MAX_TOTAL_DEG === 6 && M.MAX_TERMS === 28,
    M.MAX_EXP + "/" + M.MAX_TOTAL_DEG + "/" + M.MAX_TERMS);
 
-/* 二、解析：x^2y 类表达式 */
+/* 解析：x^2y 类表达式 */
 var n = M.parse("3x^2y + 2xy - 5", 0);
 ok("解析返回 3 项", n === 3, "got " + n);
 ok("解析无错误", M.getLastError() === 0, "err=" + M.getLastError());
@@ -70,7 +70,7 @@ M.parse("xy + xy", 8);
 ok("隐式乘 xy + xy 合并 -> 2xy", M.termCount(8) === 1 && approx(M.getCoef(8, 0), 2) &&
    M.getExps(8, 0) === 17, "got " + M.polyToString(8));
 
-/* 三、求值正确性（含 x=0 / y=0 / 负值） */
+/* 求值正确性（含 x=0 / y=0 / 负值） */
 M.parse("3x^2y + 2xy - 5", 0);
 ok("eval(1,1)=0", approx(M.evalSlot(0, 1, 1), 0), "got " + M.evalSlot(0, 1, 1));
 ok("eval(2,3)=43", approx(M.evalSlot(0, 2, 3), 43), "got " + M.evalSlot(0, 2, 3));
@@ -103,7 +103,7 @@ for (var si = 0; si < samples.length; si++) {
 }
 ok("(x+y)^2 展开在 5 点采样一致", identOk);
 
-/* 四、加 / 减 */
+/* 加 / 减 */
 M.parse("x^2 + 2xy", 0);
 M.parse("y^2 - 2xy + 1", 1);
 ok("add 返回 3 项", M.add(0, 1, 2) === 3, "got " + M.add(0, 1, 2));
@@ -128,7 +128,7 @@ M.sub(12, 12, 12);
 ok("sub 原地别名 (x+1)-(x+1)=0", M.termCount(12) === 0 && M.polyToString(12) === "0",
    "got '" + M.polyToString(12) + "'");
 
-/* 五、乘（卷积）/ 单项式乘 / 数乘 / 取负 */
+/* 乘（卷积）/ 单项式乘 / 数乘 / 取负 */
 M.parse("x + y", 0);
 M.parse("x - y", 1);
 ok("mul 返回 2 项", M.mul(0, 1, 2) === 2, "got " + M.mul(0, 1, 2));
@@ -172,7 +172,7 @@ ok("(2x-3y+1)(x+4y-2) 字符串",
    M.polyToString(2) === "2x^2 + 5xy - 3x - 12y^2 + 10y - 2",
    "got '" + M.polyToString(2) + "'");
 
-/* 六、同类项合并 */
+/* 同类项合并 */
 M.parse("x + x^2 + x", 0);
 ok("合并 x+x^2+x -> 2 项", M.termCount(0) === 2, "got " + M.termCount(0));
 ok("合并结果 x^2 + 2x", M.polyToString(0) === "x^2 + 2x", "got '" + M.polyToString(0) + "'");
@@ -191,15 +191,15 @@ ok("合并抵消后只剩 y", M.termCount(4) === 1 && M.getExps(4, 0) === 1,
 
 /* 手工构造乱序项表后 normalize 合并 */
 M.clear(5);
-M.setTerm(5, 0, 2, M.encodeExps(1, 0));   /* 2x  */
-M.setTerm(5, 1, 3, M.encodeExps(0, 1));   /* 3y  */
-M.setTerm(5, 2, 5, M.encodeExps(1, 0));   /* 5x  */
-M.setTerm(5, 3, -3, M.encodeExps(0, 1));  /* -3y */
+M.setTerm(5, 0, 2, M.encodeExps(1, 0));
+M.setTerm(5, 1, 3, M.encodeExps(0, 1));
+M.setTerm(5, 2, 5, M.encodeExps(1, 0));
+M.setTerm(5, 3, -3, M.encodeExps(0, 1));
 ok("setTerm 后 4 项", M.termCount(5) === 4, "got " + M.termCount(5));
 ok("normalize 合并 2x+5x 与 3y-3y", M.normalize(5) === 1 && approx(M.getCoef(5, 0), 7) &&
    M.getExps(5, 0) === M.encodeExps(1, 0), "got '" + M.polyToString(5) + "'");
 
-/* 七、总次数 / 分次数 */
+/* 总次数 / 分次数 */
 M.parse("3x^2y + 2xy - 5", 0);
 ok("totalDegree=3", M.totalDegree(0) === 3, "got " + M.totalDegree(0));
 ok("degreeX=2", M.degreeX(0) === 2, "got " + M.degreeX(0));
@@ -217,12 +217,12 @@ M.parse("x^5 + y", 6);
 ok("x^5+y: degX=5 / degY=1 / total=5",
    M.degreeX(6) === 5 && M.degreeY(6) === 1 && M.totalDegree(6) === 5);
 
-/* 八、排序（按 exps 降序：先 x 再 y） */
+/* 排序（按 exps 降序：先 x 再 y） */
 M.clear(7);
-M.setTerm(7, 0, 1, M.encodeExps(0, 2));   /* y^2  */
-M.setTerm(7, 1, 2, M.encodeExps(1, 0));   /* x    */
-M.setTerm(7, 2, 3, M.encodeExps(2, 1));   /* x^2y */
-M.setTerm(7, 3, 4, M.encodeExps(1, 1));   /* xy   */
+M.setTerm(7, 0, 1, M.encodeExps(0, 2));
+M.setTerm(7, 1, 2, M.encodeExps(1, 0));
+M.setTerm(7, 2, 3, M.encodeExps(2, 1));
+M.setTerm(7, 3, 4, M.encodeExps(1, 1));
 ok("排序前首项是 y^2（乱序）", M.getExps(7, 0) === M.encodeExps(0, 2),
    "got e=" + M.getExps(7, 0));
 ok("sortTerms 返回 4 项", M.sortTerms(7) === 4, "got " + M.sortTerms(7));
@@ -241,7 +241,7 @@ ok("解析输入乱序仍规范排序", M.getExps(8, 0) === 33 && M.getExps(8, 3
 ok("规范序字符串 x^2y + xy + x + y^2",
    M.polyToString(8) === "x^2y + xy + x + y^2", "got '" + M.polyToString(8) + "'");
 
-/* 九、toString（写预分配缓冲，不拼接） */
+/* toString（写预分配缓冲，不拼接） */
 M.parse("3x^2y + 2xy - 5", 0);
 ok("toString 全文", M.polyToString(0) === "3x^2y + 2xy - 5", "got '" + M.polyToString(0) + "'");
 ok("toString 返回长度与 getString().length 一致",
@@ -273,7 +273,7 @@ ok("toString 单项无多余符号", M.polyToString(7) === "x^2y", "got '" + M.p
 M.parse("3", 8);
 ok("toString 纯常数", M.polyToString(8) === "3", "got '" + M.polyToString(8) + "'");
 
-/* 十、错误与溢出路径 */
+/* 错误与溢出路径 */
 ok("x^7 单变量越界报错 E_DEGREE", (M.parse("x^7", 0) === -1 && M.getLastError() === 1),
    "err=" + M.getLastError());
 ok("x^4y^3 单变量越界报错", (M.parse("x^4y^3", 0) === -1 && M.getLastError() === 1),
@@ -311,7 +311,7 @@ M.parse("x^1", 6);
 ok("x^6 * x^1 溢出报错（不静默回绕）",
    (M.mul(5, 6, 7) === -1 && M.getLastError() === 1), "err=" + M.getLastError());
 
-/* 十一、高阶三角（正 / 反） */
+/* 高阶三角（正 / 反） */
 ok("sec(0)=1", approx(M.sec(0), 1), "got " + M.sec(0));
 ok("csc(pi/2)=1", approx(M.csc(Math.PI / 2), 1), "got " + M.csc(Math.PI / 2));
 ok("cot(pi/4)=1", approx(M.cot(Math.PI / 4), 1, 1e-12), "got " + M.cot(Math.PI / 4));
@@ -331,7 +331,7 @@ ok("cot(acot(x)) 往返 x=2.5", approx(M.cot(M.acot(2.5)), 2.5, 1e-12),
 ok("sec(asec(x)) 往返 x=1.7", approx(M.sec(M.asec(1.7)), 1.7, 1e-12),
    "got " + M.sec(M.asec(1.7)));
 
-/* 十二、双曲与反双曲 */
+/* 双曲与反双曲 */
 ok("sech(0)=1", approx(M.sech(0), 1), "got " + M.sech(0));
 ok("csch(1)=1/sinh(1)", approx(M.csch(1), 1 / Math.sinh(1), 1e-15),
    "got " + M.csch(1));
@@ -354,7 +354,7 @@ ok("atanh(1)=+Inf", M.atanh(1) === Infinity, "got " + M.atanh(1));
 ok("atanh(-1)=-Inf", M.atanh(-1) === -Infinity, "got " + M.atanh(-1));
 ok("atanh(2) 越域 -> NaN", M.atanh(2) !== M.atanh(2), "got " + M.atanh(2));
 
-/* 十三、复数域补充 */
+/* 复数域补充 */
 M.setZ(2, 3);
 M.cPowInt(2);
 ok("(2+3i)^2 = -5+12i", approx(M.getRRe(), -5, 1e-12) && approx(M.getRIm(), 12, 1e-12),
@@ -434,7 +434,7 @@ ok("exp -> ln 往返恢复 z", approx(M.getRRe(), zRe0, 1e-12) &&
    "got " + M.getRRe() + "+" + M.getRIm() + "i");
 ok("cAbs(3+4i)=5", (M.setZ(3, 4), approx(M.cAbs(), 5)), "got " + M.cAbs());
 
-/* 十四、零 GC：热路径分配计数不变 */
+/* 零 GC：热路径分配计数不变 */
 M.parse("3x^2y + 2xy - 5", 0);
 M.parse("x^2 - y^2 + 2xy + 1", 1);
 var allocBefore = M.allocCount();
@@ -480,7 +480,7 @@ M.parse("(x)", 6);
 ok("解析失败路径分配增量 = 0", M.allocCount() - allocP3 === 0,
    "delta=" + (M.allocCount() - allocP3));
 
-/* 十五、模块自包含性与预分配 */
+/* 模块自包含性与预分配 */
 ok("模块独立 require 成功", typeof M === "object" && M !== null);
 ok("导出 parse/evalSlot/mul/toString 等核心接口",
    typeof M.parse === "function" && typeof M.evalSlot === "function" &&
@@ -507,9 +507,9 @@ ok("reset 清空全部槽位", resetClean);
 ok("reset 不复位分配计数（仍为 6）", M.allocCount() === 6, "got " + M.allocCount());
 ok("reset 后 getLastError=0", M.getLastError() === 0);
 
-/* ==================== 十六、多变量符号求导（v2.0.0 diff）==================== */
+/* 多变量符号求导（v2.0.0 diff） */
 n = M.parse("x^2y + xy^2", 0);
-var dn = M.diff(0, 0, 1);                          /* d/dx */
+var dn = M.diff(0, 0, 1);
 ok("d/dx 返回 2 项", dn === 2, "got " + dn);
 ok("d/dx 第0项 = 2xy", approx(M.getCoef(1, 0), 2) && M.getExps(1, 0) === 17,
    "coef=" + M.getCoef(1, 0) + " exps=" + M.getExps(1, 0));
@@ -519,7 +519,7 @@ ok("d/dx 文本 = 2*x*y + y^2", M.polyToString(1) === "2xy + y^2",
    "got " + M.polyToString(1));
 
 M.parse("x^2y + xy^2", 0);
-M.diff(0, 1, 1);                                   /* d/dy */
+M.diff(0, 1, 1);
 ok("d/dy 文本 = x^2 + 2*x*y", M.polyToString(1) === "x^2 + 2xy",
    "got " + M.polyToString(1));
 

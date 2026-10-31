@@ -26,7 +26,7 @@ import sys
 V128 = ["128KB"]
 
 
-# ==================== 条目构造 ====================
+# 条目构造
 def P(src):
     """parse 池通用条目：裸字符串（无参数、无版本限制）。"""
     return src
@@ -56,7 +56,7 @@ def S(src, degree):
     return {"src": src, "degree": degree}
 
 
-# ==================== parse 池（250） ====================
+# parse 池（250）
 def build_parse():
     # 1) 纯数字 10：整数 / 小数 / 科学计数法（e 与 E）/ 前导零 / 大数
     nums = [
@@ -135,7 +135,7 @@ def build_parse():
     return items
 
 
-# ==================== eval 池（250） ====================
+# eval 池（250）
 def build_eval():
     # 1) 多项式 80：16 式 × 5 个 x
     poly_srcs = [
@@ -222,7 +222,7 @@ def build_eval():
     return items
 
 
-# ==================== solve 池（100） ====================
+# solve 池（100）
 def build_solve():
     quad = [
         # 整数根
@@ -277,7 +277,7 @@ def build_solve():
     return items
 
 
-# ==================== exact 池（50） ====================
+# exact 池（50）
 def build_exact():
     # 纯分数根 20（判别式为完全平方，精确形式为有理数）
     frac = [

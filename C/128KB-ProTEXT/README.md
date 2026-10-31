@@ -68,7 +68,7 @@ sqfree 复用既有槽零新视图——**`.bss` 自 v2.1.0 起零增长**，「
 ### 1.1 内存水位门禁（上游死代码 → Pro 两段式）
 
 **上游缺陷**（设计说明 §6.3 论证）：`ac_check_memory_watermark`（`ac_solvers.c:679-724`）
-估算上限 17320 B、阈值 98304 B，比值 5.68× —— **任何输入都不触发**；
+估算上限 17320 B、阈值 98304 B，比值 5.68×，**任何输入都不触发**；
 且漏算 `g_ac_scratch`（8224）与 `g_sym_nodes`（12288），低估 27496 B。
 
 **Pro 修正**（`src/ac_pro_solvers_ext.c`）：
@@ -181,13 +181,13 @@ align_pad；v1.3 峰值迁移后 2784 = 2688 + 80 + 16；现为
 | 5..8 | Durand-Kerner | Pro 新增 |
 | > 8 | 拒绝（`g_solve_error = 1`） | 与上游同码 |
 
-> 1..4 不是「抄一遍判断」，而是真的调用上游函数 —— 这样「1..4 行为与上游
+> 1..4 真的调用上游函数，这样「1..4 行为与上游
 > 逐位一致」是结构保证，不是靠人工核对。
 
 **收敛判据的修正（实测驱动的改动）**：
 
 初版只用步长判据 `max|Δz| < 1e-12`，在 `(x-1)³(x+2)²` 上**误报不收敛**。
-原因不是 bug 而是重根的固有性质：
+原因是重根的固有性质：
 
 ```
 m 重根附近：|Δz| ≈ ε^(1/m)
@@ -299,7 +299,7 @@ AC_STATIC_ASSERT(offsetof(ac_sym_node_t, value) - 12 == 4, pro_sym_node_hole_is_
 ## 3. v1.3 方向 A：多变量层
 
 三个新能力都跑在同一块 `mv` 视图（6 槽 × 28 项 × 16 B = 2688 B）上，没有新增
-任何全局对象 —— 这正是 union 尺寸从 2352 涨到 2688 的原因。
+任何全局对象，这正是 union 尺寸从 2352 涨到 2688 的原因。
 
 ### 3.1 A1：多变量 GCD
 
@@ -400,7 +400,7 @@ int            ac_pro_eig_count(void);
 `D_k = A − Σ_{j<k} λ_j·v_j·v_jᵀ`。代价是 O(n³) 的减法（n ≤ 12 时 3456 次乘加），
 换来省掉一整个 n×n 缓冲。
 
-**收敛判据盯残差而不是 |Δλ|** —— 这是实测驱动的修正。Rayleigh 商是二阶精确的，
+**收敛判据盯残差而不是 |Δλ|**，这是实测驱动的修正。Rayleigh 商是二阶精确的，
 `|Δλ|` 会先于角度误差塌到 1e-16，而残差 `‖r‖ = gap·sinθ` 还在 1e-7：用 |Δλ| 判停
 会提前 2~3 个数量级收工，3×3 用例的残差卡在 4.6e-8，过不了 1e-9 的闸门。改为盯
 残差本身的下降停滞（`res > 0.9·res_prev`）后，残差落到 3.8e-13 ~ 4.7e-13。
@@ -442,7 +442,7 @@ arena —— 越界会静默破坏其它模块的表达式树。
 层数是硬编码上界 2 的递减参数 `parts_left`：顶层 2，每做一次分部对内层传 `−1`，到 0
 关死，内层只查表/多项式。无同形自调用、无层数随输入增长的通路，等价于把两层展开成
 两个函数，只是共享同一份匹配体；深度另受 `PRO_INT_MAX_DEPTH` 封顶。`∫x⁶·sin x dx`
-（两层 + 表 `x⁴·sin` 收尾）可解，`∫x⁷·sin x dx`（需三层）仍被 ETABLE 拒绝 —— 这是
+（两层 + 表 `x⁴·sin` 收尾）可解，`∫x⁷·sin x dx`（需三层）仍被 ETABLE 拒绝，这是
 边界而非缺陷。常数乘法在 mul 层做了两条形态归一：常数×常数头先折叠（防止提升与分配
 乒乓）、常数×和差分配展开，使分部输出与表模板同为左结合扁平形态。
 
@@ -520,7 +520,7 @@ v2.2.0。组件细分记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 - **算法**：M4GB 逐对归约，lex 序，deg ≤ 4，膨胀熔断。
 - **内存**：gb 视图 1888 B（≤ 1960 预算线），被 sparse 峰值 3848 B 完全吸收，
-  **`.bss` 零增长**——「union 吸收」判据的又一次兑现。
+  **`.bss` 零增长**，「union 吸收」判据的又一次兑现。
 - **账本**：内核口径 42608 B / runner 口径 42640 B / 上游对照 39408 B
   （`bss-check` 实测逐字命中）。
 - **校验**：pro_runner **396 checks, 0 failed**（新增 68 项测试）+ RESULT: PASS。
@@ -573,7 +573,7 @@ v2.2.0。组件细分记录见 [CHANGELOG.md](CHANGELOG.md)。
 组件版本 v1.5.0 → **v1.6.0**（semver minor），对应全局版本节点 v2.4.0。
 `feat/c-eigen` 分支交付，收尾组串行收口。
 
-### 3D.1 一般实矩阵全部特征值（`src/ac_pro_schur.c`，540 行）
+### 3D.1 一般实矩阵全部特征值（`src/ac_pro_schur.c`，538 行）
 
 - Householder → Hessenberg → Francis 隐式双移 QR（bulge chasing，全显式循环
   零递归）+ 2×2 块闭式解；幂 2 精确缩放（纯指数加减零舍入）防 H² 溢出。
@@ -704,50 +704,50 @@ A1（8）/ A2（4）/ A3（4）三个 v1.3 功能未纳入 §4 门禁行，由�
 
 | 文件 | 行数 | 职责 |
 |:---|---:|:---|
-| `src/ac_pro.h` | 749 | Pro 层唯一公开头文件 |
-| `src/ac_pro_scratch.h` | 725 | `ac_pro_scratch_t` union（11 视图）+ 全部编译期断言 |
-| `src/ac_pro_lut_tables.h` | 540 | sin/cos LUT 常量表（v2.0.0，1024 项 `const double` × 2） |
-| `src/ac_pro_config.h` | 148 | 两级开关 `AC_PRO` / `AC_PRO_ACTIVE`，账本常量 |
-| `src/ac_pro_extra_globals.c` | 39 | `g_ac_pro_storage` 唯一定义处 |
+| `src/ac_pro.h` | 698 | Pro 层唯一公开头文件 |
+| `src/ac_pro_scratch.h` | 713 | `ac_pro_scratch_t` union（11 视图）+ 全部编译期断言 |
+| `src/ac_pro_lut_tables.h` | 536 | sin/cos LUT 常量表（v2.0.0，1024 项 `const double` × 2） |
+| `src/ac_pro_config.h` | 141 | 两级开关 `AC_PRO` / `AC_PRO_ACTIVE`，账本常量 |
+| `src/ac_pro_extra_globals.c` | 32 | `g_ac_pro_storage` 唯一定义处 |
 | `src/ac_pro_scratch.c` | 9 | Pro 侧 scratch 符号定义 |
-| `src/ac_pro_math.c` | 118 | LUT 常量表包装（函数式宏劫持进上游 TU，v2.0.0） |
+| `src/ac_pro_math.c` | 112 | LUT 常量表包装（函数式宏劫持进上游 TU，v2.0.0） |
 | `src/ac_pro_solvers.c` | 26 | 宏重命名拦截 `ac_guard_degree` |
-| `src/ac_pro_smoke.c` | 86 | 家族共享一致性用例接线 |
-| `src/ac_pro_solvers_ext.c` | 533 | 水位门禁重写 + B1 数值求根 + A4 LU（v1.2） |
-| `src/ac_pro_symbolic_ext.c` | 594 | A6 隐函数求导（填充洞方案，v1.2） |
-| `src/ac_pro_multi.c` | 2482 | A1 多变量 GCD + A2 因式分解（v1.3） |
-| `src/ac_pro_resultant.c` | 253 | A3 Sylvester 结式（v1.3） |
-| `src/ac_pro_eigen.c` | 381 | A5 特征向量 + Hotelling deflation（v1.3.5） |
-| `src/ac_pro_integrate.c` | 2050 | B2 符号积分：128 项表 + 固定两层分部（v1.3.5 建，v2.3.0 扩） |
-| `src/ac_pro_diff_multi.c` | 211 | 多变量符号求导（v2.0.0） |
-| `src/ac_pro_integrate_multi.c` | 257 | 多变量多项式积分（v2.0.0） |
-| `src/ac_pro_sparse.c` | 316 | 稀疏线性方程组，sparse 视图 3848 B（v2.1.0，现峰值） |
-| `src/ac_pro_bigdec.c` | 524 | 任意精度定点十进制（v2.1.0） |
-| `src/ac_pro_groebner.c` | 847 | 2 变量 Groebner 基 M4GB（v1.4.0 / 全局 v2.2.0） |
-| `src/ac_pro_rational.c` | 928 | 单变量有理函数工具 GCD/cancel/apart（v1.5.0） |
-| `src/ac_pro_ode.c` | 540 | 常系数线性齐次 ODE 通解（v1.5.0） |
-| `src/ac_pro_schur.c` | 540 | 一般实矩阵全部特征值 Francis QR（v1.6.0） |
-| `src/ac_pro_sqfree.c` | 718 | square-free 分解与重根重数（v1.6.0） |
+| `src/ac_pro_smoke.c` | 79 | 家族共享一致性用例接线 |
+| `src/ac_pro_solvers_ext.c` | 527 | 水位门禁重写 + B1 数值求根 + A4 LU（v1.2） |
+| `src/ac_pro_symbolic_ext.c` | 586 | A6 隐函数求导（填充洞方案，v1.2） |
+| `src/ac_pro_multi.c` | 2460 | A1 多变量 GCD + A2 因式分解（v1.3） |
+| `src/ac_pro_resultant.c` | 236 | A3 Sylvester 结式（v1.3） |
+| `src/ac_pro_eigen.c` | 382 | A5 特征向量 + Hotelling deflation（v1.3.5） |
+| `src/ac_pro_integrate.c` | 2052 | B2 符号积分：128 项表 + 固定两层分部（v1.3.5 建，v2.3.0 扩） |
+| `src/ac_pro_diff_multi.c` | 201 | 多变量符号求导（v2.0.0） |
+| `src/ac_pro_integrate_multi.c` | 247 | 多变量多项式积分（v2.0.0） |
+| `src/ac_pro_sparse.c` | 306 | 稀疏线性方程组，sparse 视图 3848 B（v2.1.0，现峰值） |
+| `src/ac_pro_bigdec.c` | 513 | 任意精度定点十进制（v2.1.0） |
+| `src/ac_pro_groebner.c` | 842 | 2 变量 Groebner 基 M4GB（v1.4.0 / 全局 v2.2.0） |
+| `src/ac_pro_rational.c` | 923 | 单变量有理函数工具 GCD/cancel/apart（v1.5.0） |
+| `src/ac_pro_ode.c` | 536 | 常系数线性齐次 ODE 通解（v1.5.0） |
+| `src/ac_pro_schur.c` | 538 | 一般实矩阵全部特征值 Francis QR（v1.6.0） |
+| `src/ac_pro_sqfree.c` | 715 | square-free 分解与重根重数（v1.6.0） |
 | `src/ac_pro_{base,bigint,calculus,complex,evaluator,exact,matrix,numtheory,parser,ratroot,special,symbolic,util}.c` | 各 3 | 13 个上游模块的 3 行接线桩 |
 
 ### test/（14 个文件）
 
 | 文件 | 行数 | 职责 |
 |:---|---:|:---|
-| `test/pro_kernel_main.c` | 26 | 内核口径测量的 trivial main |
-| `test/test_pro_runner.c` | 1117 | 主 runner：**574 checks**（v1.2 建 115 条，逐版扩至 574） |
-| `test/test_pro_multi.c` | 242 | A1/A2/A3 用例（v1.3） |
-| `test/test_pro_eigen.c` | 460 | A5 用例，76 条测试（v1.3.5） |
-| `test/test_pro_integrate.c` | 335 | B2 用例，58 条测试（v1.3.5 建 31 条，v2.3.0 扩至 58） |
-| `test/test_pro_diff_multi.c` | 157 | 多变量求导用例（v2.0.0） |
-| `test/test_pro_integrate_multi.c` | 162 | 多变量积分用例（v2.0.0） |
-| `test/test_pro_sparse.c` | 401 | SP 用例，35 条测试（v2.1.0） |
-| `test/test_pro_bigdec.c` | 335 | BD 用例，12 条测试（v2.1.0） |
-| `test/test_pro_groebner.c` | 275 | GB 用例，68 条测试（v2.2.0） |
-| `test/test_pro_rational.c` | 240 | RAT 用例，32 条测试（v2.3.0） |
-| `test/test_pro_ode.c` | 203 | ODE 用例，33 条测试（v2.3.0） |
-| `test/test_pro_schur.c` | 445 | SCHUR 用例，46 条测试（v2.4.0） |
-| `test/test_pro_sqfree.c` | 188 | SQFREE 用例，40 条测试（v2.4.0） |
+| `test/pro_kernel_main.c` | 18 | 内核口径测量的 trivial main |
+| `test/test_pro_runner.c` | 1102 | 主 runner：**574 checks**（v1.2 建 115 条，逐版扩至 574） |
+| `test/test_pro_multi.c` | 209 | A1/A2/A3 用例（v1.3） |
+| `test/test_pro_eigen.c` | 453 | A5 用例，76 条测试（v1.3.5） |
+| `test/test_pro_integrate.c` | 337 | B2 用例，58 条测试（v1.3.5 建 31 条，v2.3.0 扩至 58） |
+| `test/test_pro_diff_multi.c` | 145 | 多变量求导用例（v2.0.0） |
+| `test/test_pro_integrate_multi.c` | 143 | 多变量积分用例（v2.0.0） |
+| `test/test_pro_sparse.c` | 394 | SP 用例，35 条测试（v2.1.0） |
+| `test/test_pro_bigdec.c` | 327 | BD 用例，12 条测试（v2.1.0） |
+| `test/test_pro_groebner.c` | 269 | GB 用例，68 条测试（v2.2.0） |
+| `test/test_pro_rational.c` | 242 | RAT 用例，32 条测试（v2.3.0） |
+| `test/test_pro_ode.c` | 205 | ODE 用例，33 条测试（v2.3.0） |
+| `test/test_pro_schur.c` | 446 | SCHUR 用例，46 条测试（v2.4.0） |
+| `test/test_pro_sqfree.c` | 190 | SQFREE 用例，40 条测试（v2.4.0） |
 
 上游 `C/128KB/` 的 16 个模块全部经 3 行接线桩包装进 Pro 构建，源文件零改动。
 
@@ -760,7 +760,7 @@ A1（8）/ A2（4）/ A3（4）三个 v1.3 功能未纳入 §4 门禁行，由�
    口径，多出测试 TU 的 16 B 段 + 16 B 对齐。这与上游「38672 内核 / 39408
    README」的区分方式完全一致。若要求 runner 也精确等于 42608，
    需把 `s_kernel_live` 挪出 `.bss`（例如用 TLS 或链接期常量），但会牺牲
-   Zero-GC 校验的可靠性 —— 不建议。
+   Zero-GC 校验的可靠性，不建议。
 2. **A6 不支持函数调用**：`sin(x)+y` 这类表达式会被拒绝。上游 `NODE_*` 只有
    CONST/VAR/ADD/SUB/MUL/POW 五种，加 `NODE_FUNC` 会改上游语义，超出 v1.2 边界。
    若要支持，建议在 Pro 侧建独立的节点类型表，而不是改上游枚举。

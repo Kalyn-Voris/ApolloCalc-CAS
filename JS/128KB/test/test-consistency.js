@@ -1,17 +1,16 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB 家族一致性测试
- * 跑家族共享 tests/ 下的 polynomials.json / exact-forms.json / edge-cases.json，
- * 验证 128KB 内核输出与 64KB 一致（或更强）。
- *
- * 一致性口径：
- *   - 数值根不一致            → FAIL（真失败）
- *   - 精确形式从无到有        → IMPROVE（128KB 五分量混合形式更强，不算失败）
- *   - preCheck 放行 64KB 拒绝 → IMPROVE（128KB 阈值翻倍：深度≤6 函数≤4 变量≤10）
- *   - 错误码不同但均报错      → 以 expect:"error" 宽松判定（跨实现约定）
- *
- * 运行：node test/test-consistency.js   （JS/128KB 目录下）
- * 全过输出：==== consistency: N pass, M improve, 0 fail ====
- * ============================================================ */
+/* ApolloCalc · test-consistency.js — 家族一致性测试（128KB 内核 vs 64KB）
+
+   跑家族共享 tests/ 下的 polynomials.json / exact-forms.json / edge-cases.json，
+   验证 128KB 内核输出与 64KB 一致（或更强）。
+
+   一致性口径：
+     - 数值根不一致            → FAIL（真失败）
+     - 精确形式从无到有        → IMPROVE（128KB 五分量混合形式更强，不算失败）
+     - preCheck 放行 64KB 拒绝 → IMPROVE（128KB 阈值翻倍：深度≤6 函数≤4 变量≤10）
+     - 错误码不同但均报错      → 以 expect:"error" 宽松判定（跨实现约定）
+
+   运行：node test/test-consistency.js   （JS/128KB 目录下）
+   全过输出：==== consistency: N pass, M improve, 0 fail ==== */
 var fs = require("fs");
 var path = require("path");
 
@@ -41,7 +40,7 @@ function loadJSON(name) {
 
 angleMode = "RAD";
 
-/* ==================== 通用判定助手 ==================== */
+/* 通用判定助手 */
 
 /* 期望 (re,im) 根多重集合是否全部命中（乱序、一对一消耗） */
 function rootsMatch(wantPairs, tol) {
@@ -63,8 +62,8 @@ function rootsMatch(wantPairs, tol) {
 }
 
 /* 五分量精确形式 → 显示串（显示约定与 exact-forms.json 一致：
- * 整数 "3"、分数 "1/2"、纯根式 "√(2)" / "2√(2)" / "-√(2)"；
- * 混合形式与科学计数法为家族表外通用写法） */
+   整数 "3"、分数 "1/2"、纯根式 "√(2)" / "2√(2)" / "-√(2)"；
+   混合形式与科学计数法为家族表外通用写法） */
 function fmtExact(i) {
   if (_rootExactValid[i] !== 1) { return null; }
   var rat = _rootExactRat[i];
@@ -153,7 +152,7 @@ function reportFail(id, want, got, note) {
   console.log("FAIL   " + id + ": want=" + want + " got=" + got + (note ? " | " + note : ""));
 }
 
-/* ==================== 内核池尺寸与门禁边界自检（128KB 收尾验收） ==================== */
+/* 内核池尺寸与门禁边界自检（128KB 收尾验收） */
 if (tokenPool.length === 512 && numberPool.length === 256 && evalStack.length === 128 &&
     matrixPool.length === 156 && _rpnToken.length === 512 && _opStack.length === 128 &&
     _lhsToken.length === 256 && _rhsToken.length === 256) {
@@ -173,7 +172,7 @@ var depth7Rej = (parseError === 0 && preCheckExpression() === 1 && _solveError =
 if (depth5OK && depth7Rej) { pass++; }
 else { reportFail("precheck-boundary", "5 层通过且 7 层拒绝", "depth5OK=" + depth5OK + " depth7Rej=" + depth7Rej); }
 
-/* ==================== 一、polynomials.json：数值根一致性 ==================== */
+/* polynomials.json：数值根一致性 */
 var polys = loadJSON("polynomials.json");
 for (var pi = 0; pi < polys.cases.length; pi++) {
   var c = polys.cases[pi];
@@ -186,9 +185,9 @@ for (var pi = 0; pi < polys.cases.length; pi++) {
   else { reportFail(c.input, JSON.stringify(c.expectedRoots), rootsSnapshot(), "tol=" + c.tolerance); }
 }
 
-/* ==================== 二、exact-forms.json：精确形式一致性 ====================
- * 128KB 五分量需复现 64KB 显示约定（整数/分数/纯根式）；
- * 内核给不出精确形式或串不匹配 → 真失败（这些用例 64KB 全部可表达）。 */
+/* exact-forms.json：精确形式一致性
+   128KB 五分量需复现 64KB 显示约定（整数/分数/纯根式）；
+   内核给不出精确形式或串不匹配 → 真失败（这些用例 64KB 全部可表达）。 */
 var exacts = loadJSON("exact-forms.json");
 for (var ei = 0; ei < exacts.cases.length; ei++) {
   var ce = exacts.cases[ei];
@@ -201,12 +200,12 @@ for (var ei = 0; ei < exacts.cases.length; ei++) {
   else { reportFail(ce.input, JSON.stringify(ce.expectedExact), rootsSnapshot(), "精确形式不匹配"); }
 }
 
-/* ==================== 三、edge-cases.json：边界与错误 ==================== */
+/* edge-cases.json：边界与错误 */
 var edges = loadJSON("edge-cases.json");
 for (var gi = 0; gi < edges.cases.length; gi++) {
   var g = edges.cases[gi];
 
-  /* ---- 线性方程组用例 ---- */
+  /* 线性方程组用例 */
   if (g.linearSystem) {
     var n = g.linearSystem.n;
     if (n <= 12) {
@@ -234,7 +233,7 @@ for (var gi = 0; gi < edges.cases.length; gi++) {
     continue;
   }
 
-  /* ---- parse 段用例 ---- */
+  /* parse 段用例 */
   if (g.stage === "parse") {
     parseExpression(g.input);
     if (g.expect === "error") {
@@ -254,7 +253,7 @@ for (var gi = 0; gi < edges.cases.length; gi++) {
     continue;
   }
 
-  /* ---- eval 段用例 ---- */
+  /* eval 段用例 */
   if (g.stage === "eval") {
     parseExpression(g.input);
     if (parseError !== 0) {
@@ -267,7 +266,7 @@ for (var gi = 0; gi < edges.cases.length; gi++) {
     continue;
   }
 
-  /* ---- extract 段用例 ---- */
+  /* extract 段用例 */
   if (g.stage === "extract") {
     parseExpression(g.input);
     if (parseError !== 0) { reportFail(g.id, "error", "parse 段报错 parseError=" + parseError); continue; }
@@ -283,7 +282,7 @@ for (var gi = 0; gi < edges.cases.length; gi++) {
     continue;
   }
 
-  /* ---- solve 段用例（UI 真实顺序：parse → preCheck → guardDegree → extract → solve） ---- */
+  /* solve 段用例（UI 真实顺序：parse → preCheck → guardDegree → extract → solve） */
   if (g.stage === "solve") {
     solversReset();
     parseExpression(g.input);
@@ -315,8 +314,8 @@ for (var gi = 0; gi < edges.cases.length; gi++) {
       continue;
     }
     /* expectedImprove 用例：JSON 声明 64KB 拒绝（solveError=2）而本内核（128KB 阈值翻倍）
-     * preCheck 放行（128KB 返回成功）→ 判 IMPROVE；
-     * 若 128KB 也拒绝，上面 preCheck===1 分支已按 solveError 判定 */
+       preCheck 放行（128KB 返回成功）→ 判 IMPROVE；
+       若 128KB 也拒绝，上面 preCheck===1 分支已按 solveError 判定 */
     if (g.expectedImprove === true) {
       reportImprove(g.id, "128KB preCheck 阈值翻倍（深度≤6 函数≤4 变量≤10），64KB 拒绝的输入放行");
       continue;
@@ -353,7 +352,7 @@ for (var gi = 0; gi < edges.cases.length; gi++) {
   reportFail(g.id, "已知 stage", "未知 stage=" + g.stage);
 }
 
-/* ==================== 内存账本（水位门禁降级估算口径，含 _baseBuf） ==================== */
+/* 内存账本（水位门禁降级估算口径，含 _baseBuf） */
 var ledger = tokenPool.byteLength + numberPool.byteLength + evalStack.byteLength +
              matrixPool.byteLength +
              _rpnToken.byteLength + _opStack.byteLength +

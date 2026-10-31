@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
 ApolloCalc-CAS - Pro v1.3 - A1 multivariate GCD reference implementation
-========================================================================
 
 WHY THIS SCRIPT EXISTS
-----------------------
 The C side (ac_pro_multi.c, mv_gcd_prs) kept producing wrong results for
 gcd in 2 variables. Symptoms: cases where the first prem already returns
 zero were all correct; cases needing >= 2 PRS rounds were all wrong.
@@ -14,7 +12,6 @@ with exact rational arithmetic (fractions.Fraction), prints every
 intermediate state, and lets C be aligned against it.
 
 WHAT WE LEARNED (recorded here so C does not repeat the mistakes)
------------------------------------------------------------------
 Mistake 1: treating prem(f,g) == 0 as "g divides f".
     In the multivariate case prem works over K(y)[x] (rational function
     field). prem returning zero only means g divides f in K(y)[x]; the
@@ -40,7 +37,6 @@ Mistake 4 (the subtle one): mid-loop normalization.
     invariant (deg_x must decrease by exactly 1 per iteration).
 
 ALGORITHM (as implemented below)
---------------------------------
     gcd_2var(f, g):
         run gcd_pass on the x axis
         if that degrades, run gcd_pass on the y axis using the CURRENT pair
@@ -57,7 +53,6 @@ ALGORITHM (as implemented below)
         return f
 
 USAGE
------
     python tools/ref_prs.py
     python tools/ref_prs.py --quiet
 """
@@ -66,7 +61,7 @@ import sys
 from fractions import Fraction
 
 
-# ==================== Polynomial basics ====================
+# Polynomial basics
 # Representation: dict {(i, j): Fraction}, i = x degree, j = y degree.
 
 def poly_clean(p):
@@ -138,7 +133,7 @@ def lead_key(k):
     return (k[0] << 8) | k[1]
 
 
-# ==================== Content ====================
+# Content
 
 def _gcd(a, b):
     while b:
@@ -172,7 +167,7 @@ def make_primitive(a):
     return a
 
 
-# ==================== Real polynomial division ====================
+# Real polynomial division
 
 def poly_div_exact(a, b):
     """Leading-term elimination. Returns (quotient, remainder)."""
@@ -204,7 +199,7 @@ def divides(d, a):
     return poly_is_zero(rem)
 
 
-# ==================== Pseudo-remainder (x as main variable) ====================
+# Pseudo-remainder (x as main variable)
 
 def prem_x(f, g, trace=None, depth=0):
     """Pseudo-remainder of f by g with x as the main variable.
@@ -246,7 +241,7 @@ def prem_x(f, g, trace=None, depth=0):
     return R
 
 
-# ==================== Single-axis PRS pass ====================
+# Single-axis PRS pass
 
 def gcd_pass(f, g, trace=None, depth=0, axis="x"):
     """One PRS pass along the given axis.
@@ -283,10 +278,10 @@ def gcd_pass(f, g, trace=None, depth=0, axis="x"):
                     trace.append(("result", depth, dict(g), None, None, None, None))
                 return g, False, f, g
 
-            # 【关键补充：用真正的欧几里得除法兜底】
+            # 关键补充：用真正的欧几里得除法兜底
             #
             # prem 返回零只说明「在 K(y)[x] 里整除」。此时正确的做法
-            # 不是换轴重来（那会丢掉已约化的因子），而是**对当前的
+            # 不是换轴重来（那会丢掉已约化的因子），而是对当前的
             # (f, g) 直接做多项式欧几里得**——它们已经被约化到很小的
             # 规模，真实除法几轮就能收敛。
             #
@@ -315,7 +310,7 @@ def gcd_pass(f, g, trace=None, depth=0, axis="x"):
     return f, False, f, g
 
 
-# ==================== Euclidean fallback (rational coefficients) ====================
+# Euclidean fallback (rational coefficients)
 
 def euclid_gcd(f, g, trace=None, depth=0):
     """Plain Euclidean GCD over Q[x,y] using real division.
@@ -421,7 +416,7 @@ def clear_denominators(p):
     return poly_clean({k: v * lcm for k, v in p.items()})
 
 
-# ==================== Common monomial factor ====================
+# Common monomial factor
 
 def common_monomial(f, g):
     """Common monomial factor x^a * y^b.
@@ -453,7 +448,7 @@ def common_monomial(f, g):
     return {(0, 0): Fraction(1)}
 
 
-# ==================== 2-variable GCD ====================
+# 2-variable GCD
 
 def gcd_2var(f, g, trace=None, depth=0):
     f = poly_clean(f)
@@ -496,7 +491,7 @@ def gcd_2var(f, g, trace=None, depth=0):
     return make_primitive(mono)
 
 
-# ==================== Formatting and parsing ====================
+# Formatting and parsing
 
 def poly_str(p, var0="x", var1="y"):
     if poly_is_zero(p):
@@ -578,7 +573,7 @@ def parse_poly(s, var0="x", var1="y"):
     return poly_clean(out)
 
 
-# ==================== Test cases ====================
+# Test cases
 # All expectations verified by hand factorization.
 
 CASES = [

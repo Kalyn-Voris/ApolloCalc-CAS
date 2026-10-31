@@ -3,7 +3,7 @@
  * 性质：诊断工具，非正式测试（不改内核，只读）
  * 方法：每项 setup（solversReset + parseExpression）在计时环外；
  *       solve 计时环内逐轮 extractCoefficients 恢复系数 —— solveQuartic 会
- *       原地改写 _coeffs（降次 + 预解式，core_solvers.js:330/358），必须恢复，
+ *       原地改写 _coeffs（降次 + 预解式，core_solvers.js:323/358），必须恢复，
  *       extract 开销两版完全一致，不污染比值。
  * 输出：每项 µs/op = 7 轮中位数；128KB 全项 + 64KB 同项对照 + 比值。
  * 判读：
@@ -24,7 +24,7 @@ function median(arr) {
   return s[Math.floor(s.length / 2)];
 }
 
-/* ---- 用例表：name, 表达式, 次数, solve 入参, 计时环迭代数 ---- */
+/* 用例表：name, 表达式, 次数, solve 入参, 计时环迭代数 */
 var ITEMS = [
   { name: "reset      (solversReset only)",      poly: null,                 deg: 0, args: [],    iter: 20000 },
   { name: "extract    (extractCoefficients(2))", poly: "x^2-5x+6=0",         deg: 2, args: [],    iter: 20000, extractOnly: true },

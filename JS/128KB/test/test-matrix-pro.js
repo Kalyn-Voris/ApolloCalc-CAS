@@ -1,11 +1,11 @@
-/* ApolloCalc-CAS · JS/128KB 矩阵 pro 层（12×12）测试 —— v2.3.0 功能 2
- * 被测模块：src/core_matrix.js 的 pro* API（既有 3×3 寄存器层由红线
- * test-matrix.js 覆盖，本文件只测 12×12 pro 层与两层共存不变式）。
- * 锚点：C/128KB ac_matrix.c / ac_pro_solvers_ext.c(A4) / ac_pro_eigen.c(A5)
- * 的成文语义；特征值用闭式谱（对角阵 / 2+2cos(kπ/5) 三对角 / 相似变换谱）。
- * 运行：node test/test-matrix-pro.js   （JS/128KB 目录下）
- * 全过输出：==== matrix-pro: N pass, 0 fail ====
- */
+/* ApolloCalc · test-matrix-pro.js — 矩阵 pro 层（12×12）测试（v2.3.0 功能 2）
+
+   被测模块：src/core_matrix.js 的 pro* API（既有 3×3 寄存器层由红线
+   test-matrix.js 覆盖，本文件只测 12×12 pro 层与两层共存不变式）。
+   锚点：C/128KB ac_matrix.c / ac_pro_solvers_ext.c(A4) / ac_pro_eigen.c(A5)
+   的成文语义；特征值用闭式谱（对角阵 / 2+2cos(kπ/5) 三对角 / 相似变换谱）。
+   运行：node test/test-matrix-pro.js   （JS/128KB 目录下）
+   全过输出：==== matrix-pro: N pass, 0 fail ==== */
 "use strict";
 
 var M = require("../src/core_matrix.js");
@@ -22,7 +22,7 @@ function ok(name, cond, detail) {
   else { fail++; console.log("FAIL " + name + (detail !== undefined ? ": " + detail : "")); }
 }
 
-/* ---- 测试侧助手（测试期特权，不在被测零 GC 热路径内） ---- */
+/* 测试侧助手（测试期特权，不在被测零 GC 热路径内） */
 function setPro(rows, cols, data) {
   var i;
   for (i = 0; i < rows * cols; i++) {
@@ -88,7 +88,7 @@ function checkInverse(name, a, n, tol) {
   ok(name, good);
 }
 
-/* ==================== 一、pro 输入寄存器与两层共存不变式 ==================== */
+/* pro 输入寄存器与两层共存不变式 */
 ok("PRO_MAX_DIM=12 且旧 MAX_DIM=3", M.PRO_MAX_DIM === 12 && M.MAX_DIM === 3);
 ok("旧层拒绝 4 阶不变（红线口径）", M.setA(4, 4, 0, 1) === -1 && M.getError() === 1);
 ok("旧层池仍 3×9", M.allocCount() === 3 && M.rBuffer().length === 9);
@@ -99,7 +99,7 @@ ok("proSetA 下标越界拒绝", M.proSetA(2, 2, 4, 1) === -1 && M.getError() ==
 ok("proSetA 12×12 接受", M.proSetA(12, 12, 143, 5) === 0 && M.getError() === 0);
 ok("proGetR 越界 NaN", M.proGetR(12, 0) !== M.proGetR(12, 0));
 
-/* ==================== 二、proDet：1..3 闭式 + 4..12 部分主元 ==================== */
+/* proDet：1..3 闭式 + 4..12 部分主元 */
 setPro(1, 1, [7]);
 ok("proDet 1×1 = 7", M.proDet() === 7);
 setPro(2, 2, [1, 2, 3, 4]);
@@ -147,7 +147,7 @@ setPro(2, 3, [1, 2, 3, 4, 5, 6]);
 ok("proDet 非方阵 → NaN + err 3", M.proDet() !== M.proDet() && M.getError() === 3);
 ok("proDet 13 阶拒绝", M.proSetA(13, 13, 0, 1) === -1 || (M.proDet() !== M.proDet() && M.getError() === 1));
 
-/* ==================== 三、proInv：1..3 闭式 + 4..12 Gauss-Jordan ==================== */
+/* proInv：1..3 闭式 + 4..12 Gauss-Jordan */
 setPro(2, 2, [4, 7, 2, 6]);
 ok("proInv 2×2 旧层同式 R00=0.6", M.proInv() === 1 && approx(M.proGetR(0, 0), 0.6));
 setPro(3, 3, [2, 0, 0, 0, 4, 0, 0, 0, 8]);
@@ -176,7 +176,7 @@ ok("proInv 奇异拒绝", M.proInv() === -1 && M.getError() === 4);
 setPro(2, 3, [1, 2, 3, 4, 5, 6]);
 ok("proInv 非方阵拒绝", M.proInv() === -1 && M.getError() === 3);
 
-/* ==================== 四、proRank：矩形部分主元阶梯 ==================== */
+/* proRank：矩形部分主元阶梯 */
 setPro(12, 12, eye12);
 ok("rank(I₁₂)=12", M.proRank() === 12);
 setPro(3, 3, [0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -203,7 +203,7 @@ setPro(12, 12, rank7);
 ok("rank 12×12 带 5 零行=7", M.proRank() === 7, M.proRank());
 ok("rank 0 阶拒绝", M.proSetA(0, 0, 0, 0) === -1 || (M.proRank() === -1 && M.getError() === 1));
 
-/* ==================== 五、proLU：P·A=L·U+piv（C A4 契约） ==================== */
+/* proLU：P·A=L·U+piv（C A4 契约） */
 /* 重建 P·A 与 L·U 比对 */
 function checkLU(name, a, n, tol) {
   setPro(n, n, a);
@@ -282,7 +282,7 @@ var detTri = M.proDet();
 ok("proLU U 对角积×符号 = proDet", approx(luDet * (swapParity % 2 === 0 ? 1 : -1), detTri, 1e-8),
    luDet + "/" + detTri);
 
-/* ==================== 六、proEig：幂法 + Hotelling（C A5 语义） ==================== */
+/* proEig：幂法 + Hotelling（C A5 语义） */
 function checkEigResidual(name, a, n, tol) {
   setPro(n, n, a);
   var rc = M.proEig();
@@ -409,7 +409,7 @@ ok("eig 13 阶写入拒绝（proEig 的 −1 分支为防御位：dims 经 proSe
 ok("eigValue 越界返 0 / eigVector 越界 NaN",
    M.proEigValue(12) === 0 && M.proEigVector(0, 12) !== M.proEigVector(0, 12));
 
-/* ==================== 七、proQR：Gram-Schmidt（C ac_mat_qr 语义） ==================== */
+/* proQR：Gram-Schmidt（C ac_mat_qr 语义） */
 function checkQR(name, a, m, n, tol) {
   setPro(m, n, a);
   if (M.proQR() !== 1) { ok(name, false, "proQR rc=" + M.getError()); return; }
@@ -468,7 +468,7 @@ ok("QR I₁₂ → Q=I R=I", M.proQR() === 1 && M.proQRGetQ(5, 5) === 1 && M.pro
    M.proQRGetQ(0, 1) === 0 && M.proGetR(1, 0) === 0);
 ok("QR 13 阶写入拒绝", M.proSetA(13, 1, 0, 1) === -1 && M.getError() === 1);
 
-/* ==================== 八、零 GC 与复位 ==================== */
+/* 零 GC 与复位 */
 var allocBefore = M.proAllocCount();
 var hi;
 for (hi = 0; hi < 2000; hi++) {

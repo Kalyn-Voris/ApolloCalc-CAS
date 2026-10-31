@@ -1,33 +1,28 @@
-﻿# ============================================================
-# ApolloCalc-CAS · C/128KB-ProTEXT/verify.ps1
-# ------------------------------------------------------------
-# 【职责 / Responsibility】
-#   Pro v2.1.0 的**可重复验收脚本**。一条命令跑完全部硬指标：
+﻿# ApolloCalc · verify.ps1 — ProTEXT 可重复验收脚本
 #
-#       1) 三份产物构建（pro_runner / pro_kernel / degraded）
-#       2) .bss 三层账本精确比对（42608 / 42640 / 39408 / 38672）
-#       3) 测试套件执行（内嵌测试全量，0 失败）
-#       4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 / SP / BD / RAT / ODE /
-#          SCHUR / SQFREE 覆盖度
-#       5) 上游 C/128KB 零改动（git status + git diff 双证）
-#       6) 负向编译检查（AC_PRO=2 / AC_PRO=0 无 DEGRADED 必须编译失败）
-#       7) 关键符号唯一性（拦截层没有制造重复定义）
+# 一条命令跑完全部硬指标：
+#   1) 三份产物构建（pro_runner / pro_kernel / degraded）
+#   2) .bss 三层账本精确比对（42608 / 42640 / 39408 / 38672）
+#   3) 测试套件执行（内嵌测试全量，0 失败）
+#   4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 / SP / BD / RAT / ODE /
+#      SCHUR / SQFREE 覆盖度
+#   5) 上游 C/128KB 零改动（git status + git diff 双证）
+#   6) 负向编译检查（AC_PRO=2 / AC_PRO=0 无 DEGRADED 必须编译失败）
+#   7) 关键符号唯一性（拦截层没有制造重复定义）
 #
-# 【为什么不用 make 而是 PowerShell】
-#   .bss 门禁必须解析 `size` 的输出并做数值比较，还要跑二进制读 stdout。
-#   make 的 $(if)/$(filter) 能做字符串相等，但做不了「跑程序看退出码」，
-#   也没有可读的失败诊断。Makefile 里保留 bss-check / degraded-check 作为
-#   快速门禁，本脚本是发版前的完整验收。
+# 为什么不用 make 而是 PowerShell：.bss 门禁必须解析 `size` 的输出并做数值
+# 比较，还要跑二进制读 stdout。make 的 $(if)/$(filter) 能做字符串相等，但做
+# 不了「跑程序看退出码」，也没有可读的失败诊断。Makefile 里保留 bss-check /
+# degraded-check 作为快速门禁，本脚本是发版前的完整验收。
 #
-# 【沙箱说明 / Sandbox note】
-#   某些受限环境里 C/128KB-ProTEXT/ 自身只读。本脚本把产物输出到
-#   -OutDir（默认 ./.verify-out，被 .gitignore 覆盖），源文件只读。
+# 沙箱：某些受限环境里 C/128KB-ProTEXT/ 自身只读。本脚本把产物输出到
+# -OutDir（默认 ./.verify-out，被 .gitignore 覆盖），源文件只读。
 #
-# 用法：
+# 用法（pwsh 与 Windows PowerShell 均可）：
 #   pwsh -NoProfile -File C/128KB-ProTEXT/verify.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File C/128KB-ProTEXT/verify.ps1
 #   pwsh -NoProfile -File C/128KB-ProTEXT/verify.ps1 -OutDir D:/tmp/pro
 # 退出码：0 = 全部通过；1 = 有失败项。
-# ============================================================
 
 param(
     [string]$OutDir = ''

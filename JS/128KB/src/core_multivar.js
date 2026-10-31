@@ -1,18 +1,16 @@
-/* ApolloCalc-CAS · JS/128KB · core_multivar.js
- * 二元稀疏多项式（x, y）+ 高阶三角/复数补充，自包含。
- *
- * exps 编码与 C 版 ac_pro_term_t 一致：低 4 bit = y，高 4 bit = x；
- * MAX_TOTAL_DEG = 6 时不同单项式正好 N(6) = C(8,2) = 28。
- *
- * 不变式（_normalizeInPlace 保证）：exps 降序、零系数不存、同 exps 唯一。
- * 零 GC：6 个 TypedArray 加载期一次分配，之后求值/解析/运算/格式化全路径不再分配。
- * 槽位：二元运算先算进 _tmpC/_tmpE 再提交 dst，所以 dst 可与 a/b 同槽。
- * 错误码（getLastError）：0 OK / 1 次数溢出 / 2 语法错 / 3 槽号非法 / 4 项表溢出。
- *
- * 导出三通道（v2.0.0 内核拼接起生效）：
- *   Node require（module.exports 赋值）/ 浏览器 <script>（顶层 var 即全局）/
- *   内核拼接与 ESM（var 进模块作用域，export 块引用 ApolloMultivar）。
- *   三通道互斥触发：typeof module 守卫在 ESM/浏览器经典脚本下短路。
+/* ApolloCalc · core_multivar.js — 二元稀疏多项式（x, y）+ 高阶三角/复数补充，自包含。
+   exps 编码与 C 版 ac_pro_term_t 一致：低 4 bit = y，高 4 bit = x；
+   MAX_TOTAL_DEG = 6 时不同单项式正好 N(6) = C(8,2) = 28。
+
+   不变式（_normalizeInPlace 保证）：exps 降序、零系数不存、同 exps 唯一。
+   零 GC：6 个 TypedArray 加载期一次分配，之后求值/解析/运算/格式化全路径不再分配。
+   槽位：二元运算先算进 _tmpC/_tmpE 再提交 dst，所以 dst 可与 a/b 同槽。
+   错误码（getLastError）：0 OK / 1 次数溢出 / 2 语法错 / 3 槽号非法 / 4 项表溢出。
+
+   导出三通道（v2.0.0 内核拼接起生效）：
+     Node require（module.exports 赋值）/ 浏览器 <script>（顶层 var 即全局）/
+     内核拼接与 ESM（var 进模块作用域，export 块引用 ApolloMultivar）。
+     三通道互斥触发：typeof module 守卫在 ESM/浏览器经典脚本下短路。
  */
 
 var ApolloMultivar = (function () {
@@ -665,7 +663,7 @@ var ApolloMultivar = (function () {
 
   function neg(a, dst) { return scale(a, -1, dst); }
 
-  /* ==================== 多变量符号求导（v2.0.0，对齐 C 侧 ac_pro_diff_multi）====================
+  /* 多变量符号求导（v2.0.0，对齐 C 侧 ac_pro_diff_multi）
    * 逐项幂法则：d/dx(c·x^a·y^b) = (c·a)·x^(a-1)·y^b，a === 0 的项整体丢弃（d/dy 同理）。
    * 结果总次数严格下降 → 不会触发项表溢出；系数乘指数 ≤ 6 倍，double 无溢出。
    * 有序性保持：被求导项 exps 同减 1<<位宽（保序保唯一），未求导项全部丢弃，

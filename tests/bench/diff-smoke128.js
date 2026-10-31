@@ -1,15 +1,15 @@
-/* ============================================================
- * ApolloCalc-CAS · diff-smoke128.js — C 128KB vs JS 128KB 冒烟比对（第 11 轮）
- * 读 tests/bench/c128-smoke.csv 与 js128-smoke.csv（同一组用例、同一格式），
- * 按 stage 分派列、按 name 对齐逐行比对：
- *   solve:    err、count 精确相等；12 个数值 |差| ≤ 1e-9
- *   precheck: err 精确相等
- *   exact:    err、valid 与五分量（rat,rad_num,rad,den,exp）精确相等
- * 注意：精确形式为五分量（12 列），与 64KB 版 diff-smoke.js 的三分量（8 列）
- *   不同，故本脚本独立；不要与 diff-smoke.js 混用。
- * 生成 tests/bench/SMOKE-DIFF-128.md；全部通过退出码 0，否则 1。
- * 运行：node tests/bench/diff-smoke128.js
- * ============================================================ */
+/* ApolloCalc · diff-smoke128.js — C 128KB vs JS 128KB 冒烟比对
+
+   读 tests/bench/c128-smoke.csv 与 js128-smoke.csv（同一组用例、同一格式），
+   按 stage 分派列、按 name 对齐逐行比对：
+     solve:    err、count 精确相等；12 个数值 |差| ≤ 1e-9
+     precheck: err 精确相等
+     exact:    err、valid 与五分量（rat,rad_num,rad,den,exp）精确相等
+   注意：精确形式为五分量（12 列），与 64KB 版 diff-smoke.js 的三分量（8 列）
+     不同，故本脚本独立；不要与 diff-smoke.js 混用。
+   生成 tests/bench/SMOKE-DIFF-128.md；全部通过退出码 0，否则 1。
+   运行：node tests/bench/diff-smoke128.js
+*/
 "use strict";
 const fs = require("fs");
 const path = require("path");

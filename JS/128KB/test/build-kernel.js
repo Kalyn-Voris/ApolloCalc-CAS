@@ -1,38 +1,32 @@
-/* ============================================================
- * build-kernel.js — ApolloCalc-CAS JS/128KB 内核拼接脚本（构建工具，非设备交付物）
- * 运行：node test/build-kernel.js            （JS/128KB 目录下，Node 环境）→ 可读产物 + 全量校验
- *       node test/build-kernel.js --minify   → 压缩产物（≤128KB 物理线）+ 全量校验
- *
- * 功能：
- *   1. 按序读取 src/ 下 core 文件（基线 12 个，v2.3.0 起追加 core_numtheory.js / core_ode.js 等），用 \n 拼接
- *   2. 末尾追加 export 块（index.js 唯一访问点）
- *   3. 写出 ../src/core_kernel.js
- *      · 默认（无参）：可读产物，行为与历史版本完全一致
- *      · --minify：先压缩再写。压缩引擎二选一（运行时探测）：
- *          a) terser 单遍全模块（首选）：内核体与 export 块拼成完整 ES Module 一次压缩，
- *             mangle.toplevel=true 把全部顶层名压成 1-2 字符；export 对象的属性名是
- *             UI 层契约（mangle.properties 默认关闭），原样保留。回归策略随之调整：
- *             83 项 eval 回归跑在可读体上（顶层名可读，覆盖内部名直引），43 项 ESM
- *             冒烟跑在最终压缩产物上（覆盖导出链路）；603 门禁中 test-complex 亦经
- *             导出接口 import 产物，压缩产物行为被三重夹住。
- *          b) 内置词法剥离器（terser require 失败或压缩异常时回退）：单遍逐态扫描
- *             字符串/模板串（含 ${} 嵌套代码态）/正则字面量（prev-token 启发式）/注释，
- *             绝不盲目正则去注释；token 文本零改写，原换行位置保留 \n（ASI 语义不变）。
- *        两条引擎均保留顶层名与 export default 契约（对象属性名原样），因此
- *        下方 eval 回归对压缩体同样全量执行；压缩产物只经本入口（全量校验）产出。
- *   4. node --check 语法校验：默认路径先直检 .js、旧 Node 回退 .mjs 副本；
- *      --minify 路径一律写 .mjs 临时副本按 ES Module 解析校验压缩产物
- *   5. eval() 拼接体（不含 export 块——export 仅 ESM 合法，eval 中会语法错误），
- *      复用 _test_evaluator.js(41 项) + _test_solvers.js(42 项) 断言逻辑，共 83 项
- *   6. 静态扫描 export 块引用的 78 个标识符（仅可读路径）+ eval 运行时存在性复核；
- *      --minify 跳过文本正则静态扫描（terser 输出排版使其不可靠），改以运行时复核
- *      覆盖，检查名单另含测试代码直接引用的 4 个内部名（_coeffs/_rpnLen/_evalSp/_evalResult）
- *   7. 动态 import() 生成的 core_kernel.js（ESM/严格模式），走一遍导出接口全链路冒烟：
- *      严格模式 ESM 中 require 未定义，冒烟跑通即证明内核无 require 依赖（浏览器通道）
- *   8. --minify 末尾报告最终字节数并校验 128KB 物理文件线（131072 B），超线即失败
- *
- * 全部通过输出：BUILD OK, all tests passed；否则输出失败详情并退出码 1
- * ============================================================ */
+/* ApolloCalc · build-kernel.js — JS/128KB 内核拼接脚本（构建工具，非设备交付物）
+
+   运行：node test/build-kernel.js            （JS/128KB 目录下，Node 环境）→ 可读产物 + 全量校验
+         node test/build-kernel.js --minify   → 压缩产物（≤128KB 物理线）+ 全量校验
+
+   按序读取 src/ 下 core 文件（基线 12 个，v2.3.0 起追加 core_numtheory.js / core_ode.js 等），用 \n
+   拼接，末尾追加 export 块（index.js 唯一访问点），写出 ../src/core_kernel.js。默认（无参）产出可读
+   产物，行为与历史版本完全一致。--minify 先压缩再写，压缩引擎运行时探测二选一：terser 单遍全模块
+   （首选）把内核体与 export 块拼成完整 ES Module 一次压缩，mangle.toplevel=true 把全部顶层名压成
+   1-2 字符，export 对象的属性名是 UI 层契约（mangle.properties 默认关闭）原样保留；内置词法剥离器
+   （terser require 失败或压缩异常时回退）单遍逐态扫描字符串/模板串（含 ${} 嵌套代码态）/正则字面量
+   （prev-token 启发式）/注释，绝不盲目正则去注释，token 文本零改写，原换行位置保留 \n（ASI 语义
+   不变）。两条引擎均保留顶层名与 export default 契约，因此 eval 回归对压缩体同样全量执行；压缩产物
+   只经本入口（全量校验）产出。
+
+   回归策略随之调整：83 项 eval 回归跑在可读体上（顶层名可读，覆盖内部名直引），43 项 ESM 冒烟跑在
+   最终压缩产物上（覆盖导出链路）；603 门禁中 test-complex 亦经导出接口 import 产物，压缩产物行为被
+   三重夹住。node --check 语法校验：默认路径先直检 .js、旧 Node 回退 .mjs 副本，--minify 路径一律写
+   .mjs 临时副本按 ES Module 解析校验压缩产物。eval() 只吃拼接体，不含 export 块——export 仅 ESM
+   合法，eval 中会语法错误；复用的 _test_evaluator.js(41 项) + _test_solvers.js(42 项) 断言逻辑共 83
+   项。静态扫描 export 块引用的 78 个标识符（仅可读路径）加 eval 运行时存在性复核；--minify 跳过文本
+   正则静态扫描（terser 输出排版使其不可靠），改以运行时复核覆盖，检查名单另含测试代码直接引用的
+   4 个内部名（_coeffs/_rpnLen/_evalSp/_evalResult）。
+
+   最后动态 import() 生成的 core_kernel.js（ESM/严格模式），走一遍导出接口全链路冒烟：严格模式 ESM
+   中 require 未定义，冒烟跑通即证明内核无 require 依赖（浏览器通道）。--minify 末尾报告最终字节数并
+   校验 128KB 物理文件线（131072 B），超线即失败。
+
+   全部通过输出：BUILD OK, all tests passed；否则输出失败详情并退出码 1 */
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
@@ -214,7 +208,7 @@ var MIN_TEST_ONLY_NAMES = ["_coeffs", "_rpnLen", "_evalSp", "_evalResult"];
 
 var MINIFY = process.argv.indexOf("--minify") >= 0;
 /* MIN_HEADER 精简版：必须保留 "MINIFIED BUILD" 字样（无参构建靠它识别压缩产物防误覆盖），
- * 生成方式与禁改说明并入同一短句，压缩产物里每字节都算钱 */
+ 生成方式与禁改说明并入同一短句，压缩产物里每字节都算钱 */
 var MIN_HEADER = "/* ApolloCalc core_kernel.js v2.2.0 MINIFIED BUILD by build-kernel.js --minify,禁止手动编辑 */\n";
 var BYTE_BUDGET = 131072; /* 128KiB 物理文件线 */
 
@@ -223,7 +217,7 @@ function die(msg) {
   process.exit(1);
 }
 
-/* ---- [1/5] 按序读取 + \n 拼接 + 追加 export 块 ---- */
+/* [1/5] 按序读取 + \n 拼接 + 追加 export 块 */
 var parts = [];
 for (var fi = 0; fi < FILES.length; fi++) {
   var srcPath = path.join(COMMON, FILES[fi]);
@@ -240,9 +234,9 @@ if (MINIFY) {
   proceed(kernelBody, kernelBody + "\n" + EXPORT_BLOCK + "\n", false, "");
 }
 
-/* ---- --minify 压缩管线调度：terser 两段式优先，require 失败或压缩异常回退内置剥离器 ----
- * 任何回退路径都必须先过 proceed 内的全量校验（语法/eval 83 项/ESM 冒烟/字节预算）才允许
- * 以 BUILD OK 收尾——不存在无校验写压缩产物的旁路。 */
+/* --minify 压缩管线调度：terser 两段式优先，require 失败或压缩异常回退内置剥离器
+ 任何回退路径都必须先过 proceed 内的全量校验（语法/eval 83 项/ESM 冒烟/字节预算）才允许
+ 以 BUILD OK 收尾——不存在无校验写压缩产物的旁路。 */
 function runMinify() {
   try {
     startTerser().then(function (r) {
@@ -253,7 +247,7 @@ function runMinify() {
       };
     }).then(function (r) {
       /* isMin 路径：kernelBody 形参仍传可读体（eval 回归依赖可读顶层名），
-       * kernelFull 为 MIN_HEADER + 压缩全模块（body+export 已在压缩阶段合一）。 */
+       kernelFull 为 MIN_HEADER + 压缩全模块（body+export 已在压缩阶段合一）。 */
       proceed(kernelBody, MIN_HEADER + r.code + "\n", true, r.engine);
     }).catch(function (eMin) {
       die("BUILD FAILED: 压缩阶段异常:\n" + (eMin && eMin.stack ? eMin.stack : String(eMin)));
@@ -264,9 +258,9 @@ function runMinify() {
 }
 
 /* terser 单遍全模块压缩；不可用/失败返回 Promise<null>（调用方回退剥离器）。
- * body 与 export 块拼成完整 ES Module 一次压缩：mangle.toplevel=true 改写全部顶层
- * 声明名与 export 块内的自由引用（两侧同映射，一致性由单遍保证）；export 对象的
- * 属性名不走 mangle.properties，UI 层契约原样。 */
+ body 与 export 块拼成完整 ES Module 一次压缩：mangle.toplevel=true 改写全部顶层
+ 声明名与 export 块内的自由引用（两侧同映射，一致性由单遍保证）；export 对象的
+ 属性名不走 mangle.properties，UI 层契约原样。 */
 function startTerser() {
   var terser = null;
   try { terser = require("terser"); } catch (eTerser) { terser = null; }
@@ -291,14 +285,14 @@ function startTerser() {
   });
 }
 
-/* ---- 内置词法级压缩器（terser 不可用时的回退） ----
- * 单遍逐态扫描：注释/字符串/模板串（含 ${} 插值内回到代码态）/正则字面量（经典
- * prev-token 启发式：return/typeof/new 等后允许，标识符/数字/字符串/)/] 后视为除号）。
- * 安全性质：① token 文本逐字保留（含误判为正则的片段原样拷贝，不吞引用）；
- * ② 原换行位置一律输出一个 \n —— ASI/restricted production 语义零改动；
- * ③ 行内空白仅在相邻 token 拼接可能成词/合字成运算符（++ => <= 等）时保留一个空格；
- * ④ 未闭合字符串/模板/正则（允许位）/块注释一律 throw，由调用方 fail-fast。
- * 顶层名零改写，export default 契约（对象属性名）原样。 */
+/* 内置词法级压缩器（terser 不可用时的回退）
+ 单遍逐态扫描：注释/字符串/模板串（含 ${} 插值内回到代码态）/正则字面量（经典
+ prev-token 启发式：return/typeof/new 等后允许，标识符/数字/字符串/)/] 后视为除号）。
+ 安全性质：token 文本逐字保留（含误判为正则的片段原样拷贝，不吞引用）；原换行位置
+ 一律输出一个 \n，ASI/restricted production 语义零改动；行内空白仅在相邻 token 拼接
+ 可能成词/合字成运算符（++ => <= 等）时保留一个空格；未闭合字符串/模板/正则
+ （允许位）/块注释一律 throw，由调用方 fail-fast。
+ 顶层名零改写，export default 契约（对象属性名）原样。 */
 function stripMinify(src) {
   var RE_AFTER_KW = { return: 1, typeof: 1, instanceof: 1, in: 1, of: 1, new: 1, delete: 1, void: 1, throw: 1, case: 1, do: 1, else: 1, yield: 1, await: 1 };
   var THREE = { ">>>": 1, "...": 1, "===": 1, "!==": 1, "**=": 1, "<<=": 1, ">>=": 1, "&&=": 1, "||=": 1, "??=": 1 };
@@ -414,13 +408,13 @@ function stripMinify(src) {
   return out;
 }
 
-/* ---- 共享构建主流程：写出 → 语法校验 → 静态扫描 → eval+运行时复核+83 项回归
- *      → （可选）微基准 → ESM 严格模式冒烟 → 字节数报告（--minify）→ BUILD OK ----
- * kernelBody 形参恒为可读体（eval 回归依赖可读顶层名）；isMin=true 时 kernelFull
- * 为 MIN_HEADER + terser 压缩全模块（行为等价性由 terser 语义 + 43 项 ESM 冒烟 +
- * 603 门禁的产物 import 三重夹住）。 */
+/* 共享构建主流程：写出 → 语法校验 → 静态扫描 → eval+运行时复核+83 项回归
+      → （可选）微基准 → ESM 严格模式冒烟 → 字节数报告（--minify）→ BUILD OK
+ kernelBody 形参恒为可读体（eval 回归依赖可读顶层名）；isMin=true 时 kernelFull
+ 为 MIN_HEADER + terser 压缩全模块（行为等价性由 terser 语义 + 43 项 ESM 冒烟 +
+ 603 门禁的产物 import 三重夹住）。 */
 function proceed(kernelBody, kernelFull, isMin, engine) {
-  /* ---- 写出（普通构建若将覆盖压缩产物则先警示；压缩产物只经本全量校验路径产出） ---- */
+  /* 写出（普通构建若将覆盖压缩产物则先警示；压缩产物只经本全量校验路径产出） */
   if (!isMin) {
     try {
       if (fs.readFileSync(OUT, "utf8").slice(0, 200).indexOf("MINIFIED BUILD") >= 0) {
@@ -432,7 +426,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   console.log("[1/5] 已拼接 " + FILES.length + " 个源文件 -> " + OUT + " (" + Buffer.byteLength(kernelFull, "utf8") + " bytes)" +
               (isMin ? "，压缩引擎: " + engine : ""));
 
-  /* ---- [2/5] 语法校验 ---- */
+  /* [2/5] 语法校验 */
   if (isMin) {
     /* 压缩产物一律经 .mjs 临时副本按 ES Module 解析校验（确定性，不依赖 Node 对 .js 的模块探测） */
     var tmpMjsMin = path.join(os.tmpdir(), "core_kernel_minify_syntax_check.mjs");
@@ -466,8 +460,8 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     if (!syntaxOK) { die("BUILD FAILED: node --check 语法校验未通过\n" + syntaxDetail); }
   }
 
-  /* ---- [3/5] export 块引用标识符声明扫描（kernelBody 恒为可读体，两路径都跑；
-   *      文本正则匹配 var/function/逗号声明符三种形态） ---- */
+  /* [3/5] export 块引用标识符声明扫描（kernelBody 恒为可读体，两路径都跑；
+        文本正则匹配 var/function/逗号声明符三种形态） */
   {
     var undeclaredStatic = [];
     for (var si = 0; si < EXPORTED_NAMES.length; si++) {
@@ -480,10 +474,10 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     console.log("[3/5] 静态声明扫描 " + EXPORTED_NAMES.length + "/" + EXPORTED_NAMES.length + " 通过（可读体）");
   }
 
-  /* ---- [4/5] eval 可读体 + 运行时存在性复核 + 83 项测试回归 ----
-   * 直接 eval：var/function 声明进入本函数作用域，测试代码同作用域访问。
-   * 两路径统一跑可读体（压缩产物改由 ESM 冒烟在导出接口上覆盖）；
-   * --minify 时运行时名单追加测试直接引用的 4 个内部名。 */
+  /* [4/5] eval 可读体 + 运行时存在性复核 + 83 项测试回归
+   直接 eval：var/function 声明进入本函数作用域，测试代码同作用域访问。
+   两路径统一跑可读体（压缩产物改由 ESM 冒烟在导出接口上覆盖）；
+   --minify 时运行时名单追加测试直接引用的 4 个内部名。 */
   eval(kernelBody);
 
   var checkNames = isMin ? EXPORTED_NAMES.concat(MIN_TEST_ONLY_NAMES) : EXPORTED_NAMES;
@@ -501,10 +495,10 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     else { fail++; console.log("FAIL " + name + " got=" + got + " want=" + want + " err=" + _evalError); }
   }
 
-  /* ========== 以下断言逻辑复用自 _test_evaluator.js（41 项） ========== */
+  /* 以下断言逻辑复用自 _test_evaluator.js（41 项） */
   angleMode = "RAD";
 
-  /* ---- 基础表达式 ---- */
+  /* 基础表达式 */
   check("2+3*4", (parseExpression("2+3*4"), evalExpressionAt(0)), 14);
   check("(2+3)*4", (parseExpression("(2+3)*4"), evalExpressionAt(0)), 20);
   check("2^3^2", (parseExpression("2^3^2"), evalExpressionAt(0)), 512);
@@ -523,7 +517,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   check("3x^2 @x=-2", (parseExpression("3x^2"), evalExpressionAt(-2)), 12);
   check("2x^2-8 @x=3", (parseExpression("2x^2-8"), evalExpressionAt(3)), 10);
 
-  /* ---- 错误码 ---- */
+  /* 错误码 */
   parseExpression("1/0"); evalExpressionAt(0);
   console.log(_evalError === 1 ? "PASS 1/0 err=1" : "FAIL 1/0 err=" + _evalError), _evalError === 1 ? pass++ : fail++;
   parseExpression("sqrt(-1)"); evalExpressionAt(0);
@@ -532,13 +526,13 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   if (_evalError === 2 || _evalError === 3) { pass++; }  /* ln(0)→-Inf，按溢出/域错误均视为失败 */
   else { fail++; console.log("FAIL ln(0) err=" + _evalError); }
 
-  /* ---- 方程做差 ---- */
+  /* 方程做差 */
   check("eq x^2-4=0 @x=2", (parseExpression("x^2-4=0"), evalEquationAt(2)), 0);
   check("eq x^2-4=0 @x=3", (parseExpression("x^2-4=0"), evalEquationAt(3)), 5);
-  check("eq 2x+1=x+5 @x=1", (parseExpression("2x+1=x+5"), evalEquationAt(1)), -3);  /* 3-6=-3 */
+    check("eq 2x+1=x+5 @x=1", (parseExpression("2x+1=x+5"), evalEquationAt(1)), -3);
   check("eq 2x+1=x+5 @x=4", (parseExpression("2x+1=x+5"), evalEquationAt(4)), 0);
 
-  /* ---- 系数提取 ---- */
+  /* 系数提取 */
   parseExpression("x^2-5x+6=0");
   var rc = extractCoefficients(2);
   check("coeff c0", _coeffs[0], 6, 1e-7);
@@ -573,7 +567,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   check("x^2=2x+3 c1", _coeffs[1], -2, 1e-7);
   check("x^2=2x+3 c2", _coeffs[2], 1, 1e-7);
 
-  /* ---- 复位 ---- */
+  /* 复位 */
   evaluatorReset();
   if (_rpnLen === 0 && _evalSp === 0 && _evalError === 0 && _evalResult === 0 && _coeffs[3] === 0) { pass++; }
   else { fail++; console.log("FAIL reset"); }
@@ -581,7 +575,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   var evalPass = pass, evalFail = fail;
   console.log("---- evaluator: " + evalPass + " passed, " + evalFail + " failed ----");
 
-  /* ========== 以下断言逻辑复用自 _test_solvers.js（42 项） ========== */
+  /* 以下断言逻辑复用自 _test_solvers.js（42 项） */
   /* 解方程辅助：parse → extractCoefficients(deg) → solveXxx() */
   function solvePoly(src, deg) {
     solversReset();
@@ -636,7 +630,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
 
   angleMode = "RAD";
 
-  /* ==================== 模块一：二次 ==================== */
+  /* 模块一：二次 */
   solvePoly("x^2-5x+6=0", 2);
   checkRoots("quad (x-3)(x-2)", [3, 2], 1e-9);
   if (_rootExactValid[0] === 1 && _rootExactValid[1] === 1 &&
@@ -679,7 +673,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   if (_rootExactValid[0] === 1 && _rootExactValid[1] === 1) { pass++; }  /* D=0 仍精确 */
   else { fail++; console.log("FAIL double root exact validity"); }
 
-  /* ==================== 模块二：三次 ==================== */
+  /* 模块二：三次 */
   solvePoly("x^3-6x^2+11x-6=0", 3);
   checkRoots("cubic (x-1)(x-2)(x-3) ratroot", [1, 2, 3], 1e-9);
   /* 有理根快路径：三个整数根全部带精确形式（此前三次方程一律无精确形式） */
@@ -703,7 +697,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   solvePoly("2x^3-x-1=0", 3);
   checkRootsC("cubic 2x^3-x-1", [[1, 0], [-0.5, 0.5], [-0.5, -0.5]], 1e-9);
 
-  /* ==================== 模块三：四次 ==================== */
+  /* 模块三：四次 */
   solvePoly("x^4-5x^2+4=0", 4);
   checkRoots("quartic biquad (x^2-1)(x^2-4)", [1, -1, 2, -2], 1e-9);
   /* 有理根快路径：四个整数根全部带精确形式 */
@@ -731,14 +725,14 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   solvePoly("2x^4-x^3-14x^2-5x+6=0", 4);
   checkRoots("quartic frac leading (0.5,3,-2,-1)", [0.5, 3, -2, -1], 1e-7);
 
-  /* ==================== 降次链：四次 a=0 → 三次委托 ==================== */
+  /* 降次链：四次 a=0 → 三次委托 */
   solversReset();
   parseExpression("x^3-6x^2+11x-6=0");
   extractCoefficients(3);
   solveQuartic();
   checkRoots("quartic degenerate → cubic", [1, 2, 3], 1e-9);
 
-  /* ==================== 模块四：线性方程组 ==================== */
+  /* 模块四：线性方程组 */
   solversReset();
   matrixPool[0] = 2; matrixPool[1] = 3; matrixPool[2] = 8;
   matrixPool[3] = 1; matrixPool[4] = -1; matrixPool[5] = -1;
@@ -762,7 +756,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   if (_solveError === 3 && _rootCount === 0) { pass++; }
   else { fail++; console.log("FAIL lin singular: err=" + _solveError + " count=" + _rootCount); }
 
-  /* ==================== 模块五：残差回验 ==================== */
+  /* 模块五：残差回验 */
   solvePoly("x^2-5x+6=0", 2);
   verifyRoots();
   if (_residualMax < 1e-6) { pass++; }
@@ -781,7 +775,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   if (_residualMax === 0) { pass++; }
   else { fail++; console.log("FAIL residual complex skip: " + _residualMax); }
 
-  /* ==================== 模块六：门禁（128KB 阈值：深度≤6 函数≤4 变量≤10） ==================== */
+  /* 模块六：门禁（128KB 阈值：深度≤6 函数≤4 变量≤10） */
   solversReset();
   parseExpression("(((((x)))))");                                  /* 5 层：通过 */
   if (preCheckExpression() === 0) { pass++; }
@@ -824,7 +818,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   if (checkMemoryWatermark() === 0) { pass++; }
   else { fail++; console.log("FAIL watermark baseline: used>96KB?"); }
 
-  /* ==================== 模块七：复位 ==================== */
+  /* 模块七：复位 */
   solvePoly("x^2-5x+6=0", 2);
   solversReset();
   if (_rootCount === 0 && _solveError === 0 && _residualMax === 0 &&
@@ -845,9 +839,9 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
   }
   console.log("[4/5] eval 拼接体回归: evaluator " + evalPass + "/41 + solvers " + solverPass + "/42 = " + pass + "/83 全部通过");
 
-  /* ---- 可选微基准（--bench）：parseExpression 性能对比 ----
-   * 用途：核对 .length 自跟随池方案相对硬编码常量无显著解析开销；
-   * 若此处耗时比常量方案慢超过 20%，再考虑改用文件顶部常量 */
+  /* 可选微基准（--bench）：parseExpression 性能对比
+   用途：核对 .length 自跟随池方案相对硬编码常量无显著解析开销；
+   若此处耗时比常量方案慢超过 20%，再考虑改用文件顶部常量 */
   if (process.argv.indexOf("--bench") >= 0) {
     var N = 10000;
     var src = "x^2-5x+6=0";
@@ -859,11 +853,11 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     console.log("[bench] parseExpression x" + N + " = " + (t1 - t0) + "ms");
   }
 
-  /* ---- [5/5] 动态 import() 生成的 core_kernel.js（ESM/严格模式）+ 导出接口全链路冒烟 ----
-   * DevEco 工具链（babel/webpack 处理 harmony 模块）会以严格模式执行内核，
-   * 此步提前暴露任何仅松弛模式下成立的写法，并验证 export 块 getter 接线。
-   * --minify 时此步对象即压缩产物：严格模式 ESM 中 require 未定义，冒烟跑通即证明
-   * 内核无 require 依赖（浏览器 <script type=module> 通道可用）。 */
+  /* [5/5] 动态 import() 生成的 core_kernel.js（ESM/严格模式）+ 导出接口全链路冒烟
+   DevEco 工具链（babel/webpack 处理 harmony 模块）会以严格模式执行内核，
+   此步提前暴露任何仅松弛模式下成立的写法，并验证 export 块 getter 接线。
+   --minify 时此步对象即压缩产物：严格模式 ESM 中 require 未定义，冒烟跑通即证明
+   内核无 require 依赖（浏览器 <script type=module> 通道可用）。 */
   var esmProblems = [];
   function ek(name, cond) { if (!cond) { esmProblems.push(name); } }
 
@@ -955,7 +949,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     ek("siNormalize 0 无效+空串", k.siNormalize(0) === 0 && k.getSiValid() === 0 && k.siToString() === "");
     ek("baseReset 经接口生效", (k.baseReset(), k.getSiValid() === 0 && k.getBaseLen() === 0));
 
-    /* ---- v2.0.0：自包含三模块接线（multivar / matrix / special） ---- */
+    /* v2.0.0：自包含三模块接线（multivar / matrix / special） */
     ek("symboltree 命名空间接线", typeof k.symboltree === "object" &&
       typeof k.symboltree.build === "function" && typeof k.symboltree.implicitDyDx === "function");
     k.symboltree.build("x^2");

@@ -1,35 +1,22 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/test/test_pro_integrate_multi.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   多变量多项式积分（ac_pro_integrate_multi）的单元测试：10 项测试。
- *
- * 【接口约定 / Interface】
- *   与 test_pro_multi.c 同款：本文件定义自己的 pro_tally_t / pcheck，
- *   测试函数返回 pro_tally_t（checks / failed），runner 只汇总。
- *   本文件**不声明任何静态对象**（函数不占 .bss），链接进 runner 后
- *   runner 口径的 .bss 增量仍是 0。
- *
- * 【错误通道选型 / Error channel】
- *   ac_pro_integrate_multi 的返回契约：1 = 成功；-1 = 一般错误
- *   （粗因看 g_solve_error）；AC_PRO_MVI_ENONEXACT(-6) = 非精确整除
- *   （直接作为返回值，g_solve_error 同时为 2）。校验按此逐条核对
- *   两个通道（见 ac_pro.h 的「返回 / Error channel」注释）。
- *
- * 【与任务卡的两处算术修正 / Deviations from the task card】
- *   任务卡的两条用例在「精确整除」硬约束下算错了被积函数，这里
- *   修正系数、保留任务卡期望的输出串：
- *     ① 任务卡：∫(x*y^2)dy == "x*y^3"。但 ∫x·y²dy = x·y³/3，
- *        1 % 3 != 0，按整除约束必须拒绝 —— 期望串只在被积函数为
- *        3*x*y^2 时成立（3/3 = 1）。修正为 ∫(3*x*y^2)dy == "x*y^3"，
- *        保留「dy 积分 happy path」的覆盖意图。
- *     ② 任务卡：∫(2*x^3)dx == "x^4"（整除 happy path）。但
- *        ∫2x³dx = x⁴/2，2 % 4 != 0 且无整系数原函数。修正为
- *        ∫(4*x^3)dx == "x^4"（4/4 = 1），保留任务卡的期望串与
- *        「整除通过」的覆盖意图。
- *   任务卡自己的负向用例 ∫(x*y^2)dx（1/2 非整）与上述修正自洽：
- *   它验证的正是 ①② 修正掉的那类输入。
- * ============================================================ */
+/* ApolloCalc · test_pro_integrate_multi.c — 多变量多项式积分（ac_pro_integrate_multi）的单元测试，10 项测试
+
+   接口与 test_pro_multi.c 同款：本文件定义自己的 pro_tally_t / pcheck，测试函数
+   返回 pro_tally_t（checks / failed），runner 只汇总。本文件不声明任何静态对象
+   （函数不占 .bss），链接进 runner 后 runner 口径的 .bss 增量仍是 0。
+
+   错误通道：ac_pro_integrate_multi 的返回契约是 1 = 成功；-1 = 一般错误（粗因看
+   g_solve_error）；AC_PRO_MVI_ENONEXACT(-6) = 非精确整除（直接作为返回值，
+   g_solve_error 同时为 2）。校验按此逐条核对两个通道（见 ac_pro.h 的「返回 /
+   Error channel」注释）。
+
+   任务卡的两条用例在「精确整除」硬约束下算错了被积函数，这里修正系数、保留任务
+   卡期望的输出串。任务卡写 ∫(x*y^2)dy == "x*y^3"，但 ∫x·y²dy = x·y³/3，1 % 3 != 0，
+   按整除约束必须拒绝，期望串只在被积函数为 3*x*y^2 时成立（3/3 = 1），故修正为
+   ∫(3*x*y^2)dy == "x*y^3"，保留「dy 积分 happy path」的覆盖意图。任务卡写
+   ∫(2*x^3)dx == "x^4"（整除 happy path），但 ∫2x³dx = x⁴/2，2 % 4 != 0 且无整系数
+   原函数，故修正为 ∫(4*x^3)dx == "x^4"（4/4 = 1），保留任务卡的期望串与「整除通过」
+   的覆盖意图。任务卡自己的负向用例 ∫(x*y^2)dx（1/2 非整）与上述修正自洽：它验证的
+   正是这两处修正掉的那类输入。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -56,20 +43,14 @@ static void pcheck(pro_tally_t *t, int cond, const char *name, const char *detai
 
 static int streq(const char *a, const char *b) { return strcmp(a, b) == 0; }
 
-/* ==================== 多变量积分（10 项测试） ====================
- *
- * 覆盖：
- *   ① ∫·dx 逐项 happy path（含 y 因子保持）
- *   ② ∫·dy happy path
- *   ③ 非精确整除 -> AC_PRO_MVI_ENONEXACT(-6) 且 g_solve_error = 2
- *   ④ 整除 happy path（4/4 = 1）
- *   ⑤ 常数项（除数 1 恒整除）
- *   ⑥ 零多项式 -> "0"
- *   ⑦ 次数超限 dx（6+1 = 7 > 6）-> -1 / g_solve_error = 1
- *   ⑧ 次数超限 dx（3+1+3 = 7 > 6）-> -1 / g_solve_error = 1
- *   ⑨ 超越函数 sin -> 解析期拒绝 -> -1 / g_solve_error = 2
- *   ⑩ var_index 非法 -> -1 / g_solve_error = 2
- */
+/* 多变量积分（10 项测试）
+
+   覆盖：∫·dx 逐项 happy path（含 y 因子保持）；∫·dy happy path；非精确整除
+   -> AC_PRO_MVI_ENONEXACT(-6) 且 g_solve_error = 2；整除 happy path（4/4 = 1）；
+   常数项（除数 1 恒整除）；零多项式 -> "0"；次数超限 dx（6+1 = 7 > 6）-> -1 /
+   g_solve_error = 1；次数超限 dx（3+1+3 = 7 > 6）-> -1 / g_solve_error = 1；超越
+   函数 sin -> 解析期拒绝 -> -1 / g_solve_error = 2；var_index 非法 -> -1 /
+   g_solve_error = 2。 */
 pro_tally_t test_integrate_multi(void) {
     pro_tally_t t;
     char out[128];
@@ -86,7 +67,7 @@ pro_tally_t test_integrate_multi(void) {
            "returns 1, result 'x^3*y'", out);
     printf("         result: %s\n", out);
 
-    /* 任务卡算术修正 ①：被积函数 3*x*y^2（x*y^2 的原函数是 x*y^3/3，非整） */
+    /* 任务卡算术修正:被积函数 3*x*y^2（x*y^2 的原函数是 x*y^3/3，非整） */
     printf("[case MVI-2] integral(3*x*y^2) dy = x*y^3\n");
     out[0] = '\0';
     g_solve_error = 0;
@@ -103,7 +84,7 @@ pro_tally_t test_integrate_multi(void) {
            "returns ENONEXACT(-6), g_solve_error == 2", out);
     printf("         rc = %d, g_solve_error = %d\n", rc, g_solve_error);
 
-    /* 任务卡算术修正 ②：被积函数 4*x^3（2*x^3 的原函数是 x^4/2，非整） */
+    /* 任务卡算术修正:被积函数 4*x^3（2*x^3 的原函数是 x^4/2，非整） */
     printf("[case MVI-4] integral(4*x^3) dx = x^4  (exact division happy path)\n");
     out[0] = '\0';
     g_solve_error = 0;

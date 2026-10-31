@@ -1,55 +1,48 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_scratch.h
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   定义 Pro 层**独立**的 scratch union —— 设计说明 §2.2 的「模式 β」，
- *   以及唯一一个跨调用存活的 Pro 会话态 g_var_val[10]。
- *
- * 【为什么不能复用上游 ac_scratch_t / Why a separate union】
- *   上游 `C/128KB/src/ac_scratch.h` 逐字节冻结（红线 R1/R3）。要给 Pro
- *   视图腾位置就必须改上游头文件 —— 那等于复制/fork 上游。模式 β 的
- *   做法是：Pro 自带一块 union，尺寸 = 当前已实现功能的最大视图。
- *   v2.1.0 的最大视图是 `sparse`（④ 稀疏线性方程组，3848 B），因此：
- *
- *       sizeof(ac_pro_scratch_t) == 3848      <-- 编译期钉死
- *
- * 【判据 1 在 Pro union 内部依然成立】
- *   Pro 各视图互斥（一次调用只持有一个视图），故 union 尺寸 = max(视图)
- *   而不是 sum(视图)。v2.1.0 的八个视图：
- *       nr     =  264 B  （B1 Durand-Kerner，n ≤ 8）
- *       lu     = 2352 B  （A4 LU 分解，n ≤ 12）
- *       sym    = 1792 B  （A6 隐函数求导工作区）
- *       mv     = 2688 B  （A1/A2/A3 多变量项池，6 槽）
- *       res    = 1152 B  （A3 结式 Sylvester 缓冲）
- *       eig    = 2592 B  （A5 实特征向量 + Hotelling 收缩，n ≤ 12）
- *       sparse = 3848 B  （v2.1.0 ④ 稀疏线性方程组，n ≤ 32 / nnz ≤ 320）
- *                        <-- 峰值（v2.1.0 起，首次推高 union 峰值）
- *       dec    =  480 B  （v2.1.0 ⑤ 任意精度小数：5 × 96，低于峰值被吸收）
- *       gb     = 1888 B  （v2.2.0 ⑥ 2 变量 Groebner 基：基 8 槽 × 16 项紧凑
- *                          项表 + 81 格稠密归约工作区 + 32 对 critical pair
- *                          队列，低于峰值被吸收）
- *   引入更大视图时改尺寸即可，下面那行校验会把不一致炸出来。
- *
- *   【v1.3.5 关键判据（历史）：eig 2592 < mv 2688 —— 当时的 .bss 零增长】
- *     v1.3.5 加入 A5 时 eig 视图比 mv 峰值小 96 B，union 尺寸不变。
- *     v2.1.0 的 sparse 视图（3848 B）**超过** mv（2688 B）1160 B，是
- *     「union 吸收」判据首次**不**兑现的功能 —— 峰值上移是设计说明
- *     （§3 功能④，方案 a）预期内的
- *     成本：.bss 从 41456 上移到 42608（仍远低于 112 KiB 门禁）。下面的
- *     absorbed 测试链已全部改挂 sparse 峰值；mv − eig == 96 这条历史
- *     校验仍然为真，保留作档案。
- *
- * 【8 字节对齐 / 8-byte alignment】
- *   C99 没有 _Alignas。union 成员含 double 与 int32_t/int16_t，自然按 8
- *   对齐（C99 §6.2.8）。下面的 pro_scratch_is_8_byte_aligned 校验把这个
- *   事实钉在编译期，而不是靠注释保证。
- *
- * 【.bss 账本 / Ledger】
- *   g_ac_pro_storage = 3936 B（3848 + 80 + 8 对齐），Pro v2.1.0 目标 .bss：
- *       38672（上游 16 模块内核口径） + 80 + 3848 + 8 = 42608 B
- *   注意：g_var_val 刻意**不**进 union —— 它是跨调用会话态（判据 3），
- *   求值前由调用方写入、求值后仍可读，放进 union 会被其它视图覆写。
- * ============================================================ */
+/* ApolloCalc · ac_pro_scratch.h — Pro 独立 scratch union(模式 β)+ 会话态 g_var_val[10]
+
+   定义 Pro 层独立的 scratch union(设计说明 §2.2 的「模式 β」),以及唯一一个跨调用存活的
+   Pro 会话态 g_var_val[10]。
+
+   为什么不能复用上游 ac_scratch_t:上游 `C/128KB/src/ac_scratch.h` 逐字节冻结(红线 R1/R3),
+   要给 Pro 视图腾位置就必须改上游头文件,那等于复制/fork 上游。模式 β 的做法是:Pro 自带一块
+   union,尺寸 = 当前已实现功能的最大视图。v2.1.0 的最大视图是 `sparse`(④ 稀疏线性方程组,
+   3848 B),因此:
+
+       sizeof(ac_pro_scratch_t) == 3848      <-- 编译期钉死
+
+   判据 1 在 Pro union 内部依然成立:Pro 各视图互斥(一次调用只持有一个视图),故 union 尺寸
+   = max(视图) 而不是 sum(视图)。v2.1.0 的八个视图:
+
+       nr     =  264 B  (B1 Durand-Kerner, n ≤ 8)
+       lu     = 2352 B  (A4 LU 分解, n ≤ 12)
+       sym    = 1792 B  (A6 隐函数求导工作区)
+       mv     = 2688 B  (A1/A2/A3 多变量项池, 6 槽)
+       res    = 1152 B  (A3 结式 Sylvester 缓冲)
+       eig    = 2592 B  (A5 实特征向量 + Hotelling 收缩, n ≤ 12)
+       sparse = 3848 B  (v2.1.0 ④ 稀疏线性方程组, n ≤ 32 / nnz ≤ 320)
+                        <-- 峰值(v2.1.0 起,首次推高 union 峰值)
+       dec    =  480 B  (v2.1.0 ⑤ 任意精度小数:5 × 96,低于峰值被吸收)
+       gb     = 1888 B  (v2.2.0 ⑥ 2 变量 Groebner 基:基 8 槽 × 16 项紧凑
+                          项表 + 81 格稠密归约工作区 + 32 对 critical pair
+                          队列,低于峰值被吸收)
+   引入更大视图时改尺寸即可,下面那行校验会把不一致炸出来。
+
+   v1.3.5 关键判据(历史):eig 2592 < mv 2688,当时的 .bss 零增长。v1.3.5 加入 A5 时 eig 视图
+   比 mv 峰值小 96 B,union 尺寸不变。v2.1.0 的 sparse 视图(3848 B)超过 mv(2688 B)1160 B,
+   是「union 吸收」判据首次不兑现的功能,峰值上移是设计说明(§3 功能④,方案 a)预期内的成本:
+   .bss 从 41456 上移到 42608(仍远低于 112 KiB 门禁)。下面的 absorbed 测试链已全部改挂
+   sparse 峰值;mv − eig == 96 这条历史校验仍然为真,保留作档案。
+
+   8 字节对齐:C99 没有 _Alignas。union 成员含 double 与 int32_t/int16_t,自然按 8 对齐
+   (C99 §6.2.8)。下面的 pro_scratch_is_8_byte_aligned 校验把这个事实钉在编译期,而不是靠
+   注释保证。
+
+   .bss 账本:g_ac_pro_storage = 3936 B(3848 + 80 + 8 对齐),Pro v2.1.0 目标 .bss:
+
+       38672(上游 16 模块内核口径) + 80 + 3848 + 8 = 42608 B
+
+   注意:g_var_val 刻意不进 union,它是跨调用会话态(判据 3),求值前由调用方写入、求值后仍可
+   读,放进 union 会被其它视图覆写。 */
 
 #ifndef AC_PRO_SCRATCH_H
 #define AC_PRO_SCRATCH_H
@@ -66,7 +59,7 @@
  * 上游模块，dec 视图与它物理分离（设计说明）。 */
 #include "../../../C/128KB/src/ac_bigint.h"
 
-/* ---- Pro 视图的尺寸常量 ---- */
+/* Pro 视图的尺寸常量 */
 #define AC_PRO_MATRIX_MAX_DIM   12                        /* = AC_MATRIX_MAX_DIM  */
 #define AC_PRO_MATRIX_MAX_SIZE  (AC_PRO_MATRIX_MAX_DIM * AC_PRO_MATRIX_MAX_DIM)  /* 144 */
 #define AC_PRO_NUMROOT_MAX_DEG  8                         /* B1 数值求根上限（设计说明 §4.1.3） */
@@ -74,7 +67,7 @@
 #define AC_PRO_SYM_WALK         192                       /* A6 后序遍历标记栈：192 × 4 = 768 */
 #define AC_PRO_SYM_D            256                       /* A6 导数索引栈：  256 × 4 = 1024 */
 
-/* ---- v2.1.0 ④ 稀疏线性方程组常量（方案 a，设计说明）----
+/* v2.1.0 ④ 稀疏线性方程组常量（方案 a，设计说明）
  *   n ≤ 32、nnz ≤ 320 的 CSR 求解器。容量账（见下方 ac_pro_sparse_view_t）：
  *     val 320×8 + rhs/x 2×32×8 + col 320×2 + rp 33×2 + perm 32×2 = 3842
  *   → 尾部对齐到 8 的倍数 = 3848 B，即设计说明「≈3.9 KB」的落地值。
@@ -84,7 +77,7 @@
 #define AC_PRO_SP_MAX_N         32                        /* 方程个数上限 */
 #define AC_PRO_SP_MAX_NNZ       320                       /* 非零元容量上限（输入与消元填充共用） */
 
-/* ---- v2.3.0 功能 5：单变量有理函数工具常量 ----
+/* v2.3.0 功能 5：单变量有理函数工具常量
  *   次数 ≤ 8（apart 分母 1..4 走上游精确根、5..8 走 DK，ROADMAP.md:117-119）。
  *   系数域 |c| ≤ 9999：prem 中间量最坏 ~deg·C² = 8·1e8 ≈ 1e9，int64 充裕；
  *   更大的输入直接 ECOEF 拒绝（整系数域契约，绝不静默回绕）。 */
@@ -92,7 +85,7 @@
 #define AC_PRO_RAT_SLOTS        6                         /* p/q/gcd/商/余式/工作区 */
 #define AC_PRO_RAT_COEF_MAX     9999                      /* 输入系数域 |c| 上限 */
 
-/* ---- A1/A2/A3 多变量基础设施常量（v1.3）----
+/* A1/A2/A3 多变量基础设施常量（v1.3）
  *
  * 设计说明 §3.1.2：2 变量、总次数 ≤ 6 的单项式数
  *     N(d) = C(d+2, 2) = (d+1)(d+2)/2
@@ -116,9 +109,9 @@
 AC_STATIC_ASSERT(AC_PRO_MATRIX_MAX_DIM == AC_MATRIX_MAX_DIM, pro_matrix_dim_matches_upstream);
 AC_STATIC_ASSERT(AC_PRO_MATRIX_MAX_SIZE == AC_MATRIX_MAX_SIZE, pro_matrix_size_matches_upstream);
 
-/* ==================== A1/A2：多变量项记录 ====================
+/* A1/A2：多变量项记录
  *
- * 设计说明 §3.1.2 选**稀疏**表示而非稠密：
+ * 设计说明 §3.1.2 选稀疏表示而非稠密：
  *   2 变量总次数 ≤ 6 时稠密是 7×7 = 49 格，其中 21 格恒为 0（总次数 > 6），
  *   浪费 42.9%；稀疏项表 28 项 × 16 B = 448 B/多项式，4 槽 1792 B。
  *
@@ -143,9 +136,9 @@ AC_STATIC_ASSERT(AC_PRO_MV_SLOTS == 6, pro_mv_slots_is_6);
 AC_STATIC_ASSERT(AC_PRO_MV_SLOTS * AC_PRO_MV_TERMS * AC_PRO_MV_TERM_BYTES == 2688,
                  pro_mv_pool_is_2688);
 
-/* ==================== v2.1.0 ④：稀疏 CSR 视图 ====================
+/* v2.1.0 ④：稀疏 CSR 视图
  *
- * 【布局 / Layout】（偏移按 8 对齐最小化填充的顺序排列）
+ * 布局（偏移按 8 对齐最小化填充的顺序排列）
  *   val  @    0   320 × 8 = 2560   非零元数值（输入 + 消元填充共用容量）
  *   rhs  @ 2560    32 × 8 =  256   增广右端（消元中被同步行交换/行变换）
  *   x    @ 2816    32 × 8 =  256   解向量（回代后按变量序写入）
@@ -154,14 +147,12 @@ AC_STATIC_ASSERT(AC_PRO_MV_SLOTS * AC_PRO_MV_TERMS * AC_PRO_MV_TERM_BYTES == 268
  *   perm @ 3778    32 × 2 =   64   行交换记录：位置 i 持有原始行 perm[i]
  *   合计 3842 → 尾部填充到 8 的倍数 = 3848 B（union 新峰值，v2.1.0）
  *
- * 【容量语义 / Capacity semantics】
- *   320 是**输入三元组与消元填充共享**的总容量：输入 nnz ≤ 320；消元
+ *   320 是输入三元组与消元填充共享的总容量：输入 nnz ≤ 320；消元
  *   产生的填充若把总非零元推过 320，求解器返回 AC_PRO_SP_EFILL（熔断，
  *   绝不静默丢弃填充 —— 那会返回错值）。这是方案 a 视图尺寸下的诚实
  *   能力边界：填充密集的系统（近稠密输入）本来就不是稀疏求解器的目标
  *   场景，设计说明 §3 功能④ 的 preCheck「nnz ≤ 上限」即此语义。
  *
- * 【字段纪律 / Field discipline】
  *   行内条目按列号升序、列号互异（构建期排序 + 同列合并去重，精确 0
  *   在构建与填充重建时都会被丢弃）。rp/col/val 三元组的一致性由
  *   ac_pro_sparse.c 内部维护，外部只读。 */
@@ -185,9 +176,8 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_sparse_view_t *)0)->val) +
                  sizeof(((ac_pro_sparse_view_t *)0)->perm) == 3842,
                  pro_sp_payload_is_3842);
 
-/* ==================== ⑤ 任意精度小数：dec 定点十进制记录（v2.1.0）====
+/* ⑤ 任意精度小数：dec 定点十进制记录（v2.1.0）
  *
- * 【表示 / Representation】
  *   value = m · 10^(−scale)，m 为上游 ac_bigint_t（基数 1e9、20 limb、
  *   180 位十进制容量），scale 为 int32 十进制标度（容量 ±2^31）。
  *   出自设计说明的估算：
@@ -196,18 +186,18 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_sparse_view_t *)0)->val) +
  *   完全吸收，.bss 零增长（对 mv 峰值口径是 41456，对 sparse 峰值口径
  *   是 42608，两个口径下 dec 都不推高任何数字）。
  *
- * 【字段布局 / Layout】（88 + 4 + 4 = 96 B，由下面 == 校验钉死）
+ * 字段布局（88 + 4 + 4 = 96 B，由下面 == 校验钉死）
  *   m     @ 0   (88 B) 尾数（ac_bigint_t：limbs[20] + sign + top）
  *   scale @ 88  (4 B)  十进制标度
  *   pad   @ 92  (4 B)  显式填充，恒 0 —— 让 sizeof 精确为 96（同
  *                      ac_pro_term_t 的显式 pad 手法，可 memcmp 整记录）
  *
- * 【规范形 / Canonical form】（parse 与全部四则的输出都满足）
+ * 规范形（parse 与全部四则的输出都满足）
  *   ① m == 0 ⟺ scale == 0；
  *   ② scale > 0 时 m 的十进制末位非零（尾随零已剥，标度最小化）；
  *   ③ scale < 0 仅由除法产生（商的整数放大），渲染时按 10^|scale| 补零。
  *
- * 【槽位 / Slots】5 槽：0 = 操作数 A，1 = 操作数 B，2 = 结果；
+ * 槽位 5 槽：0 = 操作数 A，1 = 操作数 B，2 = 结果；
  *   3/4 为研究文档 5 槽口径的预留槽（当前实现的工作量走栈上
  *   ac_bigint_t 局部变量，不占 .bss；一个 static 对象就是 +32 B，
  *   见 ac_pro.h eig 节的实测论证）。 */
@@ -225,43 +215,42 @@ AC_STATIC_ASSERT(offsetof(ac_pro_dec_t, m)     == 0, pro_dec_m_at_0);
 AC_STATIC_ASSERT(offsetof(ac_pro_dec_t, scale) == 88, pro_dec_scale_at_88);
 AC_STATIC_ASSERT(sizeof(ac_bigint_t) == 88, pro_dec_bigint_is_88_bytes);
 
-/* ==================== v2.2.0 ⑥：2 变量 Groebner 基视图（M4GB 逐对归约）====
+/* v2.2.0 ⑥：2 变量 Groebner 基视图（M4GB 逐对归约）
  *
- * 【能力边界 / Envelope】（任务书划定）
+ * 能力边界（任务书划定）
  *   变量 = 2（x > y）、单项式序 = lex、输入多项式总次数 ≤ 4。算法走
  *   Makarim & Stevens, M4GB, ISSAC 2017（设计说明
  *   文献 P5）的「逐对处理 critical pair、不做 F4 大矩阵」路线。
  *
- * 【单项式编码 / Monomial packing】
- *   视图内一切多项式的**总次数 ≤ 8**（输入 ≤ 4；S-多项式的单项式
+ *   视图内一切多项式的总次数 ≤ 8（输入 ≤ 4；S-多项式的单项式
  *   = lcm(首项)/首项 × 项，2 变量下逐变量指数 ≤ 8，见 ac_pro_groebner.c
  *   文件头的推导）。指数各占一个 4-bit 半字节：
  *       ep = (ex << 4) | ey，ex/ey ∈ [0,8]，最大 0x88 = 136 < 256
- *   与 mv 层的 exps 打包同一思想：**一次无符号字节比较即完成 lex 序
- *   比较**（ex 是高半字节，lex x>y 先比 ex），排序与整除判断都不解包。
+ *   与 mv 层的 exps 打包同一思想：一次无符号字节比较即完成 lex 序
+ *   比较（ex 是高半字节，lex x>y 先比 ex），排序与整除判断都不解包。
  *
- * 【基槽 / Basis slots】基元素 = 紧凑稀疏项表（系数 int64 + 打包指数
- *   uint8，各 AC_PRO_GB_TERMS = 16 项），按 ep **降序**存储 —— terms[0]
+ * 基槽：基元素 = 紧凑稀疏项表（系数 int64 + 打包指数
+ *   uint8，各 AC_PRO_GB_TERMS = 16 项），按 ep 降序存储 —— terms[0]
  *   就是首项。8 槽容量取设计说明 §3 功能③ 的 basis ≤ 8 口径。
  *   死槽（b_dead，被更小首项的新基元素吸收的冗余元素）可被后续新元素
  *   复用；死槽不带任何 pair（入死时 pair 队列整体重建）。
  *
- * 【稠密归约工作区 / Dense reduction workspace】w_dense[81] 以
- *   idx = ex*9 + ey 直接寻址（ex,ey ∈ [0,8]），一次只装**一个**多项式：
+ * 稠密归约工作区：w_dense[81] 以
+ *   idx = ex*9 + ey 直接寻址（ex,ey ∈ [0,8]），一次只装一个多项式：
  *   S-多项式合成、逐对归约（M4GB 的 per-pair reduction）、终结 interreduce
  *   共用。81 格 = 9 × 9，总次数 > 8 的格子恒为 0（总次数熔断保证），
  *   lex 降序扫描就是两重循环 ex 降序 × ey 降序，无需任何查找表。
  *   单项式空间 15 个（输入 ≤ 4）装进 81 格的稠密区，比「45 格三角索引
  *   + lex 扫描表」少一层间接 —— 用 288 B 换掉一整类查表错位 bug。
  *
- * 【预算 / Budget】
+ * 预算
  *   b_coef 8×16×8 = 1024 + b_ep 128 + b_cnt/dead 16 + w_dense 648
- *   + cp_a/cp_b 64 + 计数 2 + 尾填充 6 = **1888 B ≤ 1960 B**（任务书
+ *   + cp_a/cp_b 64 + 计数 2 + 尾填充 6 = 1888 B ≤ 1960 B（任务书
  *   预算线），≤ 3848（sparse 峰值）→ 被 union 完全吸收，.bss 零增长
  *   （42608/42640 账本不动）。「union 吸收」判据在 lu/eig/dec 之后的
  *   又一次兑现。
  *
- * 【熔断语义 / Fuse semantics】任何超限（输入/中间总次数 > 8、基元素
+ * 熔断语义：任何超限（输入/中间总次数 > 8、基元素
  *   项数 > 16、基槽 > 8、pair 队列 > 32、系数溢出）都返回错误码中止，
  *   绝不静默输出不完整基 —— 错误码见 ac_pro.h 的 AC_PRO_GB_*。 */
 #define AC_PRO_GB_MAX_DEG   8     /* 视图内一切多项式的总次数上限 */
@@ -300,7 +289,7 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_gb_view_t *)0)->b_coef) +
                  sizeof(((ac_pro_gb_view_t *)0)->w_pad) == 1888,
                  pro_gb_payload_is_1888);
 
-/* ==================== v2.3.0 功能 5：poly 视图类型 ====================
+/* v2.3.0 功能 5：poly 视图类型
  * 单变量整系数多项式槽：c[k] = x^k 的系数（升序），deg 另存于槽外数组。
  * 布局账：9 × 8 = 72 B/槽 × 6 槽 = 432 + deg 24 + work 4 + 尾填 4 = 464。 */
 typedef struct {
@@ -312,10 +301,10 @@ AC_STATIC_ASSERT(AC_PRO_RAT_SLOTS * (int)sizeof(ac_pro_rat_poly_t) +
                  AC_PRO_RAT_SLOTS * (int)sizeof(int) + (int)sizeof(int) == 460,
                  pro_rat_slots_are_460);
 
-/* ==================== v2.4.0 功能 8:schur 视图类型 ====================
+/* v2.4.0 功能 8:schur 视图类型
  * 一般实矩阵特征值(Francis 隐式双移 QR,ROADMAP.md:140-145)。
  *
- * 【布局 / Layout】(偏移按 8 对齐最小化填充的顺序排列)
+ * 布局(偏移按 8 对齐最小化填充的顺序排列)
  *   h    @    0   144 × 8 = 1152  Hessenberg 约简结果(Francis 就地迭代;
  *                 特征值全部提取后复用为反迭代的 M = A − λI 工作副本)
  *   v    @ 1152   144 × 8 = 1152  实特征向量,列主序:第 k 列 = &v[k*n];
@@ -353,9 +342,9 @@ AC_STATIC_ASSERT(offsetof(ac_pro_schur_view_t, wr) == 2304, pro_schur_wr_at_2304
 AC_STATIC_ASSERT(offsetof(ac_pro_schur_view_t, piv) == 2688, pro_schur_piv_at_2688);
 AC_STATIC_ASSERT(sizeof(ac_pro_schur_view_t) % 8 == 0, pro_schur_is_8byte_multiple);
 
-/* ==================== Pro 独立 scratch union ==================== */
+/* Pro 独立 scratch union */
 typedef union {
-    /* ---- B1：Durand-Kerner 数值求根，n ≤ 8 ----
+    /* B1：Durand-Kerner 数值求根，n ≤ 8
        设计说明 §4.1.1：zre/zim 128 + 分母缓存 64 + 系数 72 = 264 B。
        wden 供 Aberth 的 Weierstrass 乘积缓存使用；DK 路径不读它，
        但保留槽位可以让「DK ↔ Aberth」切换不动 union 尺寸。 */
@@ -366,7 +355,7 @@ typedef union {
         double coef[AC_PRO_NUMROOT_MAX_DEG + 1];          /*  9 × 8 =  72 */
     } nr;                                                 /* 合计 264 B */
 
-    /* ---- A4：LU 分解（P·A = L·U），n ≤ 12 ----
+    /* A4：LU 分解（P·A = L·U），n ≤ 12
        设计说明 §3.2.2：L 1152 + U 1152 + piv 48 = 2352 B。 */
     struct {
         double  l  [AC_PRO_MATRIX_MAX_SIZE];              /* 144 × 8 = 1152 */
@@ -374,9 +363,9 @@ typedef union {
         int32_t piv[AC_PRO_MATRIX_MAX_DIM];               /*  12 × 4 =   48 */
     } lu;                                                 /* 合计 2352 B */
 
-    /* ---- A6：隐函数求导的遍历工作区 ----
-       设计说明 §3.4.2 把 A6 记为「8 B 栈上」—— 那是**按复用上游
-       s_sym_stack / s_sym_dmap 估算**的。本实现刻意不复用上游 scratch：
+    /* A6：隐函数求导的遍历工作区
+       设计说明 §3.4.2 把 A6 记为「8 B 栈上」—— 那是按复用上游
+       s_sym_stack / s_sym_dmap 估算的。本实现刻意不复用上游 scratch：
        上游 s_sym_* 是 ac_sym_derivative / ac_sym_eval 的私有工作区，Pro
        若借用，就与「一次只持有一个视图」的纪律耦合到上游内部实现上。
        自带 1792 B 换来的隔离，被更大的 mv 视图（2688 B）完全吸收，
@@ -386,40 +375,39 @@ typedef union {
         int32_t d   [AC_PRO_SYM_D];                       /* 256 × 4 = 1024 */
     } sym;                                                /* 合计 1792 B */
 
-    /* ---- A1/A2/A3：多变量项池（v1.3 新增）----
+    /* A1/A2/A3：多变量项池（v1.3 新增）
      *
-     * 【命名澄清 / Naming】
      *   任务书写「新增视图 sym，设计说明预估 1792 B」—— 那个 1792 B 的
-     *   `sym` 视图**已经在 v1.2 落地了**（上一段，A6 隐函数求导的遍历
+     *   `sym` 视图已经在 v1.2 落地了（上一段，A6 隐函数求导的遍历
      *   工作区）。设计说明 §3.1.3/§3.1.4 给 A1/A2 的预估是另外两个视图：
      *       mv   1792 B = 4 槽 × 28 项 × 16 B   （A1 多变量 GCD 项池）
      *       mv2   896 B = 2 槽 × 28 项 × 16 B   （A2 因式分解的额外 2 槽）
-     *   本节按设计说明的 mv/mv2 命名落地，并让二者**叠加**成一个视图：
+     *   本节按设计说明的 mv/mv2 命名落地，并让二者叠加成一个视图：
      *       mv 视图总容量 = 6 槽 = 2688 B（4 + 2，A1 用前 4 槽，A2 再要 2 槽）
      *   叠加而不是并列，是因为 A2 的实现路径是「先做 A1 的 GCD 判可约、
-     *   再做内容提取」，两者在**同一次调用内**先后使用项池，必须同时驻留。
+     *   再做内容提取」，两者在同一次调用内先后使用项池，必须同时驻留。
      *   若拆成两个 union 成员，A2 就需要在 GCD 结果与自己的槽位之间来回
      *   搬运，反而引入别名风险。
      *
-     * 【为什么是 6 槽而不是设计说明的 4 + 2 分开算】
+     * 为什么是 6 槽而不是设计说明的 4 + 2 分开算
      *   设计说明 §3.1.3 的 4 槽 = 操作数 A、B、余式 R1、R2（GCD 的 PRS 需要
      *   同时持有两路余式）；§3.1.4 的额外 2 槽 = 内容提取 + 余式。合起来
      *   最多同时 6 槽，故视图容量取 6 槽。
      *
-     * 【尺寸】6 × 28 × 16 = 2688 B ≤ 2352？**否** —— 2688 > 2352，
-     *   所以 v1.3 的 Pro union 峰值从 `lu`（2352）**上移到 `mv`（2688）**，
+     * 尺寸：6 × 28 × 16 = 2688 B ≤ 2352？否 —— 2688 > 2352，
+     *   所以 v1.3 的 Pro union 峰值从 `lu`（2352）上移到 `mv`（2688），
      *   .bss 随之 +336 B：41104 -> 41440，再加 struct 尾部对齐到 32 的
      *   整数倍后为 41456。这是设计说明 §7.3 预期内的
      *   「v1.3 仍由 lu 决定峰值」判断被实测推翻的地方 —— 设计说明按
      *   「mv 1792 / mv2 896 各自 ≤ 2352 即被吸收」推演，但两者在 A2 里
-     *   **并发驻留**，真实峰值是 2688 而非 1792。此处按实测落地。 */
+     *   并发驻留，真实峰值是 2688 而非 1792。此处按实测落地。 */
     struct {
         ac_pro_term_t slot[AC_PRO_MV_SLOTS][AC_PRO_MV_TERMS];  /* 6 × 28 × 16 = 2688 */
     } mv;                                                 /* 合计 2688 B  <-- 峰值（v1.3 起，v1.3.5 未变） */
 
-    /* ---- A3：结式的 Sylvester 行主序缓冲（n ≤ 12）----
+    /* A3：结式的 Sylvester 行主序缓冲（n ≤ 12）
      *   设计说明 §3.1.5 说「复用 g_mat_work[144]，新增 0 B」。那条路径成立，
-     *   但它要求调用方**传入** g_mat_work；而 ac_mat_det 的 work 参数也
+     *   但它要求调用方传入 g_mat_work；而 ac_mat_det 的 work 参数也
      *   需要 ≥ n² 且必须与 a 不同（内部先拷贝再消元）。所以数值路径实际
      *   需要两块 144 double：Sylvester 矩阵本体 + det 的工作区。
      *   上游 g_mat_work 只能提供一块，故 Pro 自带一块，另一块用 g_mat_work。
@@ -428,28 +416,28 @@ typedef union {
         double sylv[AC_PRO_MATRIX_MAX_SIZE];              /* 144 × 8 = 1152 */
     } res;                                                /* 合计 1152 B */
 
-    /* ---- A5：实特征向量 + Hotelling 收缩 deflation，n ≤ 12 ----
+    /* A5：实特征向量 + Hotelling 收缩 deflation，n ≤ 12
      *
-     * 【四块缓冲的分工 / Four buffers】
+     * 四块缓冲的分工
      *   v[144]    V 矩阵，列主序：第 k 列（v[k*n + i]）是 λ_k 的特征向量。
-     *   a[144]    调用方矩阵的**可破坏**工作副本。每求一个特征对就从
+     *   a[144]    调用方矩阵的可破坏工作副本。每求一个特征对就从
      *             调用方的 const 矩阵重新拷入（见下），再做行阶梯消元
      *             求 (A − λI)v = 0 的零空间 —— 消元会毁掉这块缓冲，
      *             所以它必须是副本，绝不能在调用方矩阵上就地操作。
      *   lam[12]   特征值，按 |λ| 降序（Hotelling 每轮取主特征对）。
      *   work[24]  幂迭代的 x / y 两个 n 向量（各 ≤ 12）+ Rayleigh 商暂存。
      *
-     * 【为什么 a 副本可以在每轮重新拷入 / Why re-copy each round】
+     * 为什么 a 副本可以在每轮重新拷入
      *   朴素实现需要同时驻留「原始 A + 当前 deflated 矩阵 + 消元工作区」
      *   三个 n×n（3 × 1152 = 3456 B），远超 2592 B 预算。
-     *   本实现利用 A5 的 API 签名 `const double *a`：**调用方的矩阵在
-     *   整个调用期间保持有效且只读**，于是「当前 deflated 矩阵」不必常驻 ——
+     *   本实现利用 A5 的 API 签名 `const double *a`：调用方的矩阵在
+     *   整个调用期间保持有效且只读，于是「当前 deflated 矩阵」不必常驻 ——
      *   每轮从调用方矩阵重拷一份，再按已求出的 (λ_j, v_j) 逐项扣除
      *       D_k = A − Σ_{j<k} λ_j · v_j · v_jᵀ
      *   即可。代价是 O(n) 轮 × O(n²) 次减法 = O(n³)，对 n ≤ 12 是
      *   3456 次乘加，可忽略；换来的是省下一整个 n×n 缓冲。
      *
-     * 【尺寸 / Size】1152 + 1152 + 96 + 192 = 2592 B ≤ 2688（mv 峰值）。
+     * 尺寸：1152 + 1152 + 96 + 192 = 2592 B ≤ 2688（mv 峰值）。
      *   被 mv 完全吸收，.bss 零增长 —— v1.3.5 的门禁值仍是 41456。 */
     struct {
         double v   [AC_PRO_MATRIX_MAX_SIZE];              /* 144 × 8 = 1152 */
@@ -458,22 +446,22 @@ typedef union {
         double work[2 * AC_PRO_MATRIX_MAX_DIM];           /*  24 × 8 =  192 */
     } eig;                                                /* 合计 2592 B */
 
-    /* ---- v2.1.0 ④：稀疏线性方程组（n ≤ 32 / nnz ≤ 320，方案 a）----
+    /* v2.1.0 ④：稀疏线性方程组（n ≤ 32 / nnz ≤ 320，方案 a）
      * 布局与容量语义见上方 ac_pro_sparse_view_t 的头注。3848 > mv 2688，
      * 本视图是 v2.1.0 起的 union 峰值 —— .bss 由 41456 上移到 42608
      * （设计说明 §3 功能④ 预估 ≈42684，落地 42608，同量级）。 */
     ac_pro_sparse_view_t sparse;                          /* 合计 3848 B  <-- 峰值（v2.1.0 起） */
 
-    /* ---- v2.3.0 功能 5：单变量有理函数工具（poly 视图，v2.3.0 新增）----
+    /* v2.3.0 功能 5：单变量有理函数工具（poly 视图，v2.3.0 新增）
      *   6 槽整系数多项式（次数 ≤ 8，9 系数 × 8 B = 72 B/槽 = 432 B）+ 次数表
      *   + 工作标记，载荷 460 B、8 字节对齐后 sizeof 464 ≤ 1536（任务书预算线）
      *   < 3848（sparse 峰值）——被 union 完全吸收，.bss 零增长（lu/eig/dec/gb
      *   之后「union 吸收」判据的第五次兑现）。
-     * 【整系数域契约 / Why integer-only】GCD/cancel 这类算法只在整系数域
+     * 整系数域契约：GCD/cancel 这类算法只在整系数域
      *   良定（A1 prem 同纪律）：全程 ac_int_t，中间量溢出即拒绝
      *   （AC_PRO_RAT_ECOEF），绝不回绕、绝不出浮点系数。
-     * 【槽位 / Slots】0 = p，1 = q，2 = gcd/商，3 = 余式，4/5 = 工作区。
-     * 【apart 的视图纪律 / apart view discipline】apart 的数值阶段（求根、
+     * 槽位 0 = p，1 = q，2 = gcd/商，3 = 余式，4/5 = 工作区。
+     * apart 的视图纪律：apart 的数值阶段（求根、
      *   A_i、回乘验证）全部在栈上数组进行（次数 ≤ 8）：deg(q) 5..8 时
      *   ac_pro_numroots 写 nr 视图，会整块覆写同 union 的 rat 数据 ——
      *   所以先把 p/q 系数拷到栈、再求根、再回代，rat 视图此后不再读。
@@ -485,17 +473,17 @@ typedef union {
         int work;                                         /*           4：标记/临时 */
     } rat;                                                /* 合计 464 B（载荷 460 + 8 字节对齐尾填，v2.3.0 功能 5） */
 
-    /* ---- v2.4.0 功能 8:一般实矩阵特征值(schur 视图,v2.4.0 新增)----
+    /* v2.4.0 功能 8:一般实矩阵特征值(schur 视图,v2.4.0 新增)
      *   Householder 化 Hessenberg → Francis 隐式双移 QR(bulge chasing,
      *   全显式循环)→ 全部特征值(实/复共轭对)+ 反迭代实特征向量;
      *   合计 2744 B ≤ 3848(sparse 峰值)——被 union 完全吸收,.bss 零增长
      *   (ROADMAP.md:145「.bss 零增长设计目标」兑现;布局与编译期断言见
      *   上方 ac_pro_schur_view_t 头注;算法与收敛边界见 src/ac_pro_schur.c
-     *   文件头)。非对称输入合法(这正是功能 8 的立项理由:ac_pro.h:283-284
+     *   文件头)。非对称输入合法(这正是功能 8 的立项理由:ac_pro.h:269-270
      *   的「非对称返 -2」缺口就此关闭)。 */
     ac_pro_schur_view_t schur;                            /* 合计 2744 B(v2.4.0 功能 8) */
 
-    /* ---- ⑤ 任意精度小数：dec 定点十进制视图（v2.1.0 新增）----
+    /* ⑤ 任意精度小数：dec 定点十进制视图（v2.1.0 新增）
      *   5 槽 × 96 B = 480 B ≤ 3848（sparse 峰值，对 mv 2688 亦然）——
      *   被峰值完全吸收，.bss 零增长（v1.3 的 lu、v1.3.5 的 eig、
      *   v2.1.0 的 dec 之后，「union 吸收」判据的又一次兑现）。槽位语义
@@ -506,7 +494,7 @@ typedef union {
         ac_pro_dec_t d[AC_PRO_DEC_SLOTS];                 /* 5 × 96 = 480 */
     } dec;                                                /* 合计 480 B */
 
-    /* ---- v2.2.0 ⑥：2 变量 Groebner 基（M4GB 逐对归约，新峰值之下）----
+    /* v2.2.0 ⑥：2 变量 Groebner 基（M4GB 逐对归约，新峰值之下）
      *   基 8 槽紧凑项表 + 81 格稠密归约工作区 + 32 对 critical pair 队列，
      *   合计 1888 B ≤ 1960（任务书预算线）< 3848（sparse 峰值）——被 union
      *   完全吸收，.bss 零增长（lu/eig/dec 之后「union 吸收」判据的第四次
@@ -516,9 +504,9 @@ typedef union {
     ac_pro_gb_view_t gb;                                  /* 合计 1888 B */
 } ac_pro_scratch_t;
 
-/* ==================== 编译期断言（从严，全部用 ==） ==================== */
+/* 编译期断言（从严，全部用 ==） */
 
-/* 核心校验：Pro union 的尺寸必须**精确**等于当前峰值视图。
+/* 核心校验：Pro union 的尺寸必须精确等于当前峰值视图。
    用 == 而不是 >=（设计说明 §8.3 对上游 >= 的批评），这样任何人悄悄
    加一个更大的视图都会在编译期被拦下，而不是让 .bss 静默增长。
    峰值自 v2.1.0 起是 sparse（3848），已高于 mv（2688）、eig（2592）、
@@ -596,16 +584,16 @@ AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, schur) == 0, pro_view_schur_starts_a
 /* g_var_val 的字节数必须与账本常量一致（80 = 10 × 8）。 */
 AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80_bytes);
 
-/* ==================== 存储实体 ====================
+/* 存储实体
  *
- * 【为什么把两块存储装进同一个 struct / Why one enclosing object】
+ * 为什么把两块存储装进同一个 struct
  *
- *   PE/COFF 链接器把**每个**全局对象按 16 B 对齐起放。两个独立全局
+ *   PE/COFF 链接器把每个全局对象按 16 B 对齐起放。两个独立全局
  *   （scratch + var_val）会因此被插入 16 B 填充；装进同一个 struct 后
  *   struct 是「顺序排列」而不是「重叠」，g_var_val 仍然是跨调用会话态，
  *   但整块只占一个分配单元，填充无从产生。
  *
- *   关键约束：g_var_val **不能**放进 union。判据 3 要求它是跨调用会话态，
+ *   关键约束：g_var_val 不能放进 union。判据 3 要求它是跨调用会话态，
  *   而 union 成员会被 lu/nr/mv/sparse/dec 视图覆写。
  */
 typedef struct {
@@ -631,9 +619,9 @@ extern ac_pro_storage_t g_ac_pro_storage;
 #define g_ac_pro_scratch (g_ac_pro_storage.scratch)
 #define g_var_val        (g_ac_pro_storage.var_val)
 
-/* ---- 视图别名：与上游 ac_scratch.h 的 s_xxx 宏同一风格 ----
+/* 视图别名：与上游 ac_scratch.h 的 s_xxx 宏同一风格
    仅在 Pro 增量代码里使用；AC_PRO_ACTIVE=0 时这些宏仍存在（指向那个
-   不存在的全局），任何**使用**都会在链接期报未定义符号，而不是悄悄
+   不存在的全局），任何使用都会在链接期报未定义符号，而不是悄悄
    读写一块不存在的内存。 */
 #define s_pro_nr_re   (g_ac_pro_scratch.nr.zre)
 #define s_pro_nr_im   (g_ac_pro_scratch.nr.zim)
@@ -649,7 +637,7 @@ extern ac_pro_storage_t g_ac_pro_storage;
 /* A3：结式的 Sylvester 行主序缓冲（n ≤ 12，n² ≤ 144） */
 #define s_pro_res_sylv   (g_ac_pro_scratch.res.sylv)
 /* A5：实特征向量 + Hotelling 收缩（n ≤ 12）。
-   s_pro_eig_v    V 矩阵，**列主序**：第 k 列特征向量 = &s_pro_eig_v[k * n]。
+   s_pro_eig_v    V 矩阵，列主序：第 k 列特征向量 = &s_pro_eig_v[k * n]。
    s_pro_eig_a    调用方矩阵的可破坏工作副本（每轮从 const 源重拷）。
    s_pro_eig_lam  特征值，|λ| 降序。
    s_pro_eig_work 幂迭代的两个 n 向量：x = &work[0]，y = &work[n]。 */
@@ -700,24 +688,24 @@ extern ac_pro_storage_t g_ac_pro_storage;
 #define s_pro_schur_piv     (g_ac_pro_scratch.schur.piv)
 #define s_pro_schur_n       (g_ac_pro_scratch.schur.n_st)
 
-/* ---- 视图持有纪律（写进头注，而不是靠调用方自觉） ----
+/* 视图持有纪律（写进头注，而不是靠调用方自觉）
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，
       ac_pro_multi_var_gcd 用 mv，ac_pro_resultant 用 res，
       ac_pro_eig_all 用 eig，ac_pro_sparse_solve 用 sparse，
       ac_pro_dec_add/sub/mul/div 用 dec，ac_pro_groebner 用 gb —— 任意两者
       都不得嵌套调用（它们共享同一块存储，后进者会整块覆写先前者）。
-      gb 视图刻意**自带解析器**（ac_pro_groebner.c 内部，与 mv 层同一语法），
+      gb 视图刻意自带解析器（ac_pro_groebner.c 内部，与 mv 层同一语法），
       不借道 mv 视图解析输入 —— 那会在同一次调用内先后持有 mv 与 gb，
       违反本条纪律。
    ② g_var_val 不参与 overlay：它是跨调用的会话态，任何函数都不得把它
       当草稿写。
-   ③ 视图里的数据在**跨 API 调用后即失效**；需要跨调用保留的结果必须
+   ③ 视图里的数据在跨 API 调用后即失效；需要跨调用保留的结果必须
       落到调用方提供的缓冲或 Pro 的结果池。
-   ④ **A2 的 mv ↔ ratroot 纪律（设计说明 §3.1.4 的关键约束）**：
+   ④ A2 的 mv ↔ ratroot 纪律（设计说明 §3.1.4 的关键约束）：
       ac_pro_multi_var_factor 在调用上游 ac_rat_root_descent 之前，必须
-      先把降维后的单变量系数**搬到 g_coeffs**（独立全局，不在任何 union
+      先把降维后的单变量系数搬到 g_coeffs（独立全局，不在任何 union
       里），再释放 mv 视图。上游 ratroot 会占用上游 ac_scratch 的
-      `ratroot` 视图 —— 那是**另一块** union（g_ac_scratch），与 Pro 的
+      `ratroot` 视图 —— 那是另一块 union（g_ac_scratch），与 Pro 的
       g_ac_pro_scratch 物理上不重叠，所以严格说并不冲突；但「一次只持有
       一个视图」的纪律仍然要求我们把 mv 的数据先落盘到 g_coeffs，
       避免调用方在 ratroot 返回后误以为 mv 里还是自己的数据。 */

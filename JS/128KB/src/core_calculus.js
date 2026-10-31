@@ -1,5 +1,4 @@
-/* ============================================================
- * ApolloCalc · core_calculus.js — 数值微积分（文件 7）
+/* ApolloCalc · core_calculus.js — 数值微积分（文件 7）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：一阶导数（中心差分）、二阶导数（五点公式）、
  *       定积分（自适应复合辛普森）、数值极限（左右逼近）、
@@ -9,16 +8,15 @@
  *       复用是有意为之的性能优化：积分最坏 ~1.3 万次求值只做一次 toRPN）
  * 铁律：热路径零堆分配、零字符串操作、零递归、零对象/数组字面量
  * UI 契约：表达式变更后必须先 calculusReset() 再 calcXxx，
- *          否则 _calcRpnReady 会复用旧表达式的缓存 RPN
- * ============================================================ */
+ *          否则 _calcRpnReady 会复用旧表达式的缓存 RPN */
 
-/* ==================== 文件 7 专属全局变量（唯一声明处） ==================== */
-var _calcResult = 0.0;          /* 最近一次微积分结果 */
+/* 文件 7 专属全局变量（唯一声明处） */
+var _calcResult = 0.0;
 var _calcError = 0;             /* 0=OK 1=域错误 2=不收敛 3=迭代超限 4=内部错 */
-var _calcIterations = 0;        /* 最近一次计算的求值次数（诊断用） */
-var _calcRpnReady = 0;          /* 0=RPN 未缓存 1=已缓存（表达式变更前必须经 calculusReset 清零） */
+var _calcIterations = 0;        /* 诊断用 */
+var _calcRpnReady = 0;          /* 0=未缓存 1=已缓存（表达式变更前必须经 calculusReset 清零） */
 
-/* ==================== 模块一：域检查与内部求值 ==================== */
+/* 模块一：域检查与内部求值 */
 
 /* 扫描 tokenPool 是否含等号；含等号表示这是方程而不是函数 → 微积分域错误 */
 function calcCheckFunction() {
@@ -46,11 +44,10 @@ function calcResetRPN() {
   _calcError = 0;
 }
 
-/* ==================== 模块二：一阶导数（中心差分） ====================
+/* 模块二：一阶导数（中心差分）
  * f'(x) ≈ (f(x+h) − f(x−h)) / (2h)
  * h = 1e-5 · max(|x|, 1)：x 近 0 时 h=1e-5；x 大时 h 正比于 x，
- * 避免 x+h 与 x 因浮点精度无法区分
- */
+ * 避免 x+h 与 x 因浮点精度无法区分 */
 function calcDerivative(x) {
   if (!isFinite(x)) { _calcError = 1; return NaN; }
   if (calcCheckFunction() !== 0) { _calcError = 1; return NaN; }
@@ -76,10 +73,9 @@ function calcDerivative(x) {
   return _calcResult;
 }
 
-/* ==================== 模块三：二阶导数（五点公式） ====================
+/* 模块三：二阶导数（五点公式）
  * f''(x) ≈ (−f(x+2h) + 16f(x+h) − 30f(x) + 16f(x−h) − f(x−2h)) / (12h²)
- * h = 1e-4 · max(|x|, 1)（二阶差分舍入更敏感，h 略大于一阶）
- */
+ * h = 1e-4 · max(|x|, 1)（二阶差分舍入更敏感，h 略大于一阶） */
 function calcDerivative2(x) {
   if (!isFinite(x)) { _calcError = 1; return NaN; }
   if (calcCheckFunction() !== 0) { _calcError = 1; return NaN; }
@@ -107,13 +103,12 @@ function calcDerivative2(x) {
   return _calcResult;
 }
 
-/* ==================== 模块四：定积分（自适应复合辛普森） ====================
+/* 模块四：定积分（自适应复合辛普森）
  * ∫[a,b] f dx ≈ (h/3)[f(a) + 4Σf(奇内点) + 2Σf(偶内点) + f(b)]
  * 自适应：n 从 100 起每轮加倍（上限 10000），前后两轮差 < 1e-8 即停；
  * 每轮单次遍历累加 sumOdd/sumEven，不缓存采样点（辛普森节点随 n 变化不可复用）；
  * 采样点 x = a + i·h 用乘法重算，不做 x += h 累积（避免浮点误差漂移）；
- * n 加倍到上限仍未收敛时返回当前结果且 _calcError=0，由 UI 层自行判断
- */
+ * n 加倍到上限仍未收敛时返回当前结果且 _calcError=0，由 UI 层自行判断 */
 function calcIntegral(a, b) {
   if (!isFinite(a) || !isFinite(b)) { _calcError = 1; return NaN; }
   if (a === b) { _calcResult = 0; _calcError = 0; return 0; }
@@ -178,15 +173,14 @@ function calcIntegral(a, b) {
   return _calcResult;
 }
 
-/* ==================== 模块五：极限（左右逼近） ====================
+/* 模块五：极限（左右逼近）
  * side: -1 左极限 / +1 右极限 / 0 双侧（左右都收敛且相差 < 1e-6 才返回均值）
  *
  * 单侧逼近：ε 从 1e-1 逐级缩到 1e-8（8 个采样点），相邻两级函数值差 < 1e-6 判收敛。
  * 注：收敛阈值取 1e-6 而非 1e-8 —— 一阶逼近型极限（如 (x²−1)/(x−1)→2，
  * x=1±ε 时值 ≈ 2±ε）相邻采样差 ≈ 9·10⁻ᵏ，6 步方案（ε≥1e-6）下最小差 9e-6，
  * 1e-8 阈值恒不收敛；ε 再往下压时 (x²−1) 的消去误差 ~1e-16/ε 又会淹没信号。
- * 8 步 + 1e-6 下 sin(x)/x 类仍达 ~1e-9 精度，(x²−1)/(x−1) 稳定收敛。
- */
+ * 8 步 + 1e-6 下 sin(x)/x 类仍达 ~1e-9 精度，(x²−1)/(x−1) 稳定收敛。 */
 function calcLimit(a, side) {
   if (!isFinite(a)) { _calcError = 1; return NaN; }
   if (calcCheckFunction() !== 0) { _calcError = 1; return NaN; }
@@ -243,7 +237,7 @@ function _calcLimitOneSide(a, side) {
   return NaN;
 }
 
-/* ==================== 模块六：复位 ====================
+/* 模块六：复位
  * UI 层在每次表达式变更后的首个微积分操作前调用（零分配；
  * 泰勒系数属于旧表达式，必须一并失效） */
 function calculusReset() {
@@ -255,7 +249,7 @@ function calculusReset() {
   _taylorCoeffs[0] = 0.0;
 }
 
-/* ==================== 模块七：泰勒展开 ====================
+/* 模块七：泰勒展开
  * f(x) 在 a 点的 n 阶泰勒展开，系数 c_k = f⁽ᵏ⁾(a)/k! 缓存于 _taylorCoeffs：
  *   k=0   直接求值 f(a)
  *   k=1   复用一阶中心差分（calcDerivative，h=1e-5·max(|a|,1)）
@@ -266,12 +260,11 @@ function calculusReset() {
  *         步长 h = ε^(1/(K+2))·max(|a|,1)（ε=2.22e-16，逐阶舍入/截断折中）
  * 数值边界：k≥10 的高阶导数差分舍入放大（~ε·2ᵏ/hᵏ）不可避免，
  *   高阶系数精度随阶数衰减是数值求导的固有极限，UI 层按需取低阶
- * 返回 0 = 成功；-1 = 参数/域错误（_calcError：1=域错误 3=阶数超限 4=内部错）
- */
-var _taylorCoeffs = new Float64Array(16);   /* 展开系数 c_k（最多 16 阶） */
-var _taylorOrder = 0;                       /* 当前展开阶数 */
-var _taylorCenter = 0.0;                    /* 展开中心 a */
-var _taylorWork = new Float64Array(256);    /* 差分表工作区（2K+1 ≤ 33，用完即弃） */
+ * 返回 0 = 成功；-1 = 参数/域错误（_calcError：1=域错误 3=阶数超限 4=内部错） */
+var _taylorCoeffs = new Float64Array(16);   /* 最多 16 阶 */
+var _taylorOrder = 0;
+var _taylorCenter = 0.0;
+var _taylorWork = new Float64Array(256);    /* 2K+1 ≤ 33，用完即弃 */
 
 function calcTaylor(x0, order) {
   _calcError = 0;

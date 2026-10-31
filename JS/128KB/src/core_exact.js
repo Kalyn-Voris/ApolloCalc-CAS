@@ -1,6 +1,4 @@
-/* ============================================================
- * ApolloCalc 文件 4：core_exact.js
- * 双模态精确数值系统（精确形式 <-> 8 位小数近似）
+/* ApolloCalc · core_exact.js — 双模态精确数值系统（精确形式 <-> 8 位小数近似）
  * 内部表示固定为五分量：
  *   value = ((exactRat + exactRadNum·√exactRad) / exactDen) × 10^exactExp
  *   - exactRat：有理部分子（0 表示无有理部）
@@ -18,16 +16,12 @@
  * 本文件直接引用文件 1（core_parser.js）已声明的全局变量：
  *   exactRat / exactRadNum / exactRad / exactDen / exactExp /
  *   exactIsValid / approxValue
- * 本文件无需额外全局暂存量：所有中间量均为函数内 var 标量（零分配）。
- * ============================================================
- */
+ * 无需额外全局暂存量：所有中间量均为函数内 var 标量（零分配）。 */
 
 /* 精确系统分量上限（2^53-1）：超出即视为无法精确表示 */
 var EXACT_INT_MAX = 9007199254740991;
 
-/* ============================================================
- * 模块一：基础工具
- * ============================================================ */
+/* 模块一：基础工具 */
 
 function exactGcd(a, b) {
   /* 欧几里得算法（迭代版）：零分配，仅局部标量，无递归 */
@@ -63,15 +57,13 @@ function exactSimplifyRadical(D) {
   return k;
 }
 
-/* ============================================================
- * 模块二：规范化（唯一表示入口，每次构造/运算后调用）
- * ============================================================ */
+/* 模块二：规范化（唯一表示入口，每次构造/运算后调用） */
 
 function exactNormalize() {
   /* 原地规范化全局五分量；失败路径置 exactIsValid = false 并保留 approxValue。
      成功路径末尾同步 approxValue。零分配：仅局部标量。 */
 
-  /* 0. 防御：非有限分量（NaN/Inf）直接失效 */
+  /* 防御：非有限分量（NaN/Inf）直接失效 */
   if (!isFinite(exactRat) || !isFinite(exactRadNum) || !isFinite(exactRad) ||
       !isFinite(exactDen) || !isFinite(exactExp)) {
     exactIsValid = false;
@@ -83,7 +75,7 @@ function exactNormalize() {
     return;
   }
 
-  /* 1. 分母恒正：den < 0 时所有分子变号 */
+  /* 分母恒正：den < 0 时所有分子变号 */
   if (exactDen < 0) {
     exactRat = -exactRat;
     exactRadNum = -exactRadNum;
@@ -94,7 +86,7 @@ function exactNormalize() {
     return;
   }
 
-  /* 2. 根号内数化简：提取完全平方因子，外系数并入根式部系数 */
+  /* 根号内数化简：提取完全平方因子，外系数并入根式部系数 */
   if (exactRadNum !== 0 && exactRad > 1) {
     if (exactRad > EXACT_INT_MAX) {
       exactIsValid = false;
@@ -111,11 +103,11 @@ function exactNormalize() {
     }
   }
 
-  /* 3. 根式部系数为 0 → 根号内置 1 */
+  /* 根式部系数为 0 → 根号内置 1 */
   if (exactRadNum === 0) {
     exactRad = 1;
   } else if (exactRad === 1) {
-    /* 4. 根号内数为 1 → 根式部并入有理部（同号相加预检） */
+    /* 根号内数为 1 → 根式部并入有理部（同号相加预检） */
     var ar0 = exactRat < 0 ? -exactRat : exactRat;
     var ab0 = exactRadNum < 0 ? -exactRadNum : exactRadNum;
     if (ar0 > EXACT_INT_MAX - ab0) {
@@ -127,7 +119,7 @@ function exactNormalize() {
     exactRad = 1;
   }
 
-  /* 5. 三数（rat, radNum, den）取最大公约数约分 */
+  /* 三数（rat, radNum, den）取最大公约数约分 */
   var ar = exactRat < 0 ? -exactRat : exactRat;
   var abn = exactRadNum < 0 ? -exactRadNum : exactRadNum;
   var g1 = exactGcd(ar, exactDen);
@@ -141,7 +133,7 @@ function exactNormalize() {
     abn = abn / g;
   }
 
-  /* 6. 零规范化为 0/0/1/1/0 */
+  /* 零规范化为 0/0/1/1/0 */
   if (exactRat === 0 && exactRadNum === 0) {
     exactRat = 0;
     exactRadNum = 0;
@@ -150,7 +142,7 @@ function exactNormalize() {
     exactExp = 0;
   }
 
-  /* 7. 溢出缓解：分量超限时把 10 的因子在分子/分母与 10^exactExp 之间转移。
+  /* 溢出缓解：分量超限时把 10 的因子在分子/分母与 10^exactExp 之间转移。
      值恒不变：分子两项同除 10 时 exp 增 1；分母除 10 时 exp 减 1。
      根号内数不参与转移（√(r/10) 会改变根式基）。 */
   while (ar > EXACT_INT_MAX || abn > EXACT_INT_MAX || exactDen > EXACT_INT_MAX) {
@@ -177,9 +169,7 @@ function exactNormalize() {
   exactUpdateApprox();
 }
 
-/* ============================================================
- * 模块三：智能构造函数（先赋五分量初值，再经 exactNormalize 规范化）
- * ============================================================ */
+/* 模块三：智能构造函数（先赋五分量初值，再经 exactNormalize 规范化） */
 
 function exactSetFraction(n, d) {
   /* 设置精确数值为分数 n/d；零分配，原地更新五分量 */
@@ -247,7 +237,7 @@ function exactSetRadical(k, m) {
 }
 
 function exactSetMixed(a, b, c, d) {
-  /* 设置精确数值为 (a + b·√c)/d —— 五分量模型新增的混合形式入口
+  /* 设置精确数值为 (a + b·√c)/d，五分量模型新增的混合形式入口
      黄金比例即 exactSetMixed(1, 1, 5, 2)；零分配，原地更新 */
   if (d === 0) {
     exactInvalidate();
@@ -331,9 +321,7 @@ function exactReset() {
   approxValue = 0;
 }
 
-/* ============================================================
- * 模块四：近似值同步
- * ============================================================ */
+/* 模块四：近似值同步 */
 
 function exactUpdateApprox() {
   /* 零分配：仅浮点运算，approxValue 原地重算 */
@@ -341,11 +329,9 @@ function exactUpdateApprox() {
                 Math.pow(10, exactExp);
 }
 
-/* ============================================================
- * 模块五：精确数值的四则运算（原地更新五分量）
+/* 模块五：精确数值的四则运算（原地更新五分量）
  * 操作数为四分量 (rat2 + radNum2·√rad2)/den2（指数视为 0）。
- * 当前全局值带非零指数（exactSetSci 产物）时暂不参与混合运算，置失效。
- * ============================================================ */
+ * 当前全局值带非零指数（exactSetSci 产物）时暂不参与混合运算，置失效。 */
 
 function exactAdd(rat2, radNum2, rad2, den2) {
   /* 当前精确数 + (rat2 + radNum2·√rad2)/den2
@@ -734,12 +720,10 @@ function exactDiv(rat2, radNum2, rad2, den2) {
   exactNormalize();
 }
 
-/* ============================================================
- * 模块六：从判别式 D 提取精确根
- * ============================================================ */
+/* 模块六：从判别式 D 提取精确根 */
 
 function exactFromDiscriminant(D) {
-  /* 文件 5 方程求解器接口：由判别式 D 提取 √D = (rat + radNum·√rad)/den
+  /* 文件 6 方程求解器接口：由判别式 D 提取 √D = (rat + radNum·√rad)/den
      保守策略：双精度入口下 D 只能是有理数，√D 的结果只可能是
      纯有理数（D 为完全平方）或纯根式 k√m，混合形式 √(p + q√r)
      需要无理 D，本入口不涉及（由五分量组装层自然覆盖）

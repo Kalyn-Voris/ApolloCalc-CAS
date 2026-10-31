@@ -1,18 +1,17 @@
-/* ============================================================
- * ApolloCalc-CAS · validate-pool.js — 池有效性校验（构建期诊断工具）
- *
- * 目的：确认 pool.json 的每一条在四个版本上真的走通了目标路径，
- *       而不是静默地测到错误短路。压测前跑一次，避免整份报告失真。
- *
- * 判定：
- *   parse   parseExpression == 0
- *   eval    parse == 0 且 evalExpressionAt 后 evalError == 0（无域错误）
- *   solve   parse == 0 且 extractCoefficients == 0 且 rootCount == degree
- *   exact   同 solve（bench 只测耗时，但路径必须真的跑通）
- *
- * 用法：node tests/bench/validate-pool.js
- * 退出码：0 = 全部通过；1 = 有条目未通过（打印明细）
- * ============================================================ */
+/* ApolloCalc · validate-pool.js — 池有效性校验（构建期诊断工具）
+
+   目的：确认 pool.json 的每一条在四个版本上真的走通了目标路径，
+         而不是静默地测到错误短路。压测前跑一次，避免整份报告失真。
+
+   判定：
+     parse   parseExpression == 0
+     eval    parse == 0 且 evalExpressionAt 后 evalError == 0（无域错误）
+     solve   parse == 0 且 extractCoefficients == 0 且 rootCount == degree
+     exact   同 solve（bench 只测耗时，但路径必须真的跑通）
+
+   用法：node tests/bench/validate-pool.js
+   退出码：0 = 全部通过；1 = 有条目未通过（打印明细）
+*/
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -35,7 +34,7 @@ async function checkVersion(tag, kernelPath) {
   const fails = [];
   let counts = { parse: 0, eval: 0, solve: 0, exact: 0 };
 
-  /* ---- parse ---- */
+  /* parse */
   filterPool(POOL.parse, tag).forEach(function (item) {
     const src = srcOf(item);
     counts.parse++;
@@ -43,7 +42,7 @@ async function checkVersion(tag, kernelPath) {
     if (e !== 0) { fails.push("parse  [" + src + "] parseError=" + e); }
   });
 
-  /* ---- eval ---- */
+  /* eval */
   filterPool(POOL.eval, tag).forEach(function (item) {
     counts.eval++;
     k.setAngleMode(item.angleMode || "DEG");
@@ -56,7 +55,7 @@ async function checkVersion(tag, kernelPath) {
     }
   });
 
-  /* ---- solve / exact ---- */
+  /* solve / exact */
   ["solve", "exact"].forEach(function (stage) {
     filterPool(POOL[stage], tag).forEach(function (item) {
       counts[stage]++;

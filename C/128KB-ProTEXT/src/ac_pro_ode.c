@@ -1,26 +1,22 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_ode.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.3.0 功能 3（C 侧）：常系数线性齐次 ODE 的字符串进、字符串出。
- *   解析 "y''+3y'+2y=0" 形态 → 特征多项式 → 上游 ac_solvers 1..4 次精确
- *   根式求特征根 → 渲染通解字符串。单根 e^{λx}、共轭对 e^{αx}(C₁cos βx +
- *   C₂sin βx)、实重根 x^k·e^{λx}；非齐次/变系数/次数 >4 如实报错，不硬解。
- *
- * 【本文件与契约的镜像关系 / Contract mirror —— ROADMAP.md:178】
- *   本文件的行为边界由 docs/contracts/ode-format-v23.md **逐字冻结**：
- *   输入文法（§3）、特征多项式映射（§3.4）、根排序与聚类（§4）、渲染
- *   规则（§5）、错误码表与判定全序（§6）。本头注是该契约的镜像；任何
- *   变更须 C/JS 双组确认后先改契约再改码。JS 侧对应物为 core_ode.js，
- *   两侧对同一输入必须产出逐字节一致的输出串与同一错误码。
- *
- * 【零存储纪律 / Zero-storage】
- *   零 static 对象、零 malloc、零 VLA、零递归；错误码走返回值
- *   （ac_pro.h:425 论证：任何 static 都让 TU 净增 32 B .bss）。特征根、
- *   系数、渲染缓冲全部栈上（n ≤ 4）。无新 Pro 视图（渲染缓冲由调用方
- *   提供，ROADMAP.md:108「.bss 零增长」）。上游 ac_solvers 用上游
- *   g_ac_scratch，与本文件无视图交集。
- * ============================================================ */
+/* ApolloCalc · ac_pro_ode.c — 常系数线性齐次 ODE 的字符串进,字符串出
+
+   v2.3.0 功能 3(C 侧):解析 "y''+3y'+2y=0" 形态 → 特征多项式 → 上游
+   ac_solvers 1..4 次精确根式求特征根 → 渲染通解字符串。单根 e^{λx},
+   共轭对 e^{αx}(C₁cos βx + C₂sin βx),实重根 x^k·e^{λx};非齐次/变系数/
+   次数 >4 如实报错,不硬解。
+
+   本文件与契约的镜像关系(ROADMAP.md:178):行为边界由
+   docs/contracts/ode-format-v23.md 逐字冻结:输入文法(§3),特征多项式
+   映射(§3.4),根排序与聚类(§4),渲染规则(§5),错误码表与判定全序(§6)。
+   本头注是该契约的镜像;任何变更须 C/JS 双组确认后先改契约再改码。JS 侧
+   对应物为 core_ode.js,两侧对同一输入必须产出逐字节一致的输出串与同一
+   错误码。
+
+   零存储纪律:零 static 对象,零 malloc,零 VLA,零递归;错误码走返回值
+   (ac_pro.h:292 论证:任何 static 都让 TU 净增 32 B .bss)。特征根,系数,
+   渲染缓冲全部栈上(n ≤ 4)。无新 Pro 视图(渲染缓冲由调用方提供,
+   ROADMAP.md:108「.bss 零增长」)。上游 ac_solvers 用上游 g_ac_scratch,
+   与本文件无视图交集。 */
 
 #include <string.h>
 #include <stdint.h>
@@ -38,7 +34,7 @@
 #define ODE_FMT_MAX       32
 
 /* 任意常数下标 ₁..₄（U+2081..2084，UTF-8 三字节；UTF-8 是本仓库既有输出
- * 风格 —— exact-forms.json 的 √(2) 同款）。static const 落 .rdata 零 .bss。 */
+ * 风格,exact-forms.json 的 √(2) 同款）。static const 落 .rdata 零 .bss。 */
 static const char s_ode_sub[4][4] = {
     "\xe2\x82\x81", "\xe2\x82\x82", "\xe2\x82\x83", "\xe2\x82\x84"
 };
@@ -55,7 +51,7 @@ static long long ode_igcd(long long a, long long b) {
     return (a < 0) ? -a : a;
 }
 
-/* ---- 输出缓冲追加 ---- */
+/* 输出缓冲追加 */
 static int ode_puts(char *buf, int cap, int *pos, const char *s) {
     while (*s != '\0') {
         if (*pos >= cap - 1) { return AC_PRO_ODE_EOVER; }
@@ -86,7 +82,7 @@ static int ode_puti(char *buf, int cap, int *pos, long long v) {
     return 0;
 }
 
-/* ---- 数值三级 fmt（契约 §5.1，与 rational 模块同算法）----
+/* 数值三级 fmt（契约 §5.1，与 rational 模块同算法）
  * 整判 1e-9 → 整串；有理重建 q ≤ 1000 → "p/q"（分数间距 ≥ 1/(q1q2) ≥ 1e-6
  * ≫ 2e-9，1e-9 邻域互不相交，重建对求根噪声不变）；否则定点 12 位
  * （半连舍远离零）。系数域 |a| ≤ 999 保证根的 Cauchy 界 ≤ 1000 < 4096，
@@ -204,7 +200,7 @@ static int ode_is_zero(double v) {
     return v < ODE_EPS && v > -ODE_EPS;
 }
 
-/* ==================== 主入口 ==================== */
+/* 主入口 */
 int ac_pro_ode(const char *src, char *out, int out_len) {
     long long a[5];          /* a[k] = y^{(k)} 的系数（契约 §3.4） */
     double re[4];
@@ -235,7 +231,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
 
     for (k = 0; k < 5; k++) { a[k] = 0; }
 
-    /* ==================== 契约 §3：单遍从左到右扫描 ====================
+    /* 契约 §3：单遍从左到右扫描
      * 判定全序（§6）：EPARSE（字符/长度/结构）→ EDEG（词法层当场）→
      * EVARCOEF（x 标志延迟裁决）→ ENONHOMO → ECOEF（系数域也延迟，
      * 否则 1000y''=1 会错报 ECOEF 而非 ENONHOMO）。 */
@@ -258,7 +254,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
 
             /* 因子序列：系数 / x 因子（置标志，延迟裁决）/ y 导数记号。
              * x 出现即 EVARCOEF 标志（§3.2），其形态（x、x^2、3x、x*y''）
-             * 只需能走到项边界 —— 结构非法字符仍当场 EPARSE。 */
+             * 只需能走到项边界,结构非法字符仍当场 EPARSE。 */
             for (;;) {
                 if (*p >= '0' && *p <= '9') {
                     c = c * 10 + (*p - '0');
@@ -319,7 +315,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
 
         if (!has_eq) { return AC_PRO_ODE_EPARSE; }
 
-        /* ---- 右端（契约 §3.3-4/5）----
+        /* 右端（契约 §3.3-4/5）
          * 空或含文法外字符（= 计入）→ EPARSE；去空白后恰为单个 '0' →
          * 齐次；其余（合法记号组成的非 "0" 串）→ ENONHOMO 候选。 */
         {
@@ -344,18 +340,18 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
         }
     }
 
-    /* ---- 延迟裁决（契约 §6 全序）---- */
+    /* 延迟裁决（契约 §6 全序） */
     if (saw_x) { return AC_PRO_ODE_EVARCOEF; }
     if (right_nonzero) { return AC_PRO_ODE_ENONHOMO; }
 
-    /* ---- 系数域（契约 §3.4）：越界 / 全零 / 无导数项 ---- */
+    /* 系数域（契约 §3.4）：越界 / 全零 / 无导数项 */
     for (k = 0; k < 5; k++) {
         if (a[k] > 999 || a[k] < -999) { return AC_PRO_ODE_ECOEF; }
         if (a[k] != 0) { n = k; }
     }
     if (n < 1) { return AC_PRO_ODE_ECOEF; }
 
-    /* ==================== 契约 §4：特征根 ==================== */
+    /* 契约 §4：特征根 */
     for (k = 0; k < 5; k++) { g_coeffs[k] = 0.0; }
     for (k = 0; k <= n; k++) { g_coeffs[k] = (double)a[k]; }
     if (n == 1) {
@@ -373,7 +369,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
     }
     for (k = 0; k < n; k++) { re[k] = g_root_re[k]; im[k] = g_root_im[k]; }
 
-    /* ---- 排序（契约 §4.2）：稳定插入，Re 降序，Re 相等（1e-9）Im 降序 ----
+    /* 排序（契约 §4.2）：稳定插入，Re 降序，Re 相等（1e-9）Im 降序
      * 渲染顺序由此唯一决定，与底层求根器内部输出顺序无关。 */
     for (k = 0; k < n; k++) { lre[k] = re[k]; lim[k] = im[k]; }
     for (i = 1; i < n; i++) {
@@ -396,7 +392,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
         lim[j + 1] = cim;
     }
 
-    /* ---- 聚类 + 渲染（契约 §4.3 / §5.2 / §5.3，一次线性扫描）---- */
+    /* 聚类 + 渲染（契约 §4.3 / §5.2 / §5.3，一次线性扫描） */
     rc = ode_puts(tmp, ODE_OUTBUF, &pos, "y = ");
     if (rc != 0) { return rc; }
     for (k = 0; k < n; k++) { used[k] = 0; }
@@ -405,7 +401,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
     for (k = 0; k < n; k++) {
         if (used[k]) { continue; }
         if (ode_is_zero(lim[k])) {
-            /* ---- 实根簇（λ = re，重数 m）---- */
+            /* 实根簇（λ = re，重数 m） */
             int m = 1;
             used[k] = 1;
             for (j = k + 1; j < n; j++) {
@@ -439,7 +435,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
                 if (rc != 0) { return rc; }
             }
         } else {
-            /* ---- 共轭对（排序后 Im 降序 ⇒ 未配对首根 Im > 0）---- */
+            /* 共轭对（排序后 Im 降序 ⇒ 未配对首根 Im > 0） */
             int v = -1;
             double alpha;
             double beta;

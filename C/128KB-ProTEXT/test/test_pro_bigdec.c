@@ -1,29 +1,21 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/test/test_pro_bigdec.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.1.0 方向⑤「任意精度定点十进制」（ac_pro_dec_*）的单元测试：
- *   12 项测试、用例编号 [case BD-1..BD-12]，覆盖任务书要求的全部维度：
- *     加减乘除进位/借位（BD-2/3/4）、标度对齐（BD-8）、除法扩标
- *     （BD-5/6/11）、位数上限熔断（BD-6/7/9/10）、字符串往返（BD-1）。
- *
- * 【期望值来源 / Expected values】
- *   全部期望串由 node（BigInt）离线核算后以**字符串常量**写入本文件：
- *   node 脚本按 src/ac_pro_bigdec.c 的同一算法复算
- *   （对齐 → 运算 → 规范化 → 规范形渲染），非运行期生成、非目测。
- *   长期望串（181/180/203 字符）按 58 列拆行的相邻字面量拼接。
- *
- * 【接口约定 / Interface】
- *   照抄 test/test_pro_multi.c：本文件定义自己的 pro_tally_t 与
- *   pcheck 助手，导出 test_bigdec(void) 返回计数结构，runner 只汇总、
- *   不感知内部类型（test_pro_runner.c 的跨 TU 约定）。入口函数不带
- *   static（external linkage），与 runner 的外部原型一致。
- *
- * 【零静态存储纪律 / Zero static storage】
- *   本文件不声明任何静态对象（pcheck/streq 是 static 函数，不占
- *   .bss），链接进来后 runner 口径的 .bss 增量仍是 0。所有缓冲都是
- *   栈上定长数组（无 VLA）。
- * ============================================================ */
+/* ApolloCalc · test_pro_bigdec.c — v2.1.0 方向⑤「任意精度定点十进制」的单元测试
+
+   ac_pro_dec_* 的 12 项测试、用例编号 [case BD-1..BD-12]，覆盖任务书要求
+   的全部维度：加减乘除进位/借位（BD-2/3/4）、标度对齐（BD-8）、除法扩标
+   （BD-5/6/11）、位数上限熔断（BD-6/7/9/10）、字符串往返（BD-1）。
+
+   期望值来源：全部期望串由 node（BigInt）离线核算后以字符串常量写入本文件，
+   node 脚本按 src/ac_pro_bigdec.c 的同一算法复算（对齐 → 运算 → 规范化 →
+   规范形渲染），非运行期生成、非目测。长期望串（181/180/203 字符）按 58 列
+   拆行的相邻字面量拼接。
+
+   接口照抄 test/test_pro_multi.c：本文件定义自己的 pro_tally_t 与 pcheck 助
+   手，导出 test_bigdec(void) 返回计数结构，runner 只汇总、不感知内部类型
+   （test_pro_runner.c 的跨 TU 约定）。入口函数不带 static（external
+   linkage），与 runner 的外部原型一致。
+
+   本文件不声明任何静态对象（pcheck/streq 是 static 函数，不占 .bss），链接
+   进来后 runner 口径的 .bss 增量仍是 0。所有缓冲都是栈上定长数组（无 VLA）。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -77,7 +69,7 @@ static void make_pow10(char *buf, int cap, int zeros) {
     buf[1 + zeros] = '\0';
 }
 
-/* ==================== 任意精度定点十进制（12 项测试） ==================== */
+/* 任意精度定点十进制（12 项测试） */
 pro_tally_t test_bigdec(void) {
     pro_tally_t t;
     char out[256];
@@ -87,7 +79,7 @@ pro_tally_t test_bigdec(void) {
     t.checks = 0;
     t.failed = 0;
 
-    /* ---------- [case BD-1] 字符串往返：解析 → 渲染 = 规范形 ---------- */
+    /* 字符串往返：解析 → 渲染 = 规范形 */
     printf("[case BD-1] string round-trip: parse -> render canonical forms\n");
     {
         int ok;
@@ -120,7 +112,7 @@ pro_tally_t test_bigdec(void) {
         printf("         last render: %.34s\n", out);
     }
 
-    /* ---------- [case BD-2] 加法进位（含 10^180 精确特例） ---------- */
+    /* 加法进位（含 10^180 精确特例） */
     printf("[case BD-2] addition carry chain + exact 10^180 corner\n");
     {
         int ok;
@@ -140,7 +132,7 @@ pro_tally_t test_bigdec(void) {
                "carry chain or exact-10^180 corner mismatched node expectation");
     }
 
-    /* ---------- [case BD-3] 减法借位与符号 ---------- */
+    /* 减法借位与符号 */
     printf("[case BD-3] subtraction borrow chain and signs\n");
     {
         int ok;
@@ -158,7 +150,7 @@ pro_tally_t test_bigdec(void) {
                "borrow chain or zero result mismatched node expectation");
     }
 
-    /* ---------- [case BD-4] 乘法（alias-safe 复用 + 标度相加） ---------- */
+    /* 乘法（alias-safe 复用 + 标度相加） */
     printf("[case BD-4] multiplication: 18+18 digit product, tiny factors\n");
     {
         int ok;
@@ -175,7 +167,7 @@ pro_tally_t test_bigdec(void) {
                "product or scale handling mismatched node expectation");
     }
 
-    /* ---------- [case BD-5] 除法扩标：精确终点 ---------- */
+    /* 除法扩标：精确终点 */
     printf("[case BD-5] division with scale extension, exact terminators\n");
     {
         int ok;
@@ -193,7 +185,7 @@ pro_tally_t test_bigdec(void) {
                "exact division mismatched node expectation");
     }
 
-    /* ---------- [case BD-6] 除法位数上限熔断（INEXACT 截断） ---------- */
+    /* 除法位数上限熔断（INEXACT 截断） */
     printf("[case BD-6] division fuse: 1/3, 2/3 truncated at 179 digits (rc=2)\n");
     {
         int ok;
@@ -216,7 +208,7 @@ pro_tally_t test_bigdec(void) {
                "fused quotient or return code mismatched node expectation");
     }
 
-    /* ---------- [case BD-7] 除法错误：除零 + 商下溢熔断 ---------- */
+    /* 除法错误：除零 + 商下溢熔断 */
     printf("[case BD-7] division errors: EDIV0 and quotient-underflow fuse\n");
     {
         int ok;
@@ -232,7 +224,7 @@ pro_tally_t test_bigdec(void) {
                "error codes mismatched AC_PRO_DEC_EDIV0/EOVER");
     }
 
-    /* ---------- [case BD-8] 标度对齐：正常 + 超容量熔断 ---------- */
+    /* 标度对齐：正常 + 超容量熔断 */
     printf("[case BD-8] scale alignment: cross-scale add and alignment fuse\n");
     {
         int ok;
@@ -248,7 +240,7 @@ pro_tally_t test_bigdec(void) {
                "alignment result or fuse mismatched node expectation");
     }
 
-    /* ---------- [case BD-9] 解析位数上限熔断（180 边界） ---------- */
+    /* 解析位数上限熔断（180 边界） */
     printf("[case BD-9] parse digit-limit fuse: 180 ok, 181 refused\n");
     {
         int ok;
@@ -271,7 +263,7 @@ pro_tally_t test_bigdec(void) {
                "180/181-digit boundary mismatched node expectation");
     }
 
-    /* ---------- [case BD-10] 语法错误 + 乘法容量熔断 ---------- */
+    /* 语法错误 + 乘法容量熔断 */
     printf("[case BD-10] parse errors and multiplication capacity fuse\n");
     {
         int ok, all_eparse;
@@ -292,7 +284,7 @@ pro_tally_t test_bigdec(void) {
                "syntax rejection or mul capacity fuse mismatched");
     }
 
-    /* ---------- [case BD-11] 除法扩标：商标度为负的整数放大 ---------- */
+    /* 除法扩标：商标度为负的整数放大 */
     printf("[case BD-11] division scale extension: negative quotient scale\n");
     {
         int ok;
@@ -308,7 +300,7 @@ pro_tally_t test_bigdec(void) {
                "scale-extension result mismatched node expectation");
     }
 
-    /* ---------- [case BD-12] 负数四则与规范零 ---------- */
+    /* 负数四则与规范零 */
     printf("[case BD-12] negatives: mul/sub/add identities and canonical zero\n");
     {
         int ok;

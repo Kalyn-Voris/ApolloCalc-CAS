@@ -1,19 +1,19 @@
-/* ============================================================
- * ApolloCalc-CAS · js-smoke.js — JS 64KB 侧冒烟 CSV（第 10 轮 Part C）
- * 与 C/64KB/test/test_smoke_csv.c 同一组用例、同一 CSV 三段式格式、
- * 同一条流水线（reset → parse → preCheck → guardDegree → extract → solve；
- * 线性组：reset → setMatrixElement → solveLinearSystem）。
- * 内核：动态 import ESM 的 JS/64KB/src/core_kernel.js（只读，禁止修改 JS 目录）。
- * 运行：node tests/bench/js-smoke.js > tests/bench/js-smoke.csv
- * 输出精度：String(x) 最短往返（信息量 ≥ %.17g），diff 脚本按数值比对。
- * ============================================================ */
+/* ApolloCalc · js-smoke.js — JS 64KB 侧冒烟 CSV
+
+   与 C/64KB/test/test_smoke_csv.c 同一组用例、同一 CSV 三段式格式、
+   同一条流水线（reset → parse → preCheck → guardDegree → extract → solve；
+   线性组：reset → setMatrixElement → solveLinearSystem）。
+   内核：动态 import ESM 的 JS/64KB/src/core_kernel.js（只读，禁止修改 JS 目录）。
+   运行：node tests/bench/js-smoke.js > tests/bench/js-smoke.csv
+   输出精度：String(x) 最短往返（信息量 ≥ %.17g），diff 脚本按数值比对。
+*/
 "use strict";
 const path = require("path");
 const { pathToFileURL } = require("url");
 
 const KERNEL = path.join(__dirname, "..", "..", "JS", "64KB", "src", "core_kernel.js");
 
-/* ---- 用例表：与 test_smoke_csv.c 的 POLY / LIN / PRE / EXACT 逐行一致 ---- */
+/* 用例表：与 test_smoke_csv.c 的 POLY / LIN / PRE / EXACT 逐行一致 */
 const POLY = [
   ["quad_56", "x^2-5x+6=0", 2],
   ["quad_cplx", "x^2+1=0", 2],

@@ -1,6 +1,7 @@
-/* ApolloCalc-CAS · JS/128KB 复数域函数测试：cExp / cLn / cPowReal
- * Node 下从 ../src 按序拼接文件 1-6 后执行；末尾经 core_kernel.js 导出接口
- * 冒烟 UI 层调用序 setComplexA → cXxx → getComplexTmp*。 */
+/* ApolloCalc · test-complex.js — 复数域函数测试：cExp / cLn / cPowReal
+
+   Node 下从 ../src 按序拼接文件 1-6 后执行；末尾经 core_kernel.js 导出接口
+   冒烟 UI 层调用序 setComplexA → cXxx → getComplexTmp*。 */
 var fs = require("fs");
 var url = require("url");
 var dir = __dirname + "/../src";
@@ -12,7 +13,6 @@ eval(code);
 var pass = 0, fail = 0;
 function approx(a, b, tol) { return Math.abs(a - b) <= (tol || 1e-9); }
 
-/* 复数结果对 (gotRe, gotIm) 与期望 (wantRe, wantIm) 逐分量比较 */
 function checkC(name, gotRe, gotIm, wantRe, wantIm, tol) {
   if (approx(gotRe, wantRe, tol) && approx(gotIm, wantIm, tol)) { pass++; }
   else { fail++; console.log("FAIL " + name + " got=(" + gotRe + ", " + gotIm + ") want=(" + wantRe + ", " + wantIm + ")"); }
@@ -24,84 +24,72 @@ function checkCond(name, cond) {
 
 angleMode = "RAD";
 
-/* ==================== 模块一：cExp ==================== */
+/* 模块一：cExp */
 
-/* 欧拉恒等式 e^{iπ} = -1（虚部应 < 1e-15） */
 _aRe = 0; _aIm = Math.PI;
 cExp();
 checkC("cExp e^(iπ) = -1+0i", _tmpRe, _tmpIm, -1, 0, 1e-12);
 checkCond("cExp e^(iπ) 虚部 < 1e-15", Math.abs(_tmpIm) < 1e-15);
 
-/* 纯虚数 e^{iπ/2} = i */
 _aRe = 0; _aIm = Math.PI / 2;
 cExp();
 checkC("cExp e^(iπ/2) = 0+1i", _tmpRe, _tmpIm, 0, 1, 1e-15);
 
-/* 零元 e^0 = 1 */
 _aRe = 0; _aIm = 0;
 cExp();
 checkC("cExp e^0 = 1+0i", _tmpRe, _tmpIm, 1, 0, 0);
 
-/* 一般情形：|e^(1+2i)| = e，arg = 2 */
 _aRe = 1; _aIm = 2;
 cExp();
 checkC("cExp |e^(1+2i)|=e 且 arg=2",
        Math.sqrt(_tmpRe * _tmpRe + _tmpIm * _tmpIm), Math.atan2(_tmpIm, _tmpRe),
        Math.E, 2, 1e-12);
 
-/* ==================== 模块二：cLn ==================== */
+/* 模块二：cLn */
 
-/* 正实数 ln(1) = 0 */
 _aRe = 1; _aIm = 0;
 cLn();
 checkC("cLn 1 = 0+0i", _tmpRe, _tmpIm, 0, 0, 0);
 
-/* 负实数 ln(-1) = iπ */
 _aRe = -1; _aIm = 0;
 cLn();
 checkC("cLn (-1) = 0+iπ", _tmpRe, _tmpIm, 0, Math.PI, 1e-15);
 
-/* 纯虚数 ln(i) = iπ/2 */
 _aRe = 0; _aIm = 1;
 cLn();
 checkC("cLn i = 0+iπ/2", _tmpRe, _tmpIm, 0, Math.PI / 2, 1e-15);
 
-/* 零元 ln(0) = -Infinity + 0i（交上层 isFinite 判错的哨兵值） */
+/* ln(0) 返回 -Infinity+0i 是交上层 isFinite 判错的哨兵值 */
 _aRe = 0; _aIm = 0;
 cLn();
 checkCond("cLn 0 = -Infinity+0i 哨兵", _tmpRe === -Infinity && _tmpIm === 0);
 
-/* 实对数一致性：ln(e^3) = 3 */
 _aRe = Math.exp(3); _aIm = 0;
 cLn();
 checkC("cLn e^3 = 3+0i", _tmpRe, _tmpIm, 3, 0, 1e-9);
 
-/* cExp → cLn 回环：e^{iπ} → ln → iπ */
 _aRe = 0; _aIm = Math.PI;
 cExp();
 _aRe = _tmpRe; _aIm = _tmpIm;
 cLn();
 checkC("cExp→cLn 回环 e^(iπ)", _tmpRe, _tmpIm, 0, Math.PI, 1e-12);
 
-/* ==================== 模块三：cPowReal ==================== */
+/* 模块三：cPowReal */
 
-/* 正实数整数幂 2^3 = 8（经 ln/exp 路径虚部恒为 0） */
+/* 2^3 走 ln/exp 路径，虚部恒为 0 */
 _aRe = 2; _aIm = 0;
 cPowReal(3);
 checkC("cPowReal 2^3 = 8+0i", _tmpRe, _tmpIm, 8, 0, 1e-12);
 checkCond("cPowReal 2^3 虚部 === 0", _tmpIm === 0);
 
-/* 负实数分数幂 (-1)^0.5 = i */
 _aRe = -1; _aIm = 0;
 cPowReal(0.5);
 checkC("cPowReal (-1)^0.5 = 0+1i", _tmpRe, _tmpIm, 0, 1, 1e-15);
 
-/* 负指数 2^(-1) = 0.5 */
 _aRe = 2; _aIm = 0;
 cPowReal(-1);
 checkC("cPowReal 2^(-1) = 0.5+0i", _tmpRe, _tmpIm, 0.5, 0, 1e-12);
 
-/* 零元幂：0^0 无定义 → NaN；0^正数 = 0；0^负数 → NaN */
 _aRe = 0; _aIm = 0;
 cPowReal(0);
 checkCond("cPowReal 0^0 = NaN", isNaN(_tmpRe) && isNaN(_tmpIm));
@@ -114,12 +102,11 @@ _aRe = 0; _aIm = 0;
 cPowReal(-1);
 checkCond("cPowReal 0^(-1) = NaN", isNaN(_tmpRe) && isNaN(_tmpIm));
 
-/* 幺元 1^7 = 1（ln 1 = 0 路径，结果精确） */
+/* 1^7 走 ln 1 = 0 路径，结果精确 */
 _aRe = 1; _aIm = 0;
 cPowReal(7);
 checkC("cPowReal 1^7 = 1+0i", _tmpRe, _tmpIm, 1, 0, 0);
 
-/* 与 cPowInt 一致性：(2+3i)^2 两条路径同结果 */
 _aRe = 2; _aIm = 3;
 cPowInt(2);
 var intRe = _tmpRe, intIm = _tmpIm;
@@ -130,7 +117,7 @@ checkC("cPowReal 与 cPowInt 一致 (2+3i)^2", _tmpRe, _tmpIm, intRe, intIm, 1e-
 var fnPass = pass, fnFail = fail;
 console.log("---- 复数域函数: " + fnPass + " passed, " + fnFail + " failed ----");
 
-/* ==================== ESM 接线冒烟：core_kernel.js 导出接口走 UI 调用序 ==================== */
+/* ESM 接线冒烟：core_kernel.js 导出接口走 UI 调用序 */
 import(url.pathToFileURL(dir + "/core_kernel.js").href).then(function (mod) {
   var k = mod.default;
 

@@ -1,21 +1,21 @@
-/* ============================================================
- * ApolloCalc-CAS · js128-smoke.js — JS 128KB 侧冒烟 CSV（第 11 轮）
- * 与 C/128KB/test/test_smoke_csv.c 同一组用例、同一 CSV 三段式格式、
- * 同一条流水线（reset → parse → preCheck → guardDegree → extract → solve；
- * 线性组：reset → setMatrixElement → solveLinearSystem）。
- * 内核：动态 import ESM 的 JS/128KB/src/core_kernel.js（只读，禁止修改 JS 目录）。
- * 运行：node tests/bench/js128-smoke.js > tests/bench/js128-smoke.csv
- * 精确形式为五分量（valid,rat,rad_num,rad,den,exp）——与 C 128KB 口径一致，
- *   注意这与 64KB 版的三分量（valid,num,den,rad）不同，故本脚本独立于 js-smoke.js。
- * 输出精度：String(x) 最短往返（信息量 ≥ %.17g），diff 脚本按数值比对。
- * ============================================================ */
+/* ApolloCalc · js128-smoke.js — JS 128KB 侧冒烟 CSV
+
+   与 C/128KB/test/test_smoke_csv.c 同一组用例、同一 CSV 三段式格式、
+   同一条流水线（reset → parse → preCheck → guardDegree → extract → solve；
+   线性组：reset → setMatrixElement → solveLinearSystem）。
+   内核：动态 import ESM 的 JS/128KB/src/core_kernel.js（只读，禁止修改 JS 目录）。
+   运行：node tests/bench/js128-smoke.js > tests/bench/js128-smoke.csv
+   精确形式为五分量（valid,rat,rad_num,rad,den,exp），与 C 128KB 口径一致；
+   这与 64KB 版的三分量（valid,num,den,rad）不同，故本脚本独立于 js-smoke.js。
+   输出精度：String(x) 最短往返（信息量 ≥ %.17g），diff 脚本按数值比对。
+*/
 "use strict";
 const path = require("path");
 const { pathToFileURL } = require("url");
 
 const KERNEL = path.join(__dirname, "..", "..", "JS", "128KB", "src", "core_kernel.js");
 
-/* ---- 用例表：与 C/128KB/test/test_smoke_csv.c 的 POLY / LIN / PRE / EXACT 逐行一致 ---- */
+/* 用例表：与 C/128KB/test/test_smoke_csv.c 的 POLY / LIN / PRE / EXACT 逐行一致 */
 const POLY = [
   ["quad_56", "x^2-5x+6=0", 2],
   ["quad_cplx", "x^2+1=0", 2],

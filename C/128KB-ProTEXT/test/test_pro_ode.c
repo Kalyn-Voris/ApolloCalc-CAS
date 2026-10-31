@@ -1,9 +1,11 @@
-/* 测试比对的是 docs/contracts/ode-format-v23.md 冻结的期望串（§5.4 范例
- * 逐字）与错误码（§6/§7 逐条，精确比较）。期望串已按契约规则（排序/聚类/
- * fmt/渲染）用一次性脚本机械复核过 11/11 一致（见契约 §5.4 注）。
- *
- * 自带 pro_tally_t，不 include runner 的内部头（与 test_pro_integrate.c 同
- * 约定）。不声明静态对象：本 TU 的 .bss 必须是 0。 */
+/* ApolloCalc · test_pro_ode.c — 二阶常系数线性齐次 ODE 的冻结期望串与错误码测试
+
+   测试比对的是 docs/contracts/ode-format-v23.md 冻结的期望串（§5.4 范例逐字）
+   与错误码（§6/§7 逐条，精确比较）。期望串已按契约规则（排序/聚类/fmt/渲染）用
+   一次性脚本机械复核过 11/11 一致（见契约 §5.4 注）。
+
+   自带 pro_tally_t，不 include runner 的内部头（与 test_pro_integrate.c 同
+   约定）。不声明静态对象：本 TU 的 .bss 必须是 0。 */
 
 #include <stdio.h>
 #include <string.h>
@@ -44,7 +46,7 @@ static void expect_ode(pro_tally_t *t, const char *in, int want_rc,
     ocheck(t, 0, name, detail);
 }
 
-/* ---- [case ODE-1] 契约 §5.4 范例 1..4（单根 / 共轭对 / 纯虚根）---- */
+/* 契约 §5.4 范例 1..4（单根 / 共轭对 / 纯虚根） */
 pro_tally_t test_ode_basic(void) {
     pro_tally_t t;
 
@@ -69,7 +71,7 @@ pro_tally_t test_ode_basic(void) {
     return t;
 }
 
-/* ---- [case ODE-2] 零根 / 实重根 / 一阶 / 三阶（§5.4 行 5..7、10）---- */
+/* 零根 / 实重根 / 一阶 / 三阶（§5.4 行 5..7、10） */
 pro_tally_t test_ode_zero_repeat(void) {
     pro_tally_t t;
 
@@ -91,7 +93,7 @@ pro_tally_t test_ode_zero_repeat(void) {
     return t;
 }
 
-/* ---- [case ODE-3] 四阶：共轭对排序与重根×共轭（§5.4 行 8..9）---- */
+/* 四阶：共轭对排序与重根×共轭（§5.4 行 8..9） */
 pro_tally_t test_ode_quartic(void) {
     pro_tally_t t;
 
@@ -111,7 +113,7 @@ pro_tally_t test_ode_quartic(void) {
     return t;
 }
 
-/* ---- [case ODE-4] 有理根的 fmt 重建（§5.4 行 11）---- */
+/* 有理根的 fmt 重建（§5.4 行 11） */
 pro_tally_t test_ode_rational(void) {
     pro_tally_t t;
 
@@ -127,7 +129,7 @@ pro_tally_t test_ode_rational(void) {
     return t;
 }
 
-/* ---- [case ODE-5] 拒绝情形（§7 逐条 + §6 判定全序交叉例）---- */
+/* 拒绝情形（§7 逐条 + §6 判定全序交叉例） */
 pro_tally_t test_ode_reject(void) {
     pro_tally_t t;
 
@@ -155,7 +157,7 @@ pro_tally_t test_ode_reject(void) {
     return t;
 }
 
-/* ---- [case ODE-6] 判定全序交叉例（§6）---- */
+/* 判定全序交叉例（§6） */
 pro_tally_t test_ode_order(void) {
     pro_tally_t t;
 
@@ -173,7 +175,7 @@ pro_tally_t test_ode_order(void) {
     return t;
 }
 
-/* ---- [case ODE-7] 边界值（§9-4）：阶 4 刚好通过 / 系数 999/1000 / EOVER ---- */
+/* 边界值（§9-4）：阶 4 刚好通过 / 系数 999/1000 / EOVER */
 pro_tally_t test_ode_bounds(void) {
     pro_tally_t t;
     char tiny[8];

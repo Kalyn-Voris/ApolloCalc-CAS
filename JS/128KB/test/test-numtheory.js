@@ -1,10 +1,10 @@
-/* ApolloCalc-CAS · JS/128KB 数论模块测试(v2.3.0 功能 1)
- * 被测模块:src/core_numtheory.js(自包含,不依赖既有 core)
- * 锚点:数学手册标准值 + C/128KB ac_numtheory 同款用例语义;
- *       大素数取公认事实值(2^31−1、F6 因子 67280421310721 等)。
- * 运行:node test/test-numtheory.js   (JS/128KB 目录下)
- * 全过输出:==== numtheory: N pass, 0 fail ====
- */
+/* ApolloCalc · test-numtheory.js — 数论模块测试(v2.3.0 功能 1)
+
+   被测模块:src/core_numtheory.js(自包含,不依赖既有 core)
+   锚点:数学手册标准值 + C/128KB ac_numtheory 同款用例语义;
+        大素数取公认事实值(2^31−1、F6 因子 67280421310721 等)。
+   运行:node test/test-numtheory.js   (JS/128KB 目录下)
+   全过输出:==== numtheory: N pass, 0 fail ==== */
 "use strict";
 
 var NT = require("../src/core_numtheory.js");
@@ -15,7 +15,7 @@ function ok(name, cond, detail) {
   else { fail++; console.log("FAIL " + name + (detail !== undefined ? ": " + detail : "")); }
 }
 
-/* ==================== 一、gcd ==================== */
+/* gcd */
 ok("gcd(48,18)=6", NT.gcd(48, 18) === 6, NT.gcd(48, 18));
 ok("gcd(18,48)=6 交换律", NT.gcd(18, 48) === 6);
 ok("gcd(0,5)=5", NT.gcd(0, 5) === 5);
@@ -28,7 +28,7 @@ ok("gcd(2^53-1,2)=1 域上界奇数", NT.gcd(9007199254740991, 2) === 1);
 ok("gcd 非整数拒绝", isNaN(NT.gcd(3.5, 7)) && NT.getError() === 1);
 ok("gcd 越域拒绝(2^53)", isNaN(NT.gcd(Math.pow(2, 53), 1)) && NT.getError() === 1);
 
-/* ==================== 二、lcm ==================== */
+/* lcm */
 ok("lcm(4,6)=12", NT.lcm(4, 6) === 12);
 ok("lcm(0,5)=0", NT.lcm(0, 5) === 0);
 ok("lcm(-4,6)=12 负号", NT.lcm(-4, 6) === 12);
@@ -37,7 +37,7 @@ ok("lcm(2^52,3) 溢出→0+err2", NT.lcm(4503599627370496, 3) === 0 && NT.getErr
    "lcm=" + NT.lcm(4503599627370496, 3) + " err=" + NT.getError());
 ok("lcm 非整数拒绝", isNaN(NT.lcm(1.5, 2)) && NT.getError() === 1);
 
-/* ==================== 三、isPrime(6k±1 试除) ==================== */
+/* isPrime(6k±1 试除) */
 ok("isPrime(-7)=0", NT.isPrime(-7) === 0);
 ok("isPrime(0)=0 isPrime(1)=0", NT.isPrime(0) === 0 && NT.isPrime(1) === 0);
 ok("isPrime(2)=1 isPrime(3)=1", NT.isPrime(2) === 1 && NT.isPrime(3) === 1);
@@ -51,7 +51,7 @@ ok("isPrime(2147483647)=1 M31", NT.isPrime(2147483647) === 1);
 ok("isPrime(2147483646)=0", NT.isPrime(2147483646) === 0);
 ok("isPrime(7.5) 非整数拒绝", NT.isPrime(7.5) === 0 && NT.getError() === 1);
 
-/* ==================== 四、isPrimeMr(Miller-Rabin) ==================== */
+/* isPrimeMr(Miller-Rabin) */
 ok("isPrimeMr(-3)=0 isPrimeMr(0)=0 isPrimeMr(1)=0",
    NT.isPrimeMr(-3) === 0 && NT.isPrimeMr(0) === 0 && NT.isPrimeMr(1) === 0);
 ok("isPrimeMr(2)=1 命中小素数表", NT.isPrimeMr(2) === 1);
@@ -76,7 +76,7 @@ for (sv = 2; sv <= 2000; sv++) {
 }
 ok("isPrime×isPrimeMr 2..2000 互证一致", sweepOK, "first mismatch @" + sv);
 
-/* ==================== 五、powMod / invMod ==================== */
+/* powMod / invMod */
 ok("powMod(2,10,1000)=24", NT.powMod(2, 10, 1000) === 24);
 ok("powMod(2,52,53)=1 费马小定理", NT.powMod(2, 52, 53) === 1);
 ok("powMod(67280421310721,1,2)=1", NT.powMod(67280421310721, 1, 2) === 1);
@@ -89,7 +89,7 @@ ok("invMod(6,9)=0 无逆元", NT.invMod(6, 9) === 0);
 ok("invMod m=1 拒绝", NT.invMod(5, 1) === 0 && NT.getError() === 1);
 ok("invMod 负 a 归一 invMod(-3,7)=2", NT.invMod(-3, 7) === 2 && ((-3 * 2) % 7 + 7) % 7 === 1);
 
-/* ==================== 六、factorize ==================== */
+/* factorize */
 ok("factorize(720) 状态", NT.factorize(720) === 1 && NT.factorCount() === 3);
 ok("factorize(720)=2^4·3^2·5",
    NT.factorPrimeAt(0) === 2 && NT.factorExpAt(0) === 4 &&
@@ -118,7 +118,7 @@ ok("factorize(0)/(−5)/7.5 拒绝",
 NT.factorReset();
 ok("factorReset 清空", NT.factorCount() === 0 && NT.factorPrimeAt(0) === 0);
 
-/* ==================== 七、nCr ==================== */
+/* nCr */
 ok("nCr(0,0)=1 nCr(5,5)=1", NT.nCr(0, 0) === 1 && NT.nCr(5, 5) === 1);
 ok("nCr(5,2)=10", NT.nCr(5, 2) === 10);
 ok("nCr(10,3)=120", NT.nCr(10, 3) === 120);
@@ -134,7 +134,7 @@ ok("nCr r>n 拒绝", NT.nCr(5, 6) === -1 && NT.getError() === 1);
 ok("nCr n<0 拒绝", NT.nCr(-4, 2) === -1 && NT.getError() === 1);
 ok("nCr 非整数拒绝", NT.nCr(5.5, 2) === -1 && NT.getError() === 1);
 
-/* ==================== 八、nPr ==================== */
+/* nPr */
 ok("nPr(5,0)=1", NT.nPr(5, 0) === 1);
 ok("nPr(5,2)=20", NT.nPr(5, 2) === 20);
 ok("nPr(10,3)=720", NT.nPr(10, 3) === 720);
@@ -146,7 +146,7 @@ ok("nPr(30,12) 溢出→−1+err2(第12因子·19 已越 4.1e16)",
 ok("nPr r>n 拒绝", NT.nPr(3, 4) === -1 && NT.getError() === 1);
 ok("nPr n<0 拒绝", NT.nPr(-1, 0) === -1 && NT.getError() === 1);
 
-/* ==================== 九、零 GC 与复位 ==================== */
+/* 零 GC 与复位 */
 ok("加载期分配 = 3(MR 表 + 因子表 + 指数表)", NT.allocCount() === 3, NT.allocCount());
 NT.reset();
 ok("reset 清错误与计数", NT.getError() === 0 && NT.getOpCount() === 0 &&

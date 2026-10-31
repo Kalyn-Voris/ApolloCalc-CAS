@@ -1,5 +1,4 @@
-/* ============================================================
- * ApolloCalc-CAS · JS/128KB · core_ode.js — 常系数线性齐次 ODE 通解
+/* ApolloCalc-CAS · JS/128KB · core_ode.js — 常系数线性齐次 ODE 通解
  * (v2.3.0 功能 3,JS 侧)契约:docs/contracts/ode-format-v23.md(冻结),
  * 与 C/128KB-ProTEXT/src/ac_pro_ode.c 互为镜像,任何偏差即实现 bug。
  *
@@ -39,21 +38,19 @@
  *
  * 导出:内核拼接 ESM(export 块 ode 命名空间)/ Node require / 浏览器 var。
  * 独立 require 下 solveOde 依赖内核拼接作用域中的 _coeffs 与
- * solveQuadratic/solveCubic/solveQuartic(core_solvers.js 前置)。
- * ============================================================
- */
+ * solveQuadratic/solveCubic/solveQuartic(core_solvers.js 前置)。 */
 
 var ApolloOde = (function () {
   "use strict";
 
-  /* ---- 常量(契约逐字) ---- */
+  /* 常量(契约逐字) */
   var MAX_LEN = 256;               /* §3.1 长度上限(不含 NUL) */
   var TOL = 1e-9;                  /* §4.2/4.3/5.1 统一容差 */
   var COEF_MAX = 999;              /* §3.4 系数域 */
   var MAX_ROOTS = 4;               /* 阶数上限 */
   var OUT_CAP = 300;               /* 最长形态静态估算 < 230(§8),300 留余量 */
 
-  /* ---- 加载期一次分配的池(allocCount = 11,合计 1464 B) ---- */
+  /* 加载期一次分配的池(allocCount = 11,合计 1464 B) */
   var _a = new Float64Array(5);          /* 特征多项式系数 a[0..4] */
   var _seen = new Int32Array(5);         /* 同阶项出现标志(§3.3-2) */
   var _re = new Float64Array(MAX_ROOTS); /* 排序后根实部 */
@@ -62,7 +59,7 @@ var ApolloOde = (function () {
   var _cType = new Int32Array(MAX_ROOTS);/* 簇类型:1 实根 2 共轭对 */
   var _cLam = new Float64Array(MAX_ROOTS);  /* 实根 λ / 共轭 α */
   var _cBeta = new Float64Array(MAX_ROOTS); /* 共轭 β(恒正) */
-  var _cMult = new Int32Array(MAX_ROOTS);   /* 重数 */
+  var _cMult = new Int32Array(MAX_ROOTS);
   var _outBuf = new Int32Array(OUT_CAP); /* 渲染缓冲(字符码) */
   var _workI = new Int32Array(16);       /* fmt 数字位寄存(定点 12 位需 12 槽) */
 
@@ -90,7 +87,7 @@ var ApolloOde = (function () {
     return 0;
   }
 
-  /* ==================== 词法/解析(契约 §3) ====================
+  /* 词法/解析(契约 §3)
    * 返回 0 = 成功;否则 = 契约错误码。成功时 _a[] 已装填且 n 已写 _deg。 */
 
   function _fail(code) { _err = code; return code; }
@@ -121,7 +118,7 @@ var ApolloOde = (function () {
       if (cc === 0 || !_charOK(cc)) { return _fail(-1); }
     }
 
-    /* ---- 结构词法:单趟左→右 ----
+    /* 结构词法:单趟左→右
      * 项累积器:sgn 项符号(初始 +1)/ coef 系数 / coefSeen / starSeen /
      * hasY y 部已消费(引号计数在 y 消费时同趟连扫) / k 当前导数阶 /
      * termOpen 本项已消费内容 token / signRun 项首连续符号计数(1=项首
@@ -182,7 +179,7 @@ var ApolloOde = (function () {
       if (cc === 42) {                               /* '*' */
         if (hasY === 1) { return _fail(-1); }        /* y''*3 → EPARSE */
         if (starSeen === 1) { return _fail(-1); }    /* 每项至多一个 * */
-        /* 星号无条件消费(gb 先例 ac_pro_groebner.c:141 同款:
+        /* 星号无条件消费(gb 先例 ac_pro_groebner.c:136 同款:
          * 系数缺省 1,契约 §3.2 例 "x*y''" 依赖此语义) */
         starSeen = 1; termOpen = 1; termEver = 1;
         i++;
@@ -216,8 +213,8 @@ var ApolloOde = (function () {
     }
     if (termEver === 0) { return _fail(-1); }        /* 左端无任何项 → EPARSE */
 
-    /* ---- 右端(§3.3-4):去首尾空白后必须恰为单个 '0';
-     * 含 x 属自由项非零(不是变系数,变系数只看左端) ---- */
+    /* 右端(§3.3-4):去首尾空白后必须恰为单个 '0';
+     * 含 x 属自由项非零(不是变系数,变系数只看左端) */
     var nz = 0;
     var first = 0;
     for (j = i + 1; j < len; j++) {
@@ -228,7 +225,7 @@ var ApolloOde = (function () {
     }
     if (nz === 0) { return _fail(-1); }              /* 右端空 → EPARSE */
 
-    /* ---- 延迟裁决全序(§6):EVARCOEF → ENONHOMO → ECOEF ---- */
+    /* 延迟裁决全序(§6):EVARCOEF → ENONHOMO → ECOEF */
     if (_varcoef === 1) { return _fail(-3); }
     if (nz !== 1 || first !== 48) { return _fail(-4); }  /* ENONHOMO */
 
@@ -260,7 +257,7 @@ var ApolloOde = (function () {
     return 0;
   }
 
-  /* ==================== fmt(契约 §5.1,跨语言确定性) ====================
+  /* fmt(契约 §5.1,跨语言确定性)
    * 直接写渲染缓冲;域外(|x| ≥ 4096 或非有限)→ −1(EINTERNAL)。 */
 
   function _llround(x) {
@@ -304,13 +301,13 @@ var ApolloOde = (function () {
     if (x !== x || x === Infinity || x === -Infinity) { return -1; }
     if (x < -4096 || x > 4096) { return -1; }        /* §5.1-4 有效域 */
 
-    /* 1. 整数判定(同时覆盖 |x| < 1e-9 → "0",不输出 -0) */
+    /* 整数判定(同时覆盖 |x| < 1e-9 → "0",不输出 -0) */
     var m = _llround(x);
     var d = x - m;
     if (d < 0) { d = -d; }
     if (d < TOL) { _pushInt(m); return 0; }
 
-    /* 2. 有理重建:q = 1..1000,p = llround(x·q),既约化;
+    /* 有理重建:q = 1..1000,p = llround(x·q),既约化;
      *    |x − p/q| ≤ 1e-9 的候选取误差最小者,平局取 q 小者(升序首遇)。
      *    论证(§5.1-2):不同既约分数距离 ≥ 1/(q1·q2) ≥ 1e-6 ≫ 2e-9,
      *    同真值的 1e-9 邻域必命中同一分数 → 同串。 */
@@ -342,7 +339,7 @@ var ApolloOde = (function () {
       return 0;
     }
 
-    /* 3. 定点 12 位:s = llround(x·1e12)(半连舍),|s| < 4.096e15 < 2^53 */
+    /* 定点 12 位:s = llround(x·1e12)(半连舍),|s| < 4.096e15 < 2^53 */
     var s = _llround(x * 1e12);
     var neg = s < 0;
     var mag = neg ? -s : s;
@@ -392,9 +389,9 @@ var ApolloOde = (function () {
     _pushStr("*x)");
   }
 
-  var _odeFail = 0;      /* 渲染期失败标志(fmt 域外 → EINTERNAL) */
+  var _odeFail = 0;      /* fmt 域外 → EINTERNAL */
 
-  /* ==================== 排序(§4.2)/ 聚类(§4.3) ==================== */
+  /* 排序(§4.2)/ 聚类(§4.3) */
 
   function _sortRoots(n) {
     var i, j;
@@ -498,7 +495,7 @@ var ApolloOde = (function () {
     return nC;
   }
 
-  /* ==================== 渲染(契约 §5) ====================
+  /* 渲染(契约 §5)
    * 项间一律 " + " 连接;前缀 "y = ";四类模板机械拼接。 */
 
   function _render(nC) {
@@ -559,7 +556,7 @@ var ApolloOde = (function () {
     return s;
   }
 
-  /* ==================== 入口(契约 §8) ==================== */
+  /* 入口(契约 §8) */
 
   function solveOde(src) {
     _result.code = 0;

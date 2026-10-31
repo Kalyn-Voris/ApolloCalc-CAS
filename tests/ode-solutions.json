@@ -419,7 +419,7 @@
       "cOutput": "-3 (EVARCOEF)",
       "jsOutput": "-1 (EPARSE)",
       "arbitration": "契约文本自相矛盾：§6 错误码表 EVARCOEF 行以 x^2*y=0 为示例（支持 C 侧行为），但 §3.3-3「^ 一律非法→EPARSE」加 §6 判定全序「EVARCOEF 仅当全串无 1/2 类错误时升级」（x$+y''=0→EPARSE 同理）指向 EPARSE（支持 JS 侧行为）。",
-      "rootCause": "C 侧解析器（ac_pro_ode.c 因子序列循环）有意容忍 x 后跟 ^<digits>（消费幂值、仅置 EVARCOEF 标志，头注明言「其形态(x、x^2、3x、x*y'')只需能走到项边界」）并被 test_pro_ode.c:142 期望 -3 固化；JS 侧按 §3.3-3+§6 全序对 ^ 当场 EPARSE。两侧各执契约矛盾文本的一端。",
+      "rootCause": "C 侧解析器（ac_pro_ode.c 因子序列循环）有意容忍 x 后跟 ^<digits>（消费幂值、仅置 EVARCOEF 标志，头注明言「其形态(x、x^2、3x、x*y'')只需能走到项边界」）并被 test_pro_ode.c:144 期望 -3 固化；JS 侧按 §3.3-3+§6 全序对 ^ 当场 EPARSE。两侧各执契约矛盾文本的一端。",
       "evidence": "2026-10-31 双侧探针实跑；两侧内嵌测试各自自洽（C 测试 pin -3，JS 测试无此输入），矛盾仅在跨语言对拍中显形。",
       "disposition": "按 ROADMAP.md:178 上报为两侧实现不一致（根因含契约文本矛盾）；修复方向（改某一侧或经双组确认修订契约 §3.3-3/§6 表述）属双组裁决，本文件不预设立场，该输入暂不进入 cases。"
     },

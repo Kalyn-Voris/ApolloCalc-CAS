@@ -1,6 +1,7 @@
-/* ApolloCalc-CAS · JS/128KB 求解层冒烟测试：Node 下从 ../src 按序拼接文件后执行
- * （core_base.js 须在 core_solvers.js 之前：checkMemoryWatermark 的 _baseBuf 依赖；
- *   core_ratroot.js 在 core_solvers.js 之后：solveCubic/solveQuartic 的有理根快路径） */
+/* ApolloCalc · test-solvers.js — 求解层冒烟测试：Node 下从 ../src 按序拼接文件后执行
+
+   拼接序约束：core_base.js 须在 core_solvers.js 之前（checkMemoryWatermark 的 _baseBuf 依赖）；
+   core_ratroot.js 在 core_solvers.js 之后（solveCubic/solveQuartic 的有理根快路径）。 */
 var fs = require("fs");
 var dir = __dirname + "/../src";
 var code = ["core_parser.js", "core_math_functions.js", "core_complex.js", "core_exact.js",
@@ -11,7 +12,6 @@ eval(code);
 var pass = 0, fail = 0;
 function approx(a, b, tol) { return Math.abs(a - b) <= (tol || 1e-9); }
 
-/* 解方程辅助：parse → extractCoefficients(deg) → solveXxx() */
 function solvePoly(src, deg) {
   solversReset();
   parseExpression(src);
@@ -21,7 +21,6 @@ function solvePoly(src, deg) {
   else if (deg === 4) { solveQuartic(); }
 }
 
-/* 检查期望实根集合是否全部命中（允许乱序） */
 function checkRoots(name, wantArr, tol) {
   var ok = (_solveError === 0);
   if (ok) {
@@ -42,7 +41,6 @@ function checkRoots(name, wantArr, tol) {
   }
 }
 
-/* 检查期望 (re,im) 根对集合是否全部命中（允许乱序，用于复根） */
 function checkRootsC(name, wantPairs, tol) {
   var ok = (_solveError === 0 && _rootCount === wantPairs.length);
   if (ok) {
@@ -65,7 +63,7 @@ function checkRootsC(name, wantPairs, tol) {
 
 angleMode = "RAD";
 
-/* ==================== 模块一：二次 ==================== */
+/* 模块一：二次 */
 solvePoly("x^2-5x+6=0", 2);
 checkRoots("quad (x-3)(x-2)", [3, 2], 1e-9);
 if (_rootExactValid[0] === 1 && _rootExactValid[1] === 1 &&
@@ -123,7 +121,7 @@ checkRoots("quad double root", [2, 2], 1e-9);
 if (_rootExactValid[0] === 1 && _rootExactValid[1] === 1) { pass++; }  /* D=0 仍精确 */
 else { fail++; console.log("FAIL double root exact validity"); }
 
-/* ==================== 模块二：三次 ==================== */
+/* 模块二：三次 */
 solvePoly("x^3-6x^2+11x-6=0", 3);
 checkRoots("cubic (x-1)(x-2)(x-3) ratroot", [1, 2, 3], 1e-9);
 /* 有理根快路径：三个整数根全部带精确形式 */
@@ -147,7 +145,7 @@ checkRoots("cubic irreducible x^3-3x", [Math.sqrt(3), 0, -Math.sqrt(3)], 1e-9);
 solvePoly("2x^3-x-1=0", 3);
 checkRootsC("cubic 2x^3-x-1", [[1, 0], [-0.5, 0.5], [-0.5, -0.5]], 1e-9);
 
-/* ==================== 模块三：四次 ==================== */
+/* 模块三：四次 */
 solvePoly("x^4-5x^2+4=0", 4);
 checkRoots("quartic biquad (x^2-1)(x^2-4)", [1, -1, 2, -2], 1e-9);
 /* 有理根快路径：四个整数根全部带精确形式 */
@@ -175,15 +173,15 @@ checkRoots("quartic mixed real+complex", [1, 2], 1e-8);
 solvePoly("2x^4-x^3-14x^2-5x+6=0", 4);
 checkRoots("quartic frac leading (0.5,3,-2,-1)", [0.5, 3, -2, -1], 1e-7);
 
-/* ==================== 降次链：四次 a=0 → 三次委托 ====================
- * extractCoefficients(3) 后 _coeffs[4] 恒为 0，solveQuartic 应降次到三次 */
+/* 降次链：四次 a=0 → 三次委托
+   extractCoefficients(3) 后 _coeffs[4] 恒为 0，solveQuartic 应降次到三次 */
 solversReset();
 parseExpression("x^3-6x^2+11x-6=0");
 extractCoefficients(3);
 solveQuartic();
 checkRoots("quartic degenerate → cubic", [1, 2, 3], 1e-9);
 
-/* ==================== 模块四：线性方程组 ==================== */
+/* 模块四：线性方程组 */
 solversReset();
 matrixPool[0] = 2; matrixPool[1] = 3; matrixPool[2] = 8;
 matrixPool[3] = 1; matrixPool[4] = -1; matrixPool[5] = -1;
@@ -205,7 +203,7 @@ solveLinearSystem(2);
 if (_solveError === 3 && _rootCount === 0) { pass++; }
 else { fail++; console.log("FAIL lin singular: err=" + _solveError + " count=" + _rootCount); }
 
-/* ==================== 模块五：残差回验 ==================== */
+/* 模块五：残差回验 */
 solvePoly("x^2-5x+6=0", 2);
 verifyRoots();
 if (_residualMax < 1e-6) { pass++; }
@@ -224,7 +222,7 @@ verifyRoots();
 if (_residualMax === 0) { pass++; }
 else { fail++; console.log("FAIL residual complex skip: " + _residualMax); }
 
-/* ==================== 模块六：门禁（128KB 阈值：深度≤6 函数≤4 变量≤10） ==================== */
+/* 模块六：门禁（128KB 阈值：深度≤6 函数≤4 变量≤10） */
 solversReset();
 parseExpression("(((((x)))))");                                  /* 5 层：通过 */
 if (preCheckExpression() === 0) { pass++; }
@@ -267,16 +265,16 @@ else { fail++; console.log("FAIL guardMultivariate"); }
 if (checkMemoryWatermark() === 0) { pass++; }
 else { fail++; console.log("FAIL watermark baseline: used>96KB?"); }
 
-/* ==================== 模块七：复位 ==================== */
+/* 模块七：复位 */
 solvePoly("x^2-5x+6=0", 2);
 solversReset();
 if (_rootCount === 0 && _solveError === 0 && _residualMax === 0 &&
     _rootExactDen[0] === 1 && _rootExactRad[3] === 1 && _rootExactValid[2] === 0) { pass++; }
 else { fail++; console.log("FAIL solversReset"); }
 
-/* ==================== 模块八：线性方程组 12 元（矩阵池 156 = 12×13） ==================== */
+/* 模块八：线性方程组 12 元（矩阵池 156 = 12×13） */
 /* 12 元满秩非平凡系统：A[r][c] = 1 + ((r + 5c) % 13)（13 同余下 12 行两两不同，
- * 无重复行结构），解向量 x_c = c+1，右端 b_r = Σ A[r][c]·x_c 装填时同步累加 */
+   无重复行结构），解向量 x_c = c+1，右端 b_r = Σ A[r][c]·x_c 装填时同步累加 */
 solversReset();
 var n12 = 12;
 var stride12 = n12 + 1;

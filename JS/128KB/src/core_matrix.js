@@ -1,11 +1,9 @@
-/* ApolloCalc-CAS · JS/128KB · core_matrix.js
- * 基础矩阵运算：乘法 / 转置 / 行列式 / 逆矩阵（≤3×3 闭式），自包含。
+/* ApolloCalc-CAS · JS/128KB · core_matrix.js — 基础矩阵运算：乘法 / 转置 / 行列式 / 逆矩阵（≤3×3 闭式），自包含。
  * v2.3.0 功能 2：pro 层升级 12×12——部分主元 det/inv/rank、LU 分解
  * （P·A=L·U+piv 访问器，契约对齐 C/128KB-ProTEXT ac_pro.h A4）、
  * 幂法 + Hotelling deflation 实对称全特征对（对齐 ac_pro_eig_all 语义：
  * |λ| 降序 + 访问器 + 同款错误码）、QR 分解（对齐 ac_mat_qr 语义）。
  *
- * 【双层结构说明（红线约束下的实现形态）】
  *   红线测试 test-matrix.js 把既有寄存器 API 钉死在 ≤3 阶（setA(4,4,..)
  *   必须 err=1 拒绝、rBuffer().length===9、allocCount()===3），因此 12×12
  *   以 pro 层同模块叠加实现：既有寄存器层（A/B/R 3×3）逐字节保持原行为，
@@ -13,12 +11,12 @@
  *   allocCount() 报告既有寄存器层的 3 个池（红线断言口径不变）；
  *   proAllocCount() 报告 pro 层 7 个池；全模块加载期合计 10 个 TypedArray。
  *
- * 【pro 层寄存器模型】proSetA(rows, cols, i, v) 写 12×12 输入寄存器 A
+ * proSetA(rows, cols, i, v) 写 12×12 输入寄存器 A
  *   （行主序）；结果一律落 pro 结果寄存器 R（proGetR 读取），特征对经
  *   proEigValue/proEigVector 读取。UI 调用序 proSetA → proXxx → proGetR*，
  *   与既有 setA → det → getR 契约同构。
  *
- * 【pro 层池账本（全部加载期一次分配，allocCount=7，合计 5944 B）】
+ * pro 层池账本（全部加载期一次分配，allocCount=7，合计 5944 B）
  *   _pa    Float64Array(144)  输入寄存器 A（12×12）      1152 B
  *   _pr    Float64Array(144)  结果寄存器 R                1152 B
  *   _luBuf Float64Array(144)  LU 打包 L\U / det·rank·inv
@@ -28,11 +26,10 @@
  *   _eigLam Float64Array(12)  特征值 λ（|λ| 降序）          96 B
  *   _work  Float64Array(24)   eig x/y 向量 / QR 列草稿     192 B
  *   池合计 ≈ 5.8 KiB（ROADMAP 预算 ~6 KB 内）；C 侧 eig 视图 2592 B
- *   （ac_pro.h:286）作上界参照，JS 以独立池替代 union 视图。
+ *   （ac_pro.h:272）作上界参照，JS 以独立池替代 union 视图。
  *   共享草稿约定：LU/det/rank/inv/eig 依次复用 _luBuf，一次调用使上一次
  *   的草稿结果失效（C Pro union「一次调用只持有一个视图」同款语义）。
  *
- * 【pro 层算法与 C 侧逐字对齐】
  *   - 部分主元消元核 = C ac_matrix.c mat_echelon（主元阈值 1e-12、零列
  *     右移计秩、swap 奇偶定 det 符号）；rank 支持矩形 m×n。
  *   - LU = ac_pro_solvers_ext.c ac_mat_lu 的 Doolittle 部分主元逐字移植：
@@ -46,7 +43,7 @@
  *   - QR = ac_matrix.c ac_mat_qr 的 Gram-Schmidt 逐字移植：Q m×n 正交列、
  *     R n×n 上三角；秩亏列 R[j][j]=0 且 q 零列（成文语义）。
  *
- * 【pro 层错误码（getError，与既有码共用通道）】
+ * pro 层错误码（getError，与既有码共用通道）
  *   0 OK / 1 维度超界（>12 或 ≤0 或下标越界）/ 3 非方阵 / 4 奇异 /
  *   5 幂迭代不收敛 / 6 非对称矩阵 / 7 零矩阵（特征向量无法归一化）。
  *   proEig 返回值本身即 C 侧同款错误码：1 成功 / −1 维度 / −2 非对称 /
@@ -55,19 +52,18 @@
  * 零 GC：10 个 TypedArray 加载期一次分配，全路径无对象/数组字面量、
  * 无字符串操作、无递归。
  *
- * 导出三通道：Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。
- */
+ * 导出三通道：Node require / 浏览器 <script> 顶层 var / 内核拼接 ESM。 */
 
 var ApolloMatrix = (function () {
   "use strict";
 
   var MAX_DIM = 3;
-  var CAP = MAX_DIM * MAX_DIM;      /* 9 */
+  var CAP = MAX_DIM * MAX_DIM;
   var SINGULAR_TOL = 1e-12;         /* 与 C/128KB ac_matrix 的主元阈值同值 */
 
-  var _a = new Float64Array(CAP);   /* 输入寄存器 A（m×k） */
-  var _b = new Float64Array(CAP);   /* 输入寄存器 B（k×n） */
-  var _r = new Float64Array(CAP);   /* 结果寄存器 R */
+  var _a = new Float64Array(CAP);
+  var _b = new Float64Array(CAP);
+  var _r = new Float64Array(CAP);
 
   var _rowsA = 0, _colsA = 0;
   var _rowsB = 0, _colsB = 0;
@@ -78,13 +74,13 @@ var ApolloMatrix = (function () {
   var _allocCount = 3;
   var _det = 0;                     /* det()/inv() 最近一次的行列式值 */
 
-  /* ==================== v2.3.0 pro 层：12×12 ==================== */
+  /* v2.3.0 pro 层：12×12 */
 
   var PRO_MAX_DIM = 12;
-  var PRO_CAP = PRO_MAX_DIM * PRO_MAX_DIM;   /* 144 */
+  var PRO_CAP = PRO_MAX_DIM * PRO_MAX_DIM;
 
-  var _pa = new Float64Array(PRO_CAP);       /* pro 输入寄存器 A */
-  var _pr = new Float64Array(PRO_CAP);       /* pro 结果寄存器 R */
+  var _pa = new Float64Array(PRO_CAP);
+  var _pr = new Float64Array(PRO_CAP);
   var _luBuf = new Float64Array(PRO_CAP);    /* LU 打包 / 工作副本 / deflated A */
   var _vBuf = new Float64Array(PRO_CAP);     /* QR 的 Q / eig 的 V（行存） */
   var _piv = new Int32Array(PRO_MAX_DIM);    /* LU 置换 / eig 零空间列主元 */
@@ -108,14 +104,13 @@ var ApolloMatrix = (function () {
   function bBuffer() { return _b; }
   function rBuffer() { return _r; }
 
-  /* ==================== 既有寄存器层（≤3×3，行为保持 v2.2.0 逐字节不变） ==================== */
+  /* 既有寄存器层（≤3×3，行为保持 v2.2.0 逐字节不变） */
 
   function _dimsOK(r, c) {
     return r >= 1 && r <= MAX_DIM && c >= 1 && c <= MAX_DIM;
   }
 
-  /* 写输入寄存器：dims + 行主序下标一次给定，越界拒绝不写。
-   * 重复调用覆盖旧值 —— 换矩阵前不要求 reset。 */
+  /* 重复调用覆盖旧值 —— 换矩阵前不要求 reset。 */
   function _setReg(arr, rr, cc, rows, cols, i, v) {
     _err = 0;
     if (!_dimsOK(rows, cols) || i < 0 || i >= rows * cols) { _err = 1; return -1; }
@@ -207,7 +202,7 @@ var ApolloMatrix = (function () {
     var n = _rowsA;
     if (n === 1) { _det = _a[0]; return _det; }
     if (n === 2) { _det = _a[0] * _a[3] - _a[1] * _a[2]; return _det; }
-    /* 3×3 Sarrus：a(ei − fh) − b(di − fg) + c(dh − eg) */
+    /* 3×3 Sarrus 展开 */
     _det = _a[0] * (_a[4] * _a[8] - _a[5] * _a[7])
          - _a[1] * (_a[3] * _a[8] - _a[5] * _a[6])
          + _a[2] * (_a[3] * _a[7] - _a[4] * _a[6]);
@@ -273,7 +268,7 @@ var ApolloMatrix = (function () {
     return 1;
   }
 
-  /* ==================== pro 层：输入寄存器与结果读取 ==================== */
+  /* pro 层：输入寄存器与结果读取 */
 
   function _pDimsOK(r, c) {
     return r >= 1 && r <= PRO_MAX_DIM && c >= 1 && c <= PRO_MAX_DIM;
@@ -305,7 +300,7 @@ var ApolloMatrix = (function () {
     return 1;
   }
 
-  /* ==================== pro 层：部分主元消元核（C mat_echelon 同款） ====================
+  /* pro 层：部分主元消元核（C mat_echelon 同款）
    * 在 _luBuf[0..m·n) 上原地行梯形消元（部分主元），返回秩并把交换次数
    * 累入 _swaps。主元阈值 1e-12；零列右移继续找秩（矩形支持）。 */
   function _echelon(m, n) {
@@ -348,7 +343,7 @@ var ApolloMatrix = (function () {
     return rank;
   }
 
-  /* ==================== pro det：1..3 闭式快路径 + 4..12 部分主元 LU ==================== */
+  /* pro det：1..3 闭式快路径 + 4..12 部分主元 LU */
 
   function proDet() {
     _err = 0;
@@ -375,7 +370,7 @@ var ApolloMatrix = (function () {
     return _det;
   }
 
-  /* ==================== pro inv：1..3 闭式快路径 + 4..12 Gauss-Jordan 部分主元 ====================
+  /* pro inv：1..3 闭式快路径 + 4..12 Gauss-Jordan 部分主元
    * 工作副本在 _luBuf、单位阵累加器在 _pr，逐列归一主元并消散至全列；
    * 主元选择只看 A 部分，行操作两缓冲同步 —— 与 C 增广 [A|I] 单行流水
    * 逐运算同序，舍入路径一致。结果 R = A⁻¹（proGetR 读取）。 */
@@ -426,7 +421,7 @@ var ApolloMatrix = (function () {
       _pRowsR = 3; _pColsR = 3;
       return 1;
     }
-    /* ---- 4..12：增广语义的 in-place Gauss-Jordan ----
+    /* 4..12：增广语义的 in-place Gauss-Jordan
      * det 同步记账：每列主元 f 累乘、行交换计奇偶，det = (−1)^swaps·∏f
      * （行归一化不改变行列式，LU 型乘积即精确记账）。 */
     for (i = 0; i < n * n; i++) { _luBuf[i] = _pa[i]; }
@@ -477,7 +472,7 @@ var ApolloMatrix = (function () {
     return 1;
   }
 
-  /* ==================== pro rank：矩形 m×n 部分主元阶梯消元 ==================== */
+  /* pro rank：矩形 m×n 部分主元阶梯消元 */
 
   function proRank() {
     _err = 0;
@@ -490,7 +485,7 @@ var ApolloMatrix = (function () {
     return _echelon(m, n);
   }
 
-  /* ==================== pro LU：P·A = L·U + piv（C ac_mat_lu 逐字移植） ====================
+  /* pro LU：P·A = L·U + piv（C ac_mat_lu 逐字移植）
    * 打包存储：_luBuf 对角及以上 = U，对角以下 = L 的乘数；L 单位下三角
    * 由 proLUGetL 组装（对角恒 1）。piv[i] = 第 i 行来自原矩阵的行号。
    * 奇异（任一主元 |·| < 1e-12）→ −1 + err 4，L/U/piv 内容不得使用。 */
@@ -557,11 +552,11 @@ var ApolloMatrix = (function () {
   }
   function proLUN() { return _luN; }
 
-  /* ==================== pro eig：幂法 + Hotelling deflation（ac_pro_eigen.c 逐字移植） ====================
+  /* pro eig：幂法 + Hotelling deflation（ac_pro_eigen.c 逐字移植）
    * 返回值 = C 侧同款错误码：1 成功 / 0 内部错误 / −1 维度越界 /
    * −2 非对称 / −3 不收敛 / −4 零矩阵。结果：λ 在 _eigLam（|λ| 降序），
    * 特征向量第 k 个的分量 i 在 _vBuf[k·n + i]（C 列主序访问器同布局）。
-   * 常量与 C 侧逐字同值（ac_pro_eigen.c:43-49）。 */
+   * 常量与 C 侧逐字同值（ac_pro_eigen.c:44-50）。 */
   function _eigNorm2(voff, n) {
     var s = 0.0;
     var i;
@@ -682,7 +677,7 @@ var ApolloMatrix = (function () {
 
       for (i = 0; i < n; i++) { _work[x + i] = _work[y + i] / ny; }
 
-      /* 停滞判据盯残差而不是 |Δλ|：Rayleigh 商二阶精确（C 同款注释） */
+      /* 停滞判据盯残差：Rayleigh 商二阶精确，|Δλ| 不作判据（C 同款注释） */
       if (t >= 1 && res > 0.9 * resPrev) { converged = 1; break; }
       resPrev = res;
     }
@@ -893,7 +888,7 @@ var ApolloMatrix = (function () {
   }
   function proEigCount() { return _eigCount; }
 
-  /* ==================== pro QR：Gram-Schmidt（C ac_mat_qr 逐字移植） ====================
+  /* pro QR：Gram-Schmidt（C ac_mat_qr 逐字移植）
    * A（m×n，proSetA 装入）→ Q m×n 正交列（_vBuf，proQRGetQ 读取）+
    * R n×n 上三角（结果寄存器 _pr，proGetR 读取）。秩亏列 → R[j][j]=0
    * 且 q 零列（C 成文语义）。_pa 只读，无别名问题（C 需中转拷贝的

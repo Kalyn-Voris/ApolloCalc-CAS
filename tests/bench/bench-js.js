@@ -18,14 +18,14 @@ var fs = require("fs");
 var path = require("path");
 var url = require("url");
 
-/* ---- 加载内核 ---- */
+/* 加载内核 */
 var kernelPath = process.argv[2];
 if (!kernelPath) {
   console.error("usage: node bench-js.js <kernel.js> [--warmup=1000] [--runs=3]");
   process.exit(1);
 }
 
-/* ---- 解析参数 ---- */
+/* 解析参数 */
 var warmup = 1000;
 var runs = 3;
 process.argv.slice(3).forEach(function (a) {
@@ -33,14 +33,14 @@ process.argv.slice(3).forEach(function (a) {
   if (a.indexOf("--runs=") === 0) { runs = parseInt(a.slice(7), 10); }
 });
 
-/* ---- 版本标签：由内核路径判定，决定 pool 的 versions 门控 ---- */
+/* 版本标签：由内核路径判定，决定 pool 的 versions 门控 */
 function versionTagOf(p) {
   if (p.indexOf("128KB") >= 0) { return "128KB"; }
   if (p.indexOf("64KB") >= 0) { return "64KB"; }
   return "64KB";   /* 未知路径按最小能力集处理，避免误选 128KB 专属条目 */
 }
 
-/* ---- 池过滤：裸字符串恒通用；对象按 versions 门控 ---- */
+/* 池过滤：裸字符串恒通用；对象按 versions 门控 */
 function filterPool(items, versionTag) {
   return items.filter(function (item) {
     if (typeof item === "string") { return true; }
@@ -67,23 +67,23 @@ function gcNow() {
 
   var versionTag = versionTagOf(kernelPath);
 
-  /* ---- 加载池 ---- */
+  /* 加载池 */
   var pool = JSON.parse(fs.readFileSync(__dirname + "/pool.json", "utf8"));
   var iterBudget = pool.iterations;
 
-  /* ---- 静态池占用（如果内核暴露了接口就输出，否则跳过） ---- */
+  /* 静态池占用（如果内核暴露了接口就输出，否则跳过） */
   if (typeof k.getStaticPoolBytes === "function") {
     console.log("STATIC,total_bytes," + k.getStaticPoolBytes());
   }
 
-  /* ---- CSV 头（列名严格固定） ---- */
+  /* CSV 头（列名严格固定） */
   console.log("stage,name,iterations,total_ms,us_per_op");
 
-  /* ---- 汇总累加器 ---- */
+  /* 汇总累加器 */
   var sumOps = 0;
   var sumMs = 0;
 
-  /* ---- 池式迭代：遍历 items 凑到 totalIter，runs 轮取中位数 ---- */
+  /* 池式迭代：遍历 items 凑到 totalIter，runs 轮取中位数 */
   function benchPool(stage, items, totalIter, perIterFn) {
     var poolSize = items.length;
     if (poolSize === 0) {
@@ -122,14 +122,14 @@ function gcNow() {
     console.log("MEM,after_" + stage + ",heap_MB," + memUsedMB().toFixed(3));
   }
 
-  /* ---- 求解器调用签名适配 ----
+  /* 求解器调用签名适配
    * JS128 的 solveCubic(skipRational) 带参、JS64 无参（跨版本分叉）。
    * 在环外一次性解析，避免每轮迭代多做一次分支判断。 */
   var cubicFn = (k.solveCubic.length > 0)
     ? function () { k.solveCubic(0); }
     : function () { k.solveCubic(); };
 
-  /* ==================== parse ==================== */
+  /* parse */
   gcNow();
   console.log("MEM,baseline,heap_MB," + memUsedMB().toFixed(3));
   var parseItems = filterPool(pool.parse, versionTag);
@@ -137,7 +137,7 @@ function gcNow() {
     k.parseExpression(typeof item === "string" ? item : item.src);
   });
 
-  /* ==================== eval ====================
+  /* eval
    * 池内每条表达式不同 → 环内必须重设 angleMode + parse，再求值。
    * 因此 eval 段测得的是「解析 + 求值」的合计成本（与旧 cases.json 版
    * 只在环内测 evalExpressionAt 不同，见 BENCH-1M.md 口径说明）。 */
@@ -148,7 +148,7 @@ function gcNow() {
     k.evalExpressionAt(item.x);
   });
 
-  /* ==================== solve ====================
+  /* solve
    * 规范链路（与 test-solvers / test_smoke_csv 一致）：
    *   solversReset → parseExpression → extractCoefficients → solveXxx */
   function solveOnce(item) {
@@ -163,17 +163,17 @@ function gcNow() {
   var solveItems = filterPool(pool.solve, versionTag);
   benchPool("solve", solveItems, iterBudget.solve, solveOnce);
 
-  /* ==================== exact ====================
+  /* exact
    * 只测耗时（不校验精确形式），池偏向精确形式路径：
    * 纯分数根 / 纯根式根 / 五分量混合形式。 */
   var exactItems = filterPool(pool.exact, versionTag);
   benchPool("exact", exactItems, iterBudget.exact, solveOnce);
 
-  /* ---- 汇总行 ---- */
+  /* 汇总行 */
   console.log("SUMMARY,total_ops," + sumOps + ",total_ms," + sumMs.toFixed(3) +
               ",avg_us_per_op," + (sumMs / sumOps * 1000).toFixed(4));
 
-  /* ---- 运行时堆增量：10 万次 parse 前后各 gc 一次再测 heapUsed ---- */
+  /* 运行时堆增量：10 万次 parse 前后各 gc 一次再测 heapUsed */
   gcNow();
   var memBefore = memUsedMB();
   for (var i = 0; i < 100000; i++) { k.parseExpression("x^2-5x+6=0"); }

@@ -127,7 +127,7 @@ Eigenmath 三库高频功能逐条对标，ROADMAP §一 的可回查底稿）�
 |---|---|---|---|
 | 符号微分引擎 | JS | `core_symboltree.js`（新） | parseExpression 的 RPN token 流 → 扁平表达式树（512×4 节点池）→ 符号求导：四则/幂三支路（常指数/常底/一般 u^v）+ 17 种单参函数；多项式子树接 ratRootDescent 输出因式列表（factor 语义，镜像 ac_sym_factor_poly）；隐函数 dy/dx = −F_x/F_y 对齐 C 侧 A6（错误码逐值复刻）。树侧两道上限（节点 ≤100 / 树深 ≤48）与 preCheck 括号深度的联动定义成文。116 项测试。池 35 232 B |
 | 符号积分 | JS | `core_integrate.js`（新） | 积分表 128 项与 C 侧逐项对齐（anti 模板串 + 偏移表加载期解析，加载期断言恰 128 项）+ 固定两层分部（parts_left 2→1→0 关死，无自调用）；错误码复刻 AC_PRO_INT_\*。与 C 的文法边界如实成文（已知超集偏差 3 条，见下「如实口径」，对拍用例避开）。75 项测试。池 93 676 B |
-| 一般实矩阵特征值 | C | `ac_pro_schur.c`（新） | Householder→Hessenberg→Francis 隐式双移 QR（bulge chasing，全显式循环）+ 2×2 块闭式解；幂 2 精确缩放（纯指数加减零舍入）防 H² 溢出；单特征值 50 轮预算 + EISPACK 同款异常位移，不收敛返 −2 绝不输出垃圾；可选反迭代实特征向量（残差 ≤ 1e-9·(1+‖A‖)，6 组尝试全失败返 −3；复特征值不产出向量）。ac_pro.h:283-284「非对称返 −2」成文缺口关闭。schur 视图 2744 B ≤ 3848 吸收线，`.bss` 零增长。13 例 / 46 checks |
+| 一般实矩阵特征值 | C | `ac_pro_schur.c`（新） | Householder→Hessenberg→Francis 隐式双移 QR（bulge chasing，全显式循环）+ 2×2 块闭式解；幂 2 精确缩放（纯指数加减零舍入）防 H² 溢出；单特征值 50 轮预算 + EISPACK 同款异常位移，不收敛返 −2 绝不输出垃圾；可选反迭代实特征向量（残差 ≤ 1e-9·(1+‖A‖)，6 组尝试全失败返 −3；复特征值不产出向量）。ac_pro.h:269-270「非对称返 −2」成文缺口关闭。schur 视图 2744 B ≤ 3848 吸收线，`.bss` 零增长。13 例 / 46 checks |
 | square-free 分解与重根重数 | C+JS | `ac_pro_sqfree.c`（新）/ `core_ratroot.js` ApolloSqfree 段 | 整系数循环式 SFF（f 与 f′ 逐层 GCD），重数由分解层指标精确决定、浮点永不参与重数合并；输出 (根, 重数) 列表，C ≤8 次（1..4 精确 @e / 5..8 DK @d）、JS 整题 ≥5 → EDEG（契约 §5.1 成文分叉）。契约 [sqfree-format-v24](contracts/sqfree-format-v24.md)。C 10 例（SQFREE）/ JS 70 项。JS 池 2 240 B |
 | 结式 + 2 变量 Groebner 基 | JS | `core_groebner.js`（新） | 结式：Sylvester 矩阵（阶 ≤12）复用 v2.3.0 矩阵 pro 层 proDet，数值路径与 C 同语义；Groebner：M4GB 逐对归约 1:1 移植（lex 序、输入 deg ≤4、基 8 槽/16 项/pair 32 熔断、Buchberger 第一判据、interreduce 不动点），错误码 = AC_PRO_GB_\* 全序。**系数域收窄**：JS 无 int64，Float64 安全整数 \|v\| > 2^53−1 即 EOVER（−6）熔断——两侧能力边界不对等，不称「对等」。60 项测试。池 6 648 B |
 
@@ -137,7 +137,7 @@ Eigenmath 三库高频功能逐条对标，ROADMAP §一 的可回查底稿）�
   JS 组累计 +53 578 B（自 49 747 B）。全项目 JS 静态池 30 112 → **167 908 B**
   （符号微分 35 232 + 符号积分 93 676 + 结式/Groebner 6 648 + sqfree 2 240，
   实测各模块加载期 TypedArray byteLength 之和）——已超 ROADMAP §五 口径的
-  98 304 B 水位门禁；门禁函数 `checkMemoryWatermark`（core_solvers.js:622-644）
+  98 304 B 水位门禁；门禁函数 `checkMemoryWatermark`（core_solvers.js:612-634）
   只累计基础内核池、不含模块池，故测试仍全绿。后续任何 JS 功能落位前应重估
   水位。
 - **Groebner 系数域收窄（不称「对等」）**：JS 无 int64，系数域为 Float64

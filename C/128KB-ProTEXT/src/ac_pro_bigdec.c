@@ -1,57 +1,45 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_bigdec.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.1.0 方向⑤「任意精度小数」：上游 ac_bigint_t（基数 1e9、
- *   20 limb、180 位十进制）之上的定点十进制 dec 视图。
- *   value = m · 10^(−scale)，m ∈ ac_bigint_t（88 B），scale ∈ int32。
- *   出处：设计说明（dec 视图
- *   5 × {bigint 88 + scale 8} = 480 B，被 Pro union 的 mv 峰值 2688 B
- *   完全吸收 → .bss 维持 41456 零增长）。
- *
- * 【算法 / Algorithms】
- *   解析  [+-]?digits[.digits] → 前导零不计数、小数尾零按标度剥离、
- *         9 位一组压 limb（最高位组在前）；有效位 > 180 → EDIGITS 熔断。
- *   加减  对齐到 max(scale)（尾数位数 + 对齐位数 ≤ 180，否则 EOVER）；
- *         同号相加有 10^180 进位风险：先用 NINES = 10^180−1 预检
- *         （ac_bi_cmp(t_a, NINES − t_b) > 0 ⟺ 进位被 20 limb 截弃）；
- *         t_a + t_b == 10^180 的精确特例落 (1, s−180)，其余 EOVER。
- *         上游 bi_mag_add 的进位收尾是「静默丢弃」契约（结果溢出未
- *         定义），故这道预检是正确性必要条件，不是防御性客套。
- *   乘法  上游 alias-safe ac_bi_mul；容量 = 位数(m_a) + 位数(m_b) ≤ 180。
- *   除法  divmod 余数扩标长除：e = 180 − 位数(m_a)，N = m_a·10^e 恰好
- *         占满 180 位，Q/R = ac_bi_divmod(N, m_b)，结果
- *         Q·10^(−(e+s_a−s_b))；R ≠ 0 → INEXACT(2)（截断近似）；
- *         Q == 0 且 R ≠ 0 → EOVER（连 1 位有效数字都凑不出——e 已是
- *         容量内最大，Q 随 e 单调不减，故熔断是诚实的）。
- *
- * 【与上游 g_bi_* 草稿契约的关系 / Draft-contract isolation】
- *   只调用上游公开纯函数 ac_bi_add/sub/mul/divmod/cmp/from_int64/
- *   to_string/zero/copy；dec 的值全部存放在 Pro dec 视图
- *   （g_ac_pro_storage.dec）与栈上 ac_bigint_t 局部变量，不读写
- *   g_bi_a/b/tmp/work1/work2，不调用 factorial/fibonacci——上游
- *   ac_bigint.h:66-70 的草稿契约（work1/work2 跨调用遗留内容）因此
- *   物理不可达。上游函数内部自用的 s_bi_* / g_bi_work1（ac_bi_sub
- *   的临时）由上游自身维护，与 dec 的操作数无别名。
- *
- * 【规范形 / Canonical form】（所有写槽路径的输出都满足）
- *   ① m == 0 ⟺ scale == 0；② scale > 0 时 m 十进制末位非零；
- *   ③ scale < 0 仅由除法产生。dec_canon 用「整 limb 剥离 + 除 10 单
- *   位剥离」实现（≤ 19 次 limb 移位 + ≤ 8 次 divmod，循环有界）。
- *
- * 【Zero-GC / 零静态】
- *   无 malloc、无 VLA、无递归、无 static 对象（错误码走返回值，
- *   一个 static 就是 .bss +32 B，见 ac_pro.h eig 节实测论证）。
- *   栈上最多 ~7 个 ac_bigint_t（616 B）+ 200 B 字符缓冲。
- *   所有循环上界均为编译期常量或被容量预检截断（≤ 20 次 limb 级
- *   循环 / ≤ 180 次字符串扫描），无无界迭代。
- * ============================================================ */
+/* ApolloCalc · ac_pro_bigdec.c — v2.1.0 方向⑤ 任意精度定点十进制
+
+   上游 ac_bigint_t(基数 1e9,20 limb,180 位十进制)之上的定点十进制 dec
+   视图。value = m · 10^(−scale),m ∈ ac_bigint_t(88 B),scale ∈ int32。
+   出处:设计说明(dec 视图 5 × {bigint 88 + scale 8} = 480 B,被 Pro union
+   的 mv 峰值 2688 B 完全吸收 → .bss 维持 41456 零增长)。
+
+   解析 [+-]?digits[.digits]:前导零不计数,小数尾零按标度剥离,9 位一组压
+   limb(最高位组在前);有效位 > 180 → EDIGITS 熔断。加减对齐到 max(scale)
+   (尾数位数 + 对齐位数 ≤ 180,否则 EOVER);同号相加有 10^180 进位风险,
+   先用 NINES = 10^180−1 预检(ac_bi_cmp(t_a, NINES − t_b) > 0 ⟺ 进位被
+   20 limb 截弃);t_a + t_b == 10^180 的精确特例落 (1, s−180),其余 EOVER。
+   上游 bi_mag_add 的进位收尾是「静默丢弃」契约(结果溢出未定义),故这道
+   预检是正确性必要条件,不是防御性客套。乘法走上游 alias-safe ac_bi_mul,
+   容量 = 位数(m_a) + 位数(m_b) ≤ 180。除法是 divmod 余数扩标长除:
+   e = 180 − 位数(m_a),N = m_a·10^e 恰好占满 180 位,
+   Q/R = ac_bi_divmod(N, m_b),结果 Q·10^(−(e+s_a−s_b));R ≠ 0 →
+   INEXACT(2)(截断近似);Q == 0 且 R ≠ 0 → EOVER(连 1 位有效数字都凑
+   不出,e 已是容量内最大,Q 随 e 单调不减,故熔断是诚实的)。
+
+   与上游 g_bi_* 草稿契约的关系:只调用上游公开纯函数
+   ac_bi_add/sub/mul/divmod/cmp/from_int64/to_string/zero/copy;dec 的值
+   全部存放在 Pro dec 视图(g_ac_pro_storage.dec)与栈上 ac_bigint_t 局部
+   变量,不读写 g_bi_a/b/tmp/work1/work2,不调用 factorial/fibonacci。上游
+   ac_bigint.h:66-70 的草稿契约(work1/work2 跨调用遗留内容)因此物理不可
+   达。上游函数内部自用的 s_bi_* / g_bi_work1(ac_bi_sub 的临时)由上游自身
+   维护,与 dec 的操作数无别名。
+
+   规范形(所有写槽路径的输出都满足):m == 0 ⟺ scale == 0;scale > 0 时 m
+   十进制末位非零;scale < 0 仅由除法产生。dec_canon 用「整 limb 剥离 + 除
+   10 单位剥离」实现(≤ 19 次 limb 移位 + ≤ 8 次 divmod,循环有界)。
+
+   零静态:无 malloc,无 VLA,无递归,无 static 对象(错误码走返回值,一个
+   static 就是 .bss +32 B,见 ac_pro.h eig 节实测论证)。栈上最多 ~7 个
+   ac_bigint_t(616 B)+ 200 B 字符缓冲。所有循环上界均为编译期常量或被容量
+   预检截断(≤ 20 次 limb 级循环 / ≤ 180 次字符串扫描),无无界迭代。 */
 
 #include "ac_pro.h"
 
 #if AC_PRO_ACTIVE
 
-/* ==================== 小助手（幅值域） ==================== */
+/* 小助手（幅值域） */
 
 /* 十进制有效位数（|x|，零 → 0）。top limb 已规范化（非零）。 */
 static int dec_digits(const ac_bigint_t *x) {
@@ -65,7 +53,7 @@ static int dec_digits(const ac_bigint_t *x) {
 
 /* out = x · 10^k（k ≥ 0）。调用方必须先保证位数(x) + k ≤ 180，
  * 否则上游 mul 的 2×LIMBS 防御截断会变成静默错值。9 位一组乘
- * 1e9，余数按 10^r 一次乘——循环 ≤ 20 次。 */
+ * 1e9，余数按 10^r 一次乘，循环 ≤ 20 次。 */
 static void dec_shift_up(ac_bigint_t *x, long long k) {
     ac_bigint_t p;
     int i;
@@ -83,7 +71,8 @@ static void dec_shift_up(ac_bigint_t *x, long long k) {
     }
 }
 
-/* 把槽内记录规范化（规范形 ①②；scale < 0 不动，见 scratch.h 注释）。
+/* 把槽内记录规范化（零的标度归 0、尾数末位非零；scale < 0 不动，见
+ * scratch.h 注释）。
  * 整 limb 剥离（limbs[0]==0 ⟺ m%1e9==0，每次 −9 位标度）+ 单位剥离
  * （limbs[0]%10==0 ⟺ m%10==0，divmod 除 10；limb 剥后每轮 ≤ 8 次）。 */
 static void dec_canon(int slot) {
@@ -92,7 +81,7 @@ static void dec_canon(int slot) {
     ac_bigint_t q, r, ten;
 
     if (m->sign == 0 || m->top == 0) {
-        d->scale = 0;                   /* 规范形 ①：零的标度为 0 */
+        d->scale = 0;                   /* 零的标度归 0 */
         d->pad = 0;
         return;
     }
@@ -113,7 +102,7 @@ static void dec_canon(int slot) {
     d->pad = 0;
 }
 
-/* ==================== 解析 ==================== */
+/* 解析 */
 
 /* 语法 [+-]?digits[.digits]（".5"/"5." 合法；无空白/指数/千分位）。
  * 前导零不计数、小数尾零按标度剥离（"1.50" → m=15, s=1）、整数尾部
@@ -135,7 +124,7 @@ static int dec_parse_into(const char *src, int slot) {
 
     if (src == (const char *)0) { return AC_PRO_DEC_EPARSE; }
 
-    /* ---- 第 1 遍：语法校验 + 计数 + 非零端点 ---- */
+    /* 第 1 遍：语法校验 + 计数 + 非零端点 */
     p = src;
     if (*p == '+' || *p == '-') {
         neg = (*p == '-');
@@ -178,7 +167,7 @@ static int dec_parse_into(const char *src, int slot) {
     strip = (tz < frac) ? tz : frac;                    /* 只能剥小数尾零 */
     scale = frac - strip;                               /* ≥ 0：解析不产生负标度 */
     /* 保留的有效位 = [fi, ndigits−strip)：首非零起、止于被剥尾零之前
-     *（"1.50" → "15"、s=1；"1000" → "1000"、s=0——整数尾零保留）。 */
+     * （"1.50" → "15"、s=1；"1000" → "1000"、s=0,整数尾零保留）。 */
     span = ndigits - strip - fi;
     if (span > (long long)AC_PRO_DEC_MAX_DIGITS) {
         return AC_PRO_DEC_EDIGITS;                      /* 位数上限熔断 */
@@ -187,9 +176,9 @@ static int dec_parse_into(const char *src, int slot) {
         return AC_PRO_DEC_EOVER;                        /* 标度超 int32 */
     }
 
-    /* ---- 第 2 遍：重扫字符串，把 [fi, fi+span) 的数字压 limb ----
-     * 基数 1e9 的 limb 必须**右对齐**分块：首组 = span%9 位（整除则 9
-     * 位），其后每 9 位一组——30 位数字的首组是 3 位（"123"），若按
+    /* 第 2 遍：重扫字符串，把 [fi, fi+span) 的数字压 limb
+     * 基数 1e9 的 limb 必须右对齐分块：首组 = span%9 位（整除则 9
+     * 位），其后每 9 位一组，30 位数字的首组是 3 位（"123"），若按
      * 左对齐 9 位切，整个尾数会被放大 10^6（实测 BD-1 钉住的错误）。 */
     first_len = (int)(span % 9);
     if (first_len == 0) { first_len = 9; }
@@ -237,7 +226,7 @@ static int dec_parse_into(const char *src, int slot) {
                                                未剥尾零段不会尾随小数零） */
 }
 
-/* ==================== 渲染 ==================== */
+/* 渲染 */
 
 /* 槽 → 规范形十进制字符串。长度先行核算（long long），不足即 EBUF，
  * 绝不截断半截结果。失败时 out 不被改写。 */
@@ -260,7 +249,7 @@ static int dec_render_slot(int slot, char *out, int out_len) {
     ac_bi_copy(&mag, m);
     mag.sign = 1;                           /* 只渲染幅值，符号自管 */
     ac_bi_to_string(&mag, dig, (int)sizeof dig);
-    L = (long long)dec_digits(m);           /* == strlen(dig) */
+    L = (long long)dec_digits(m);           /* strlen(dig) */
     s = (long long)d->scale;
 
     /* 需求长度：s==0 → L；0<s<L → L+1（'.'）；0<s≤L → 2+s（"0."+补零）；
@@ -293,10 +282,10 @@ static int dec_render_slot(int slot, char *out, int out_len) {
     return AC_PRO_DEC_OK;
 }
 
-/* ==================== 运算体（读槽 0/1，写槽 2） ==================== */
+/* 运算体（读槽 0/1，写槽 2） */
 
 /* 对齐：out = 槽 x 的尾数 · 10^(target − scale_x)。容量不足 → EOVER
- *（对齐是精确移位，绝不截断低位）。零对齐免检（0·10^k = 0）。 */
+ * （对齐是精确移位，绝不截断低位）。零对齐免检（0·10^k = 0）。 */
 static int dec_align(int x, long long target, ac_bigint_t *out) {
     const ac_pro_dec_t *d = &s_pro_dec_slot(x);
     long long k = target - (long long)d->scale;
@@ -313,7 +302,7 @@ static int dec_align(int x, long long target, ac_bigint_t *out) {
 /* 同号幅值相加的 10^180 进位预检（幅值域！ta/tb 可为负，先取 |·|）：
  * 溢出 ⟺ |ta| + |tb| ≥ 10^180 ⟺ |ta| > NINES − |tb|（NINES = 10^180−1；
  * NINES − |tb| ≥ 0 无溢出，因为 |tb| < 10^180）。
- * |ta| + |tb| == 10^180 ⟺ |ta| == NINES − |tb| + 1 —— 精确特例置
+ * |ta| + |tb| == 10^180 ⟺ |ta| == NINES − |tb| + 1,精确特例置
  * *exact_pow10，由调用方落 (±1, s−180)。其余溢出 EOVER。
  * 返回 AC_PRO_DEC_OK（无溢出 / 精确特例）或 AC_PRO_DEC_EOVER。 */
 static int dec_add_carry_check(const ac_bigint_t *ta, const ac_bigint_t *tb,
@@ -367,14 +356,14 @@ static int dec_compute_add(int is_sub) {
 
     if (is_sub) {
         /* a − b = a + (−b)：b 取负后与加法同路径。注意 ta 与 −tb 同号
-           时同样是幅值相加，一样有 10^180 进位风险——统一走预检。 */
+           时同样是幅值相加，一样有 10^180 进位风险，统一走预检。 */
         if (tb.sign == 1) { tb.sign = -1; }
         else if (tb.sign == -1) { tb.sign = 1; }
     }
 
     if (ta.sign != 0 && ta.sign == tb.sign) {
         /* 同号：上游幅值加的收尾进位在 20 limb 处静默截弃（结果溢出为
-           契约外行为，ac_bigint.c:70-74），必须先预检——正确性必要条件。 */
+           契约外行为，ac_bigint.c:70-74），必须先预检，正确性必要条件。 */
         rc = dec_add_carry_check(&ta, &tb, &exact_pow10);
         if (rc != AC_PRO_DEC_OK) { return rc; }
         if (exact_pow10) {
@@ -466,7 +455,7 @@ static int dec_compute_div(void) {
     return (r.top > 0) ? AC_PRO_DEC_INEXACT : AC_PRO_DEC_OK;
 }
 
-/* ==================== 公共驱动 ==================== */
+/* 公共驱动 */
 
 /* 解析 a→槽 0、b→槽 1，运算写槽 2，渲染到 out。任一步失败即短路
  * 返回错误码；除法可能合法返回 INEXACT(2)。 */
@@ -493,7 +482,7 @@ static int dec_binary(const char *a, const char *b, char *out, int out_len,
     return (rr != AC_PRO_DEC_OK) ? rr : rc;
 }
 
-/* ==================== 公开 API（ac_pro.h 声明） ==================== */
+/* 公开 API（ac_pro.h 声明） */
 
 int ac_pro_dec_parse(const char *src, int slot) {
     if (slot < 0 || slot >= AC_PRO_DEC_SLOTS) { return AC_PRO_DEC_ESLOT; }

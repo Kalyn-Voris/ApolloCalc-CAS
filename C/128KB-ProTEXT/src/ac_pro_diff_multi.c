@@ -1,38 +1,28 @@
-/* ============================================================
- * ApolloCalc-CAS · C/128KB-ProTEXT/src/ac_pro_diff_multi.c
- * ------------------------------------------------------------
- * 【职责 / Responsibility】
- *   v2.0.0：多变量符号求导（d/dx、d/dy）。对 A1/A2/A3 的多项式
- *   字符串语法逐项求导，输出同一套归一化字符串。
- *
- * 【签名偏离任务卡的原因 / Why the signature deviates】
- *   任务卡原签名是 `ac_pro_diff_multi(const mv_poly_t*, ...)`，但
- *   mv_poly_t 是 ac_pro_multi.c 的**私有类型**（见 ac_pro.h「窄接口」
- *   注释：公开槽号而非句柄，是为了不让槽位纪律泄漏到多个 TU）。本
- *   文件与 A3 同一条纪律：入口收**字符串**，内部走
- *   ac_pro_multi_parse_into(src, slot) 窄接口，与
- *   ac_pro_multi_var_gcd 的入口风格完全一致。
- *
- * 【视图复用：只用槽 0 和槽 1 / Slot discipline】
- *   不申请新视图、不改 ac_pro_scratch.h：
- *       槽 0  输入多项式（ac_pro_multi_parse_into 写入）
- *       槽 1  求导结果（本文件直接写 s_pro_mv_slot(1)）
- *   结果项表无需再归一化：槽 0 的项表按 exps 降序且指数互异（解析器
- *   的不变式），求导把每个保留项的对应变量指数**减同一个常数**
- *   （d/dx 减 1<<4，d/dy 减 1）—— 保序、单射，所以槽 1 自然有序、
- *   无重复指数；系数经 ac_safe_mul 非零，无零项。
- *
- * 【Zero-GC / Zero-.bss】
- *   无 malloc、无 VLA、无递归；本文件**没有任何静态存储对象**
- *   （static 函数不占 .bss），所以 kernel 口径 .bss 仍是 42608、
- *   runner 口径仍是 42640（实测见 make bss-check）。
- *
- * 【溢出防护 / Overflow discipline】
- *   与 A1/A2/A3 同一条设计说明 §3.1.3 硬要求：新系数 = c × exp 一律走
- *   上游 ac_safe_mul（ac_exact.h），溢出置 g_solve_error = 5
- *   （ac_pro_multi.c 的 PRO_MV_ERR_OVERFLOW 同码）并失败，
- *   绝不返回错值。
- * ============================================================ */
+/* ApolloCalc · ac_pro_diff_multi.c — 2 变量符号求导 d/dx、d/dy + mv_format 同款渲染
+
+   v2.0.0:多变量符号求导(d/dx、d/dy)。对 A1/A2/A3 的多项式字符串语法逐项
+   求导,输出同一套归一化字符串。
+
+   签名偏离任务卡的原因:任务卡原签名是 `ac_pro_diff_multi(const mv_poly_t*,
+   ...)`,但 mv_poly_t 是 ac_pro_multi.c 的私有类型(见 ac_pro.h「窄接口」
+   注释:公开槽号而非句柄,是为了不让槽位纪律泄漏到多个 TU)。本文件与 A3
+   同一条纪律:入口收字符串,内部走 ac_pro_multi_parse_into(src, slot) 窄
+   接口,与 ac_pro_multi_var_gcd 的入口风格完全一致。
+
+   视图复用,只用槽 0 和槽 1:不申请新视图、不改 ac_pro_scratch.h,
+       槽 0  输入多项式(ac_pro_multi_parse_into 写入)
+       槽 1  求导结果(本文件直接写 s_pro_mv_slot(1))
+   结果项表无需再归一化:槽 0 的项表按 exps 降序且指数互异(解析器的不变式),
+   求导把每个保留项的对应变量指数减同一个常数(d/dx 减 1<<4,d/dy 减 1),
+   保序、单射,所以槽 1 自然有序、无重复指数;系数经 ac_safe_mul 非零,无零项。
+
+   零 .bss:无 malloc、无 VLA、无递归;本文件没有任何静态存储对象
+   (static 函数不占 .bss),所以 kernel 口径 .bss 仍是 42608、runner 口径
+   仍是 42640(实测见 make bss-check)。
+
+   溢出防护:与 A1/A2/A3 同一条设计说明 §3.1.3 硬要求,新系数 = c × exp 一律
+   走上游 ac_safe_mul(ac_exact.h),溢出置 g_solve_error = 5
+   (ac_pro_multi.c 的 PRO_MV_ERR_OVERFLOW 同码)并失败,绝不返回错值。 */
 
 #include <stdio.h>
 
@@ -44,7 +34,7 @@
 /* 与 ac_pro_multi.c 同码：5 = 多变量系数溢出（上游只用 0..4）。 */
 #define PRO_MV_ERR_OVERFLOW 5
 
-/* ==================== exps 编码 / 解码 ====================
+/* exps 编码 / 解码
  * 从 ac_pro_multi.c 顶部的 mv_exps / mv_xdeg / mv_ydeg 原样抄录。
  * 它们是该文件的 static 私有实现（刻意不进公开头），本文件作为
  * mv 视图的第二个使用者，把同一编码规则复制一份而不是破坏封装：
@@ -60,13 +50,13 @@ static int diff_ydeg(int32_t exps) {
     return (int)(exps & AC_PRO_MV_EXP_MASK);
 }
 
-/* ==================== 格式化（仿 ac_pro_multi.c 的 mv_format）====
+/* 格式化（仿 ac_pro_multi.c 的 mv_format）
  * 把槽 1 的前 count 项写成规范字符串，规则与 mv_format 逐条一致：
- *   ① 项按 exps 降序（槽 1 已自然有序，见头注）；
- *   ② 系数 |mag| != 1 时写 "2*x*y"，=1 时省系数（写 "x" 而非 "1*x"）；
- *   ③ 指数 1 省略（写 "x" 而非 "x^1"）；指数 0 省略变量；
- *   ④ 项之间用 " + " / " - " 连接（负系数转成减号 + 绝对值）；
- *   ⑤ 零多项式写 "0"。
+ *   项按 exps 降序（槽 1 已自然有序，见头注）；
+ *   系数 |mag| != 1 时写 "2*x*y"，=1 时省系数（写 "x" 而非 "1*x"）；
+ *   指数 1 省略（写 "x" 而非 "x^1"）；指数 0 省略变量；
+ *   项之间用 " + " / " - " 连接（负系数转成减号 + 绝对值）；
+ *   零多项式写 "0"。
  * 缓冲不足返回 -1（调用方置 g_solve_error = 2）。无静态存储。 */
 static int diff_format(int count, char *out, int out_len) {
     const ac_pro_term_t *t = s_pro_mv_slot(1);
@@ -141,7 +131,7 @@ static int diff_format(int count, char *out, int out_len) {
     return 0;
 }
 
-/* ==================== 对外：多变量符号求导 ====================
+/* 对外：多变量符号求导
  * 见 ac_pro.h 的完整契约。占用 mv 视图槽 0（输入）与槽 1（输出），
  * 调用期间不得嵌套任何其它 Pro 视图 API。 */
 int ac_pro_diff_multi(const char *src, int var_index, char *out, int out_len) {
@@ -164,7 +154,7 @@ int ac_pro_diff_multi(const char *src, int var_index, char *out, int out_len) {
 
     /* 解析进槽 0。parse_into 不清 g_solve_error（由调用方负责，见其注释）：
      * 语法错时它保持 0，这里补置 2；若归一化期间已置 5（合并同类项加法
-     * 溢出），则保留 5 —— 不吞掉更严重的错误码。 */
+     * 溢出），则保留 5，不吞掉更严重的错误码。 */
     g_solve_error = 0;
     n = ac_pro_multi_parse_into(src, 0);
     if (n < 0) {
