@@ -54,6 +54,7 @@ var FILES = [
   "core_solvers.js",
   "core_ratroot.js",
   "core_symboltree.js",
+  "core_integrate.js",
   "core_multivar.js",
   "core_matrix.js",
   "core_special.js",
@@ -65,7 +66,7 @@ var FILES = [
 var EXPORT_BLOCK = `/* ============================================================
  * ApolloCalc · core_kernel.js — 内核统一入口
  * 由 build-kernel.js 自动拼接，禁止手动编辑
- * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → symboltree → multivar → matrix → special → numtheory → ode（15 文件，v2.3.0 起随新模块追加）
+ * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → symboltree → integrate → multivar → matrix → special → numtheory → ode（16 文件，v2.3.0 起随新模块追加）
  * ============================================================ */
 
 /* 供 index.js 引用的内核接口（UI 层唯一访问点） */
