@@ -51,6 +51,12 @@ function solveQuadratic() {
   _rootCount = 0;
   _solveError = 0;
 
+  /* 多元非线性门禁(ROADMAP §二:v2.3.0 把死代码「接入」求解管线——唯一可行
+   * 方向,函数名被红线测试与构建导出契约引用,不可删):≥2 变量且含非线性
+   * 运算(^ 或函数调用)→ _solveError = 2 拒绝;线性多元组不在此拦,
+   * 交 solveLinearSystem(守卫语义本就不拦线性多元)。 */
+  if (guardMultivariateNonlinear() === 1) { return _solveError; }
+
   var c = _coeffs[0];
   var b = _coeffs[1];
   var a = _coeffs[2];
@@ -193,6 +199,9 @@ function solveCubic(skipRational) {
   _rootCount = 0;
   _solveError = 0;
 
+  /* 多元非线性门禁(同 solveQuadratic;内层降次委托会重复扫描,幂等无害) */
+  if (guardMultivariateNonlinear() === 1) { return _solveError; }
+
   var d = _coeffs[0];
   var c = _coeffs[1];
   var b = _coeffs[2];
@@ -293,6 +302,9 @@ function solveCubic(skipRational) {
 function solveQuartic() {
   _rootCount = 0;
   _solveError = 0;
+
+  /* 多元非线性门禁(同 solveQuadratic;预解式内层调用会重复扫描,幂等无害) */
+  if (guardMultivariateNonlinear() === 1) { return _solveError; }
 
   var e = _coeffs[0];
   var d = _coeffs[1];

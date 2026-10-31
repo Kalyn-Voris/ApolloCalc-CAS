@@ -4,7 +4,7 @@
  *       node test/build-kernel.js --minify   → 压缩产物（≤128KB 物理线）+ 全量校验
  *
  * 功能：
- *   1. 按序读取 src/ 下 12 个 core 文件，用 \n 拼接
+ *   1. 按序读取 src/ 下 core 文件（基线 12 个，v2.3.0 起追加 core_numtheory.js / core_ode.js 等），用 \n 拼接
  *   2. 末尾追加 export 块（index.js 唯一访问点）
  *   3. 写出 ../src/core_kernel.js
  *      · 默认（无参）：可读产物，行为与历史版本完全一致
@@ -55,14 +55,16 @@ var FILES = [
   "core_ratroot.js",
   "core_multivar.js",
   "core_matrix.js",
-  "core_special.js"
+  "core_special.js",
+  "core_numtheory.js",
+  "core_ode.js"
 ];
 
 /* export 块：内容与交付约定逐字一致，禁止在此改动（改了会与 index.js 契约漂移） */
 var EXPORT_BLOCK = `/* ============================================================
  * ApolloCalc · core_kernel.js — 内核统一入口
  * 由 build-kernel.js 自动拼接，禁止手动编辑
- * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → multivar → matrix → special（12 文件）
+ * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → multivar → matrix → special → numtheory → ode（14 文件，v2.3.0 起随新模块追加）
  * ============================================================ */
 
 /* 供 index.js 引用的内核接口（UI 层唯一访问点） */
@@ -164,7 +166,13 @@ export default {
   /* ---- v2.0.0 自包含三模块（IIFE 单命名空间，UI 层经 multivar.* / matrix.* / special.* 访问） ---- */
   multivar: ApolloMultivar,
   matrix: ApolloMatrix,
-  special: ApolloSpecial
+  special: ApolloSpecial,
+
+  /* ---- v2.3.0 数论模块（IIFE 单命名空间，gcd/素性/分解/nCr/nPr，安全整数域 ≤2^53−1） ---- */
+  numtheory: ApolloNumtheory,
+
+  /* ---- v2.3.0 ODE 通解（常系数线性齐次 1..4 阶，特征根复用求解层，契约 ode-format-v23） ---- */
+  ode: ApolloOde
 };`;
 
 /* export 块引用的全部内核标识符（78 个；函数形参 i/v/mode/re/im/w/n/x/a/b/side/order/x0 除外） */
