@@ -3,6 +3,88 @@
 本项目的所有重要变更记录于此。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循 [语义化版本](https://semver.org/)。
 
+## v2.3.0 (2026-10-31)
+
+本全局版本节点同时更新 C、JS 两侧，主题为「补齐短板 + 低风险纵深」：JS 侧补上
+数论、矩阵 12×12 两个最刺眼的不对称，双侧落地常系数线性 ODE，C 侧做积分与
+有理函数两个高复用数学面。开发方式：双 Git worktree 并行
+（`feat/c-symbolic` / `feat/js-pack`），ODE 字符串格式契约
+（[docs/contracts/ode-format-v23.md](docs/contracts/ode-format-v23.md)）由 C 组
+开工第 1 个 commit 先行冻结、JS 组按其实现；收尾组 feat/release-v2.3.0 串行
+收口（对标调研落库、跨语言契约文件、版本双轨递进）。
+
+### Added（C 侧 · C/128KB-ProTEXT · 组件 v1.4.0 → v1.5.0）
+
+- **常系数线性齐次 ODE 通解**（`ac_pro_ode.c` 新）：`y''+3y'+2y=0` 型字符串进、
+  通解字符串出；特征方程走 ac_solvers 1..4 次精确根式，单根 e^{λx}、共轭对
+  cos/sin、实重根 x^k·e^{λx}、重根×共轭四类渲染模板；非齐次/变系数/阶 ≥5
+  按错误码 −1..−5 从严拒绝，绝不硬解。零 static 对象，**.bss 零增长**。
+- **B2 符号积分增强**（`ac_pro_integrate.c`）：积分表 64 → **128 项**（tan/sec/
+  csc/cot 族、双曲族、1/(a²±x²)、√(a²±x²) 类，带线性内层替换）；分部积分
+  一层 → **固定两层**（深度硬编码的展开式实现，无自调用，不违反禁递归红线；
+  显式修订 README「只做一层」契约）。测试 31 → 58 项。
+- **单变量有理函数工具**（`ac_pro_rational.c` 新）：欧几里得 GCD（整系数域，
+  伪除 + primitive 归一）、cancel 约分、apart 部分分式（1..4 次精确根 /
+  5..8 次 DK 数值根，仅互异单根；回乘验证残差 ≤ 1e-9 才输出）。32 项测试。
+
+### Added（JS 侧 · JS/128KB · 组件 v2.2.0 → v2.3.0）
+
+- **数论模块**（`core_numtheory.js` 新）：gcd/lcm、6k±1 试除 + Miller-Rabin
+  （底数集与 C 侧逐字一致）、质因数分解、nCr/nPr；安全整数域 ≤ 2^53−1。
+  89 项测试，池 288 B。
+- **矩阵 12×12 pro 层**（`core_matrix.js` 升级）：部分主元 det/inv/rank、
+  LU(P·A=L·U+piv，对齐 C 侧 A4)、幂法 + Hotelling deflation 实对称全特征对、
+  QR；≤3×3 闭式寄存器层红线行为逐字节保留。82 项测试，pro 池 5944 B。
+- **ODE 通解 JS 侧**（`core_ode.js` 新）：与 C 侧逐字镜像（同解析文法、同排序
+  聚类、同 fmt 三分支、同渲染模板、同错误码数值）。72 项测试，池 1464 B。
+- **guardMultivariateNonlinear 接入求解管线**：≥2 变量非线性多元组在
+  solveQuadratic/Cubic/Quartic 入口拒绝（v2.0.0 起的已知死代码，唯一可行
+  方向为接入）；新增 test-guard.js 16 例，测试文件 12 → 16。
+
+### Added（跨语言契约与文档）
+
+- **`tests/ode-solutions.json`（新）**：ODE 通解跨语言契约——**70 个双侧实跑
+  逐字节一致的用例冻结**（契约 §5.4 全部 11 行、§6 错误码全序、§7 拒绝情形、
+  §9-4 边界值，含 √2/√3/∛2 无理根 fmt 12 位路径）；**3 个两侧输出不一致的
+  输入逐条记录于 `knownDeviations`**（见下方 Known issues），不冻结进 cases。
+- **三份对标调研落库**：[docs/refs/benchmark-sympy.md](docs/refs/benchmark-sympy.md) /
+  [benchmark-giac.md](docs/refs/benchmark-giac.md) /
+  [benchmark-eigenmath.md](docs/refs/benchmark-eigenmath.md)（SymPy / Giac(Xcas) /
+  Eigenmath，ROADMAP §一 的可回查底稿）。
+- **docs/features.md 重写**：补齐 v2.3.0 全部新功能；修复停留在 v2.0.0 的滞后
+  数字（「281 项测试 / .bss 41 456 B」→ 实测 488 checks / 42608 B）。
+
+### Changed（版本管理 · 双轨递进）
+
+- `C/128KB-ProTEXT/VERSION` v1.4.0 → **v1.5.0**（Pro 层新特性按 semver minor
+  递进）；`JS/128KB/VERSION` v2.2.0 → **v2.3.0**；全局 Tag **v2.3.0**。
+- JS 压缩内核重建：`core_kernel.js` **34 510 → 49 747 B**（预算 131 072 B）；
+  全项目 JS 静态池 22 416 → **30 112 B**（≈ 29.4 KiB，水位门禁 98 304 B 内）。
+
+### Known issues（收尾对拍发现，如实上报）
+
+- **JS 侧 ODE 小正值实根渲染缺陷**：实特征根 0 < |λ| < 0.5 且 llround 到 0 时
+  （如 1/3、1/999），`core_ode.js` `_isZeroInt` 混返 boolean/数字、实根渲染门
+  `=== 0` 比较失配，exp 因子被误省略、根被当作 λ=0 渲染（`999y''+998y'-y=0`
+  C 侧正确、JS 侧输出裸 `C₁`）。负小根与共轭对分支不受影响，两侧内嵌测试均未
+  暴露。详见 tests/ode-solutions.json `knownDeviations[0]`。
+- **两条错误码分歧（契约文本歧义各执一端）**：`x^2*y=0` C −3 / JS −1
+  （契约 §6 表示例与 §3.3-3/§6 全序自相矛盾）；`y''x=0` C −1 / JS −3
+  （契约 §3.2「任意位置」与 §3.3-1「导数记号后」冲突）。须双组确认后统一，
+  详见 tests/ode-solutions.json `knownDeviations[1]/[2]`。
+- 契约文档自洽化：ode-format-v23.md §5.1-3 的 `fmt(-0.5)="-0.5"` 示例与
+  §5.1-2 规则及 §5.4 第 11 行矛盾，两侧实现均已按 p/q 形态交付，示例改正为
+  `"-1/2"`（无行为变更）。
+
+### 测试口径
+
+- C 侧：`verify.ps1` **33 passed, 0 failed**（8 节验收，本版第 4 节改按各功能用例数断言）；pro_runner **488 checks, 0 failed**
+  （396 + B2 27 + rational 32 + ODE 33）；`.bss` 三门禁 42608 / 42640 / 39408
+  逐字命中，degraded 38672（本版零增长）。
+- JS 侧：16 测试文件 **TOTAL: 862 pass, 0 fail**。
+- 跨语言：`node tests/bench/diff-smoke128.js` **50/50 用例一致**（exit 0）；
+  ODE 契约 70 用例双侧冻结（见上）。
+
 ## v2.2.0 (2026-10-27)
 
 本全局版本节点同时更新 C、JS 两侧，并落地「全局 Tag + 组件独立 VERSION」双轨制版本

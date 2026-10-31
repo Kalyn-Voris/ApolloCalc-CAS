@@ -9,10 +9,10 @@
 | 组件 | 堆限制 | 语言 | 状态 | 全局版本节点 (Global Tag) | 组件版本 (Component Version) | 功能范围 |
 |:---|:---|:---|:---|:---|:---|:---|
 | [JS/64KB](JS/64KB/) | 64KB | JavaScript | ✅ 已完成 | v1.0.0 | —（未建轨道） | 解析求值、2-4 次方程、6 元线性方程组、精确形式 |
-| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ 活跃 | **v2.2.0** | **v2.2.0**（首个组件版本记录） | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + 多变量多项式与符号求导/矩阵基础运算/特殊函数 + **深度压缩管线（`build-kernel.js --minify`：core_kernel.js 175 142 → 57 523 B，−67.2%）**，见 [docs/js-128kb.md](docs/js-128kb.md) |
+| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ 活跃 | **v2.3.0** | **v2.3.0** | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + 多变量多项式与符号求导/矩阵（基础 ≤3×3 + **pro 12×12**）/特殊函数/**数论**（v2.3.0）/**常系数线性齐次 ODE 通解**（v2.3.0）+ 深度压缩管线（`build-kernel.js --minify`，当前 175 142 → **49 747 B**，−71.6%）+ guardMultivariateNonlinear 接入求解管线，见 [docs/js-128kb.md](docs/js-128kb.md) |
 | [C/64KB](C/64KB/) | 64KB | C99 | ✅ 已完成 | v1.0.0 | —（未建轨道） | 对等 JS/64KB + 数论/进制分数/工具层三个 C 独有优势，见 [docs/c99-64kb.md](docs/c99-64kb.md) |
 | [C/128KB](C/128KB/) | 128KB | C99 | ✅ 已完成（冻结） | v1.0.0 | —（未建轨道） | 对等 JS/128KB + 大整数/矩阵/特殊函数/符号求导四个 C 独有优势，见 [docs/c99-128kb.md](docs/c99-128kb.md) |
-| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ 活跃 | **v2.2.0** | **v1.4.0** | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分、多变量符号求导/多变量积分/LUT 常量表化、稀疏线性方程组 (n≤32)/任意精度定点小数 (180 位)、**2 变量 Groebner 基（M4GB 逐对归约，lex，deg≤4，膨胀熔断）**；gb 视图 1888 B 被 sparse 峰值完全吸收，`.bss` 零增长（内核 42608 B / runner 42640 B / 上游对照 39408 B，pro_runner 396 checks），见设计说明 |
+| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ 活跃 | **v2.3.0** | **v1.5.0** | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、**符号积分（128 项表 + 固定两层分部，v2.3.0 增强）**、多变量符号求导/多变量积分/LUT 常量表化、稀疏线性方程组 (n≤32)/任意精度定点小数 (180 位)、2 变量 Groebner 基（M4GB 逐对归约，lex，deg≤4，膨胀熔断）、**单变量有理函数工具 GCD/cancel/apart（v2.3.0）**、**常系数线性齐次 ODE 通解（v2.3.0，契约 [ode-format-v23](docs/contracts/ode-format-v23.md)）**；`.bss` 零增长（内核 42608 B / runner 42640 B / 上游对照 39408 B，pro_runner 488 checks），见设计说明 |
 
 > **双轨制口径（v2.2.0 起）**：「全局版本节点 (Global Tag)」是仓库级发布标签，对应根
 > [CHANGELOG.md](CHANGELOG.md) 的条目，一次发布可只覆盖部分组件；「组件版本
@@ -21,29 +21,32 @@
 > 本版 C/128KB-ProTEXT 即为全局 v2.2.0 / 组件 v1.4.0。未建轨道的组件标「—」，
 > 沿革见根 CHANGELOG；组件级细分记录见各组件 `CHANGELOG.md`。
 
-**当前版本：v2.2.0（2026-10-27，全局 Tag）** — 本轮全局版本节点同时覆盖 C、JS 两侧
-与版本管理双轨制（双 Git worktree 并行：`feat/groebner` / `feat/js-minify`）：
+**当前版本：v2.3.0（2026-10-31，全局 Tag）** — 本轮全局版本节点同时覆盖 C、JS
+两侧，主题「补齐短板 + 低风险纵深」（双 Git worktree 并行：`feat/c-symbolic` /
+`feat/js-pack`，ODE 契约先行冻结，收尾组串行收口）：
 
-- **C 侧（C/128KB-ProTEXT，组件 v1.3.5 → v1.4.0）**：新增 **2 变量 Groebner 基**——
-  M4GB 逐对归约、lex 序、deg ≤ 4、膨胀熔断；gb 视图 1888 B（≤ 1960 预算线）被
-  sparse 峰值 3 848 B 完全吸收，**`.bss` 零增长**：内核口径 42 608 B / runner 口径
-  42 640 B / 上游对照 39 408 B（`bss-check` 实测逐字命中）；pro_runner
-  **396 checks, 0 failed**（新增 68 项测试）。验收脚本 `verify.ps1` 修复三处——相对
-  -OutDir 在任何 Push-Location 之前锚定为绝对路径（消除第 7 节 neg*.o 解析到不存在
-  目录、且被 neg1/neg2「非零 = 预期拒绝」判定掩盖的环境性失败）、负向编译 verdict
-  携带 gcc 退出码与 stderr 摘要、文件存为 UTF-8 with BOM（根治 BOM-less 中文注释
-  在 CP936 解码下吞字节的存量隐患）；三种调用模式全部 **31 passed, 0 failed**，
-  两道门禁复跑 exit 0。
-- **JS 侧（JS/128KB，首个组件版本记录）**：**深度压缩管线**并入
-  `build-kernel.js --minify` 唯一重建入口——`core_kernel.js` **175 142 → 57 523 B**
-  （压缩率 67.2%，越过 > 50% 目标且低于 ~87.6 KB 冲刺线）。terser 两段式：内核体
-  按经典 script 压缩（`mangle.toplevel: false`，顶层名全保留）+ EXPORT_BLOCK 单独
-  按 module 压缩，拼接后 `export default` 契约不变、压缩体全量 eval 回归通过；
-  terser 不可用/无网络时自动回退内置词法级剥离器（同入口、同全量校验，16 项词法
-  边界单测，实测 79 435 B / 54.6%，同样达标）。12 测试文件 **603 pass, 0 fail**。
-- **版本管理（双轨制落地）**：根 README 版本对照表改为「全局版本节点 / 组件版本」
-  两列分立；`C/128KB-ProTEXT/VERSION` v1.4.0、`JS/128KB/VERSION` v2.2.0（新建）；
-  新建两份组件 CHANGELOG，自组件视角细分记录。
+- **C 侧（C/128KB-ProTEXT，组件 v1.4.0 → v1.5.0）**：三个新数学面——**常系数
+  线性齐次 ODE 通解**（`ac_pro_ode.c`，字符串进字符串出，格式冻结于
+  [docs/contracts/ode-format-v23.md](docs/contracts/ode-format-v23.md)，
+  非齐次/变系数/阶 ≥5 从严拒绝）；**B2 符号积分增强**（表 64 → 128 项 +
+  分部积分一层 → 固定两层，无自调用不触禁递归红线）；**单变量有理函数工具**
+  （`ac_pro_rational.c`，GCD/cancel/apart，整系数域，apart 互异单根 + 回乘
+  验证）。`.bss` 零增长：内核口径 42 608 B / runner 42 640 B / 上游对照
+  39 408 B（`bss-check` 实测逐字命中）；pro_runner **488 checks, 0 failed**
+  （396 + 92）；`verify.ps1` **33 passed, 0 failed**。
+- **JS 侧（JS/128KB，组件 v2.2.0 → v2.3.0）**：**数论模块**（`core_numtheory.js`，
+  gcd/lcm、Miller-Rabin 底数集与 C 逐字一致、质因数分解、nCr/nPr）；
+  **矩阵 12×12 pro 层**（`core_matrix.js`，det/inv/rank、LU(P·A=L·U+piv)、
+  幂法+Hotelling 全特征对、QR，≤3×3 闭式层红线保留）；**ODE 通解**
+  （`core_ode.js`，与 C 侧逐字镜像）；**guardMultivariateNonlinear 接入**
+  solveQuadratic/Cubic/Quartic（v2.0.0 起的已知死代码消除）。压缩内核重建
+  34 510 → **49 747 B**（预算 131 072 B），静态池 22 416 → 30 112 B
+  （水位门禁 98 304 B 内）；16 测试文件 **862 pass, 0 fail**。
+- **跨语言契约**：[tests/ode-solutions.json](tests/ode-solutions.json)（新建）——
+  70 个双侧实跑逐字节一致的 ODE 用例冻结；3 个两侧输出不一致的输入如实上报于
+  `knownDeviations`（1 条 JS 侧实现缺陷、2 条契约文本歧义各执一端），
+  不冻结进 cases、不返工兜底。三份对标调研落库
+  [docs/refs/](docs/refs/)（SymPy / Giac / Eigenmath）。
 
 详见 [CHANGELOG.md](CHANGELOG.md)（全局口径）与
 [C/128KB-ProTEXT/CHANGELOG.md](C/128KB-ProTEXT/CHANGELOG.md) /
@@ -63,7 +66,7 @@
 | 版本 | `.bss` | 水位门禁 | 占用率 |
 |:---|---:|---:|---:|
 | JS 64KB | —（TypedArray 静态池 5.4 KB） | 64KB | — |
-| JS 128KB | —（TypedArray 静态池 22.4 KB，含 multivar/matrix） | 128KB | — |
+| JS 128KB | —（TypedArray 静态池 30 112 B ≈ 29.4 KB，含 multivar/matrix pro/numtheory/ode） | 128KB | — |
 | C 64KB | **10,576 B（10.33 KiB）** | 48 KB | 21.5% |
 | C 128KB | **39,408 B（38.48 KiB / 39.4 KB）** | 96 KB | **40.1%** |
 | C 128KB-ProTEXT | **42,608 B（41.61 KiB）** | 112 KiB | **37.15%** |
@@ -82,17 +85,19 @@ ApolloCalc-CAS/
 ├── tests/               四版本共享的一致性测试用例（JSON）
 ├── JS/
 │   ├── 64KB/            已验证内核（src + test + 说明）
-│   └── 128KB/           功能增强版（v2.0.0：+ 多变量多项式/符号求导/矩阵/特殊函数，
-│                        12 文件内核，见 docs/js-128kb.md）
+│   └── 128KB/           功能增强版（v2.3.0：+ 数论/矩阵 12×12 pro 层/ODE 通解，
+│                        16 文件测试，内核 49 747 B，见 docs/js-128kb.md）
 └── C/
     ├── 64KB/            C99 对等实现（已完成 v1.0.0）
     ├── 128KB/           C99 增强版（已完成 v1.0.0，冻结）
-    └── 128KB-ProTEXT/   C99 Pro 层（v2.1.0）：冻结上游内核，叠加多变量 GCD /
+    └── 128KB-ProTEXT/   C99 Pro 层（v2.3.0）：冻结上游内核，叠加多变量 GCD /
                          有理根因式分解 / Sylvester 结式 / LU 分解 / 实特征向量
                          (Hotelling deflation) / 隐函数求导 / 高次数值求根 /
-                         符号积分 / 多变量符号求导 / 多变量积分 /
-                         LUT 常量表化 / 稀疏线性方程组 (n≤32) /
-                         任意精度定点小数 (180 位)；`.bss` 42608 B，上游零改动
+                         符号积分 (128 项表 + 固定两层分部) / 多变量符号求导 /
+                         多变量积分 / LUT 常量表化 / 稀疏线性方程组 (n≤32) /
+                         任意精度定点小数 (180 位) / 2 变量 Groebner 基 (M4GB) /
+                         单变量有理函数工具 (GCD/cancel/apart) /
+                         常系数线性齐次 ODE 通解；`.bss` 42608 B，上游零改动
 ```
 
 ## 快速开始
@@ -106,14 +111,16 @@ node test/test-solvers.js      # 求解层冒烟测试
 node test/build-kernel.js      # 重新拼接 core_kernel.js 并跑 80 项全量回归
 ```
 
-### JS 128KB（v2.0.0，含多变量引擎）
+### JS 128KB（v2.3.0，含多变量引擎与数论/矩阵 pro/ODE）
 
 ```bash
 cd JS/128KB
 node test/test-multivar.js     # 多变量多项式 + 符号求导 + 高阶三角/复数（194 项）
-node test/test-matrix.js       # 矩阵基础运算（39 项）
-node test/test-special.js      # 特殊函数 erf/gamma/lgamma（33 项）
-node test/build-kernel.js      # 12 文件拼接 + 83 项回归 + ESM 43 项冒烟
+node test/test-numtheory.js    # 数论 gcd/lcm/素性/质因数分解/组合数（89 项）
+node test/test-matrix-pro.js   # 矩阵 12×12 pro 层 det/inv/rank/LU/eig/QR（82 项）
+node test/test-ode.js          # 常系数线性齐次 ODE 通解（72 项）
+node test/run-all.js           # 16 文件全量：862 pass / 0 fail
+node test/build-kernel.js      # 拼接 + 83 项回归 + ESM 冒烟（--minify 重建压缩内核）
 ```
 
 ### C99（MinGW / GCC，零依赖）
@@ -128,18 +135,18 @@ node ../../tests/bench/js-smoke.js  > ../../tests/bench/js-smoke.csv
 node ../../tests/bench/diff-smoke.js    # C vs JS 跨版本比对 → SMOKE-DIFF.md
 ```
 
-### C99 Pro（v2.1.0，稀疏求解 + 任意精度小数）
+### C99 Pro（v2.3.0，积分增强 + 有理函数工具 + ODE）
 
 ```bash
 cd C/128KB-ProTEXT
 mingw32-make            # 编译 pro_runner（cmd 直接可用；Git Bash 下加 SHELL=cmd.exe）
-./pro_runner.exe        # 328 项测试全绿（含稀疏线性求解/任意精度小数）+ Zero-GC --wrap 验证
+./pro_runner.exe        # 488 项测试全绿（含 ODE/有理函数工具/积分增强）+ Zero-GC --wrap 验证
 mingw32-make bss-check  # .bss 三门禁精确命中：42608 / 42640 / 39408
 ```
 
 ## 测试
 
-`tests/` 下的三份 JSON 用例是四版本共享的一致性测试：`polynomials.json`（数值求根）、`exact-forms.json`（精确形式）、`edge-cases.json`（边界与错误码）。任何语言、任何堆预算的实现都必须对同一输入给出一致结果。
+`tests/` 下的共享 JSON 用例是跨实现的一致性契约：`polynomials.json`（数值求根）、`exact-forms.json`（精确形式）、`edge-cases.json`（边界与错误码）、`ode-solutions.json`（ODE 通解逐字契约，v2.3.0 新建，含 3 条 knownDeviations 如实上报）。任何语言、任何堆预算的实现都必须对同一输入给出一致结果。
 
 ## 性能
 

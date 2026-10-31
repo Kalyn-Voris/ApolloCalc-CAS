@@ -5,6 +5,58 @@
 的口径区分：根记录**全局版本节点**（仓库级 Tag，一次发布可只覆盖部分组件），本文件
 记录**组件版本**（见本目录 [VERSION](VERSION)）。
 
+## v2.3.0 (2026-10-31)
+
+**与全局版本节点的对应关系**：本组件版本对应全局 Tag **v2.3.0**（组件 v2.2.0 →
+**v2.3.0**）。本版四个功能块由 `feat/js-pack` 分支并行交付（feat/c-symbolic 承担
+C 侧积分/有理函数/ODE），收尾组 feat/release-v2.3.0 收口。
+
+### Added
+
+- **数论模块**（`src/core_numtheory.js` 新）：gcd/lcm、6k±1 试除 + Miller-Rabin
+  （底数集与 C 侧 `ac_numtheory.c` 逐字一致，保跨语言对拍同源）、质因数分解、
+  nCr/nPr；声明安全整数域 ≤ 2^53−1，溢出返回错误码绝不返回错值。
+  89 项测试。池 288 B（底数表 96 + 因子表 192）。
+- **矩阵 12×12 pro 层**（`src/core_matrix.js` 升级）：部分主元 det/inv/rank、
+  LU 分解（契约对齐 C 侧 A4：P·A = L·U + piv 访问器）、幂法 + Hotelling
+  deflation 的实对称全特征对（|λ| 降序，对齐 ac_pro_eig_all）、QR 分解；
+  ≤3×3 闭式寄存器层红线行为逐字节保留（双层结构，pro 独立池）。82 项测试。
+  pro 池 5944 B（ROADMAP 预算 ~6 KB 内）。
+- **常系数线性齐次 ODE 通解**（`src/core_ode.js` 新）：与 C 侧 `ac_pro_ode.c`
+  依 [docs/contracts/ode-format-v23.md](../../docs/contracts/ode-format-v23.md)
+  逐字镜像——特征根复用 solveQuadratic/Cubic/Quartic（_coeffs 低位在前），
+  稳定排序（Re 降序、1e-9 容差）→ 聚类 → fmt（整数/有理重建 q≤1000/定点
+  12 位）→ 四类项模板渲染；错误码与 C 同值（−6 EOVER JS 侧不产生）。
+  72 项测试。池 1464 B（11 个加载期一次分配）。
+- **guardMultivariateNonlinear 接入求解管线**（`src/core_solvers.js`）：死代码
+  唯一可行方向（函数名被红线测试与构建导出契约引用，不可删除）——
+  ≥2 变量且含 `^`/函数调用的非线性多元组在三个多项式求解入口
+  `_solveError = 2` 拒绝，solveLinearSystem 不拦。新增 `test/test-guard.js`
+  16 例（12 → 16 测试文件）。
+
+### Changed
+
+- **压缩内核重建**：四块新功能并入后经 `node test/build-kernel.js --minify`
+  重建，`core_kernel.js` **34 510 → 49 747 B**（预算 131 072 B）；
+  全项目静态池 22 416 → **30 112 B**（≈ 29.4 KiB，水位门禁 98 304 B 内）。
+
+### 测试口径
+
+- 16 测试文件 **TOTAL: 862 pass, 0 fail**（v2.2.0 基线 603 + 数论 89 +
+  矩阵 pro 82 + ODE 72 + 守卫 16）。
+- 跨语言 ODE 契约 [tests/ode-solutions.json](../../tests/ode-solutions.json)
+  冻结 70 个双侧一致用例。
+
+### Known issues
+
+- **小正值实根通解渲染缺陷**（收尾对拍发现）：实特征根 0 < |λ| < 0.5 且
+  llround 到 0 时（如 1/3、1/999），`core_ode.js` 的 `_isZeroInt` 混返
+  boolean/数字、实根渲染门以 `=== 0` 比较，exp 因子被误省略、根被当作 λ=0
+  渲染（C 侧同输入正确输出 `exp(1/999*x)` 项）。负小根与共轭对分支不受影响，
+  故内嵌测试未暴露。详见 tests/ode-solutions.json
+  `knownDeviations[0]`，按 ROADMAP.md:178 如实上报为实现 bug，修复前
+  该输入不入契约 cases。
+
 ## v2.2.0 (2026-10-27)
 
 **本文件首条记录**：JS/128KB 的组件版本轨道自本版建立，首个组件版本 v2.2.0 与
