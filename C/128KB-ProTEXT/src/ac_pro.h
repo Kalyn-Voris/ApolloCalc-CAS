@@ -418,6 +418,47 @@ int ac_pro_rat_apart(const char *f, char *out, int out_len);
 #define AC_PRO_RAT_EDOM    (-4)  /* apart 语义拒绝：假分式 / 重根 / 复根 / 回乘验证不过 */
 #define AC_PRO_RAT_EOVER   (-5)  /* 输出缓冲不足 */
 
+/* ==================== v2.3.0 功能 3（C 侧）：常系数线性齐次 ODE ==========
+ * 行为边界由 docs/contracts/ode-format-v23.md **逐字冻结**（本节是该契约
+ * 的镜像，ac_pro_ode.c 头注同；契约变更须 C/JS 双组确认后先改契约）。
+ *
+ * 【能力边界 / Envelope】
+ *   未知函数固定 y、自变量固定 x（小写），阶数 n ∈ [1, 4]；整系数
+ *   |a_k| ≤ 999；ASCII 输入 ≤ 256 字节。非齐次（右端非 "0"）/ 变系数
+ *   （左端出现 x）/ 阶数 ≥ 5 / 恒等式 → 对应错误码，不硬解。
+ *
+ * 【输入文法 / Input syntax（契约 §3，逐字）】
+ *   项 := [符号][系数][x 因子...]y{撇号 0..4}；系数可缺省为 1、`*` 可选、
+ *   同阶项禁止重复、y 记号后只允许 空白/+/-/=/串尾；右端去空白后必须
+ *   恰为单个 '0'。判定全序（§6）：
+ *   EPARSE → EDEG（撇号计到 5 当场）→ EVARCOEF（x 标志延迟）→
+ *   ENONHOMO → ECOEF → [求根渲染期] EOVER / EINTERNAL。
+ *
+ * 【通解渲染 / Output（契约 §5，逐字）】
+ *   "y = " 前缀 + 逐项和，项 = C_i [*x^j] [*exp(fmt(λ或α)*x)]
+ *   [*cos/sin(fmt(β)*x)]；唯二特例：j=0 省 x 因子、指数整判 0 时整个
+ *   exp 因子省略。根序 = Re 降序、Re 相等（1e-9）Im 降序；共轭对先 cos
+ *   后 sin、重数按 x 幂层展开；任意常数 C₁..C₄（U+2081..2084）按渲染
+ *   顺序连续分配，总数 = n。fmt 三级：整判 1e-9 / 有理重建 q≤1000 /
+ *   定点 12 位。
+ *
+ * 【接口 / Interface】
+ *   int ac_pro_ode(const char *src, char *out, int out_len);
+ *   out 由调用方提供，契约冻结 out_len ≥ 256；不足 → EOVER 且不写部分
+ *   内容。无根访问器、无解析态访问器（特征多项式/根数组是内部量）。
+ *   返回 §6 错误码；失败时 out 内容未定义。 */
+int ac_pro_ode(const char *src, char *out, int out_len);
+
+#define AC_PRO_ODE_OK        0    /* 成功 */
+#define AC_PRO_ODE_EPARSE   (-1)  /* 词法/结构错误（契约 §6） */
+#define AC_PRO_ODE_EDEG     (-2)  /* 导数阶 ≥ 5 */
+#define AC_PRO_ODE_EVARCOEF (-3)  /* 变系数：左端出现 x 记号 */
+#define AC_PRO_ODE_ENONHOMO (-4)  /* 非齐次：右端非单个 '0' */
+#define AC_PRO_ODE_ECOEF    (-5)  /* 系数域：|a_k|>999 / 全零 / 无导数项 */
+#define AC_PRO_ODE_EOVER    (-6)  /* 输出缓冲不足 */
+#define AC_PRO_ODE_EINTERNAL (-7) /* 聚类失败 / 求根失败 / fmt 越域（绝不硬凑） */
+
+
 /* ==================== v2.1.0 方向④：稀疏线性方程组（方案 a）====================
  *
  * 【能力边界 / Envelope】

@@ -846,6 +846,15 @@ pro_multi_tally_t test_rat_apart_dk(void);
 pro_multi_tally_t test_rat_limits(void);
 pro_multi_tally_t test_rat_buffer(void);
 
+/* v2.3.0 功能 3 C 侧：常系数线性齐次 ODE（test/test_pro_ode.c，同跨 TU 约定） */
+pro_multi_tally_t test_ode_basic(void);
+pro_multi_tally_t test_ode_zero_repeat(void);
+pro_multi_tally_t test_ode_quartic(void);
+pro_multi_tally_t test_ode_rational(void);
+pro_multi_tally_t test_ode_reject(void);
+pro_multi_tally_t test_ode_order(void);
+pro_multi_tally_t test_ode_bounds(void);
+
 int main(void) {
     tally_t t;
 
@@ -1020,6 +1029,26 @@ int main(void) {
                r3.checks, r3.failed, r4.checks, r4.failed,
                r5.checks, r5.failed, r6.checks, r6.failed,
                r7.checks, r7.failed);
+    }
+
+    /* v2.3.0 功能 3 C 侧：常系数线性齐次 ODE（test/test_pro_ode.c，7 用例） */
+    {
+        pro_multi_tally_t o1 = test_ode_basic();
+        pro_multi_tally_t o2 = test_ode_zero_repeat();
+        pro_multi_tally_t o3 = test_ode_quartic();
+        pro_multi_tally_t o4 = test_ode_rational();
+        pro_multi_tally_t o5 = test_ode_reject();
+        pro_multi_tally_t o6 = test_ode_order();
+        pro_multi_tally_t o7 = test_ode_bounds();
+        t.checks += o1.checks + o2.checks + o3.checks + o4.checks
+                  + o5.checks + o6.checks + o7.checks;
+        t.failed += o1.failed + o2.failed + o3.failed + o4.failed
+                  + o5.failed + o6.failed + o7.failed;
+        printf("--- v2.3.0 ode: basic %d/%d, zero %d/%d, quartic %d/%d, rational %d/%d, reject %d/%d, order %d/%d, bounds %d/%d (checks/failed) ---\n",
+               o1.checks, o1.failed, o2.checks, o2.failed,
+               o3.checks, o3.failed, o4.checks, o4.failed,
+               o5.checks, o5.failed, o6.checks, o6.failed,
+               o7.checks, o7.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
