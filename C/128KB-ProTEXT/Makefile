@@ -105,14 +105,16 @@ PRO_EXTRA    := src/ac_pro_extra_globals.c src/ac_pro_solvers_ext.c \
                 src/ac_pro_diff_multi.c src/ac_pro_integrate_multi.c \
                 src/ac_pro_sparse.c src/ac_pro_bigdec.c \
                 src/ac_pro_groebner.c src/ac_pro_rational.c \
-                src/ac_pro_ode.c
+                src/ac_pro_ode.c \
+                src/ac_pro_schur.c src/ac_pro_sqfree.c
 SRC          := $(PRO_SRC) $(PRO_EXTRA) src/ac_pro_smoke.c
 TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
                 test/test_pro_eigen.c test/test_pro_integrate.c \
                 test/test_pro_diff_multi.c test/test_pro_integrate_multi.c \
                 test/test_pro_sparse.c test/test_pro_bigdec.c \
                 test/test_pro_groebner.c test/test_pro_rational.c \
-                test/test_pro_ode.c
+                test/test_pro_ode.c test/test_pro_schur.c \
+                test/test_pro_sqfree.c
 # 内核口径构建用的 trivial main（零静态存储，只为了让 .bss 口径可比）
 KERNEL_MAIN  := test/pro_kernel_main.c
 

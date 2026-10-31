@@ -312,6 +312,47 @@ AC_STATIC_ASSERT(AC_PRO_RAT_SLOTS * (int)sizeof(ac_pro_rat_poly_t) +
                  AC_PRO_RAT_SLOTS * (int)sizeof(int) + (int)sizeof(int) == 460,
                  pro_rat_slots_are_460);
 
+/* ==================== v2.4.0 功能 8:schur 视图类型 ====================
+ * 一般实矩阵特征值(Francis 隐式双移 QR,ROADMAP.md:140-145)。
+ *
+ * 【布局 / Layout】(偏移按 8 对齐最小化填充的顺序排列)
+ *   h    @    0   144 × 8 = 1152  Hessenberg 约简结果(Francis 就地迭代;
+ *                 特征值全部提取后复用为反迭代的 M = A − λI 工作副本)
+ *   v    @ 1152   144 × 8 = 1152  实特征向量,列主序:第 k 列 = &v[k*n];
+ *                 复特征值列全零(vector(k) 返回 NULL,绝不硬凑复向量)
+ *   wr   @ 2304    12 × 8 =   96  特征值实部(|λ| 降序)
+ *   wi   @ 2400    12 × 8 =   96  特征值虚部(共轭对相邻,+im 在前)
+ *   work @ 2496    24 × 8 =  192  Householder 向量 + 反迭代 x/y 两向量
+ *   piv  @ 2688    12 × 4 =   48  反迭代 LU 的行交换记录(int32)
+ *   n_st @ 2736     4        =    4  已求个数(accessor 停泊位)
+ *   pad  @ 2740     4        =    4  显式尾填充,恒 0(sizeof 可预测)
+ *   合计 2744 → 8 的倍数,≤ 3848(sparse 峰值)→ 被 union 完全吸收,
+ *   .bss 零增长(lu/eig/dec/gb/rat 之后「union 吸收」判据的第六次兑现;
+ *   ROADMAP.md:145 预估「H 1152 + wr/wi 192 + work ~256 ≈ 1.6 KB;加反
+ *   迭代向量 +1152 ≈ 2.8 KB」——落地 2744 B,同量级)。 */
+typedef struct {
+    double  h   [AC_PRO_MATRIX_MAX_SIZE];    /*    0 .. 1152 : Hessenberg / 迭代就地       */
+    double  v   [AC_PRO_MATRIX_MAX_SIZE];    /* 1152 .. 2304 : 实特征向量(列主序)          */
+    double  wr  [AC_PRO_MATRIX_MAX_DIM];     /* 2304 .. 2400 : 特征值实部(|λ| 降序)        */
+    double  wi  [AC_PRO_MATRIX_MAX_DIM];     /* 2400 .. 2496 : 特征值虚部(共轭对相邻)      */
+    double  work[2 * AC_PRO_MATRIX_MAX_DIM]; /* 2496 .. 2688 : Householder / 反迭代向量     */
+    int32_t piv [AC_PRO_MATRIX_MAX_DIM];     /* 2688 .. 2736 : 反迭代 LU 行交换             */
+    int32_t n_st;                            /* 2736 .. 2740 : 已求个数(accessor 停泊)     */
+    int32_t pad;                             /* 2740 .. 2744 : 显式尾填充,恒 0             */
+} ac_pro_schur_view_t;                       /* sizeof = 2744 */
+
+AC_STATIC_ASSERT(sizeof(ac_pro_schur_view_t) == 2744, pro_view_schur_is_2744);
+AC_STATIC_ASSERT(sizeof(((ac_pro_schur_view_t *)0)->h) +
+                 sizeof(((ac_pro_schur_view_t *)0)->v) +
+                 sizeof(((ac_pro_schur_view_t *)0)->wr) +
+                 sizeof(((ac_pro_schur_view_t *)0)->wi) +
+                 sizeof(((ac_pro_schur_view_t *)0)->work) +
+                 sizeof(((ac_pro_schur_view_t *)0)->piv) + 8 ==
+                 2744, pro_schur_payload_is_2744);
+AC_STATIC_ASSERT(offsetof(ac_pro_schur_view_t, wr) == 2304, pro_schur_wr_at_2304);
+AC_STATIC_ASSERT(offsetof(ac_pro_schur_view_t, piv) == 2688, pro_schur_piv_at_2688);
+AC_STATIC_ASSERT(sizeof(ac_pro_schur_view_t) % 8 == 0, pro_schur_is_8byte_multiple);
+
 /* ==================== Pro 独立 scratch union ==================== */
 typedef union {
     /* ---- B1：Durand-Kerner 数值求根，n ≤ 8 ----
@@ -444,6 +485,16 @@ typedef union {
         int work;                                         /*           4：标记/临时 */
     } rat;                                                /* 合计 464 B（载荷 460 + 8 字节对齐尾填，v2.3.0 功能 5） */
 
+    /* ---- v2.4.0 功能 8:一般实矩阵特征值(schur 视图,v2.4.0 新增)----
+     *   Householder 化 Hessenberg → Francis 隐式双移 QR(bulge chasing,
+     *   全显式循环)→ 全部特征值(实/复共轭对)+ 反迭代实特征向量;
+     *   合计 2744 B ≤ 3848(sparse 峰值)——被 union 完全吸收,.bss 零增长
+     *   (ROADMAP.md:145「.bss 零增长设计目标」兑现;布局与编译期断言见
+     *   上方 ac_pro_schur_view_t 头注;算法与收敛边界见 src/ac_pro_schur.c
+     *   文件头)。非对称输入合法(这正是功能 8 的立项理由:ac_pro.h:283-284
+     *   的「非对称返 -2」缺口就此关闭)。 */
+    ac_pro_schur_view_t schur;                            /* 合计 2744 B(v2.4.0 功能 8) */
+
     /* ---- ⑤ 任意精度小数：dec 定点十进制视图（v2.1.0 新增）----
      *   5 槽 × 96 B = 480 B ≤ 3848（sparse 峰值，对 mv 2688 亦然）——
      *   被峰值完全吸收，.bss 零增长（v1.3 的 lu、v1.3.5 的 eig、
@@ -487,6 +538,7 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->gb)     == 1888, pro_view_gb_is
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)     ==  464, pro_view_rat_is_464);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      ==  460 + 4,
                  pro_view_rat_is_8byte_aligned_464);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->schur)   == 2744, pro_view_schur_is_2744);
 
 /* 判据 1 在 Pro union 内部：每个视图都必须 ≤ 峰值，
    否则「union 尺寸 = max(视图)」这条前提被破坏。
@@ -511,6 +563,8 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      <= sizeof(((ac_pro_sc
                  pro_view_rat_absorbed);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      <= 1536,
                  pro_view_rat_under_task_budget);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->schur)    <= sizeof(((ac_pro_scratch_t *)0)->sparse),
+                 pro_view_schur_absorbed);
 /* v1.3.5 的历史档案：mv 比 eig 恰好大 96 B（当年「.bss 零增长」的充要
    条件）。v2.1.0 峰值上移后这条等式仍然为真，保留作回归锚点。
    v2.1.0 ⑤：dec 480 < mv 2688（当年的峰值）—— lu（v1.3）、eig（v1.3.5）
@@ -537,6 +591,7 @@ AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, eig) == 0, pro_view_eig_starts_at_ze
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, sparse) == 0, pro_view_sparse_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, dec) == 0, pro_view_dec_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, gb) == 0, pro_view_gb_starts_at_zero);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, schur) == 0, pro_view_schur_starts_at_zero);
 
 /* g_var_val 的字节数必须与账本常量一致（80 = 10 × 8）。 */
 AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80_bytes);
@@ -632,6 +687,18 @@ extern ac_pro_storage_t g_ac_pro_storage;
    s_pro_rat_deg(i) 是该槽次数（-1 = 零多项式）。 */
 #define s_pro_rat_slot(i)   (g_ac_pro_scratch.rat.s[(i)])
 #define s_pro_rat_deg(i)    (g_ac_pro_scratch.rat.deg[(i)])
+/* v2.4.0 功能 8:schur 视图。h 是 Hessenberg/迭代就地缓冲(特征值提取完
+   毕后复用为反迭代的 M = A − λI 工作副本);v 列主序实特征向量
+   (v[k*n + i] = 第 k 个特征向量的第 i 分量,复特征值列全零);
+   wr/wi 特征值实/虚部(|λ| 降序,共轭对相邻 +im 在前);work 是
+   Householder 与反迭代向量;piv 是反迭代 LU 行交换。 */
+#define s_pro_schur_h       (g_ac_pro_scratch.schur.h)
+#define s_pro_schur_v       (g_ac_pro_scratch.schur.v)
+#define s_pro_schur_wr      (g_ac_pro_scratch.schur.wr)
+#define s_pro_schur_wi      (g_ac_pro_scratch.schur.wi)
+#define s_pro_schur_work    (g_ac_pro_scratch.schur.work)
+#define s_pro_schur_piv     (g_ac_pro_scratch.schur.piv)
+#define s_pro_schur_n       (g_ac_pro_scratch.schur.n_st)
 
 /* ---- 视图持有纪律（写进头注，而不是靠调用方自觉） ----
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，
