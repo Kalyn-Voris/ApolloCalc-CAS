@@ -3,6 +3,107 @@
 本项目的所有重要变更记录于此。格式遵循 [Keep a Changelog](https://keepachangelog.com/)，
 版本号遵循 [语义化版本](https://semver.org/)。
 
+## v2.4.0 (2026-10-31)
+
+本全局版本节点同时更新 C、JS 两侧，主题为「符号引擎 + 数值深度」：JS 侧补上
+符号微分、符号积分、结式与 Groebner 三个代数面，C 侧吃下一般矩阵特征值，
+双侧落地 square-free 分解与重根重数。开发方式：双 Git worktree 并行
+（`feat/c-eigen` / `feat/js-symbol`），square-free 输出格式契约
+（[docs/contracts/sqfree-format-v24.md](docs/contracts/sqfree-format-v24.md)）
+由 C 组开工第 1 个 commit 先行冻结、JS 组按其实现（机制同 v2.3.0 ODE 契约）；
+收尾组串行收口。
+
+### Added（C 侧 · C/128KB-ProTEXT · 组件 v1.5.0 → v1.6.0）
+
+- **一般实矩阵全部特征值**（`ac_pro_schur.c` 新）：Householder→Hessenberg→
+  Francis 隐式双移 QR（bulge chasing，全显式循环零递归）+ 2×2 块闭式解；
+  幂 2 精确缩放（纯指数加减零舍入）防 H² 溢出；单特征值 50 轮预算 +
+  EISPACK 同款异常位移，不收敛返 −2 **绝不输出未收敛的垃圾特征值**；可选
+  反迭代实特征向量（残差 ≤ 1e-9·(1+‖A‖)，6 组尝试全失败返 −3；复特征值不
+  产出向量）。`ac_pro.h:283-284`「非对称返 −2」成文缺口就此关闭。
+  schur 视图 2744 B ≤ 3848 吸收线，**.bss 零增长**。13 例 / 46 checks。
+- **单变量多项式 square-free 分解与重根重数**（`ac_pro_sqfree.c` 新）：整系数
+  循环式 SFF（f 与 f′ 逐层 GCD），重数由分解层指标精确决定、浮点永不参与
+  重数合并；输出 (根, 重数) 列表，≤8 次（1..4 精确根式 @e / 5..8 次
+  Durand-Kerner @d）。字符串格式冻结于
+  [sqfree-format-v24](docs/contracts/sqfree-format-v24.md)（该契约为本组开工
+  第 1 个 commit 先行落库，与 JS 侧互为镜像）。复用 poly/rat 槽零新视图，
+  **.bss 零增长**。10 例 / 40 checks。
+
+### Added（JS 侧 · JS/128KB · 组件 v2.3.0 → v2.4.0）
+
+- **符号微分引擎**（`core_symboltree.js` 新）：parseExpression 的 RPN token 流
+  → 扁平表达式树（512×4 节点池）→ 符号求导（四则/幂三支路 + 17 种单参函数）；
+  多项式子树接 ratRootDescent 输出因式列表（factor 语义，镜像
+  ac_sym_factor_poly）；隐函数 dy/dx 对齐 C 侧 A6（错误码逐值复刻）。
+  116 项测试，池 35 232 B。
+- **符号积分**（`core_integrate.js` 新）：积分表 128 项与 C 侧逐项对齐
+  （anti 模板串 + 偏移表加载期解析，加载期断言恰 128 项）+ 固定两层分部
+  （无自调用，不违反禁递归红线）；错误码复刻 AC_PRO_INT_\*。75 项测试，
+  池 93 676 B。
+- **square-free (根, 重数)**（`core_ratroot.js` 扩展 ApolloSqfree 段）：按契约
+  逐字实现；JS 整题 ≥5 → EDEG（契约 §5.1 成文分叉，唯一双侧行为差异）。
+  70 项测试，池 2 240 B。
+- **结式 + 2 变量 Groebner 基**（`core_groebner.js` 新）：结式 = Sylvester
+  矩阵（阶 ≤12）复用 v2.3.0 矩阵 pro 层 proDet；Groebner = M4GB 逐对归约
+  1:1 移植（lex 序、输入 deg ≤4、基 8 槽/16 项/pair 32 熔断、Buchberger
+  第一判据、interreduce 不动点），错误码 = AC_PRO_GB_\* 全序。60 项测试，
+  池 6 648 B。
+
+### Added（跨语言契约与文档）
+
+- **`tests/polynomials.json` sqfree 区（新）**：square-free (根, 重数) 跨语言
+  契约用例——**70 例双侧实跑核对零分歧冻结**（契约 §10-1 两层结构：双侧区
+  64 例〔成功 31 期望串逐字 + 错误 33 按契约 §7 数值精确比较〕+ C 侧区 6 例
+  〔整题 5..8 次共 5 例仅 C 断言期望串、JS 断言 −2；EOVER 缓冲语义 1 例
+  cOnly，JS 消费方跳过〕）。**无 knownDeviations**（两侧输出不一致即实现 bug
+  的口径下，本版零上报）；用例以两侧内嵌套件为准提炼，收尾组未发明新用例。
+- **docs/features.md 增补**：v2.4.0 全部新功能与实测数字刷新（含「如实口径」
+  节，见下）。
+
+### Changed（版本管理 · 双轨递进）
+
+- `C/128KB-ProTEXT/VERSION` v1.5.0 → **v1.6.0**（Pro 层新特性按 semver minor
+  递进）；`JS/128KB/VERSION` v2.3.0 → **v2.4.0**；全局 Tag **v2.4.0**。
+- JS 压缩内核重建：`core_kernel.js` **49 747 → 103 325 B**（预算 131 072 B，
+  余量 27 747 B）；全项目 JS 静态池 30 112 → **167 908 B**（符号微分 35 232 +
+  符号积分 93 676 + 结式/Groebner 6 648 + sqfree 2 240，实测各模块加载期
+  TypedArray byteLength 之和）。
+
+### Known issues（如实口径 · 收尾对拍与 JS 组交付说明转写）
+
+- **JS 静态池水位**：167 908 B 已超 ROADMAP §五 口径的 98 304 B 水位门禁；
+  门禁函数 `checkMemoryWatermark`（core_solvers.js:622-644）只累计基础内核池、
+  不含模块池，故测试仍全绿。**后续任何 JS 功能落位前应重估水位**。
+- **Groebner 系数域收窄（不称「对等」）**：JS 无 int64，系数域为 Float64
+  安全整数，\|中间量\| > 2^53−1 即 EOVER（−6）熔断（实现文件头与测试文件头
+  成文）；经典用例幅值远低于熔断线，但输入幅值 >1e6 量级的中间量两侧能力
+  不对等。
+- **结式为数值路径**（C 同款）：det 条件数敏感，主元阈值 1e-12（proDet 契约）；
+  **结式为 0 是公共根判据而非错误**——与 C 逐值同语义。词法无总次数上限
+  （与 C parse_into 同域），每变量指数 ≤15。
+- **sqfree 求解层副作用**：逐层求根复用求解层 `_coeffs`/`_root*`（C 侧
+  ac_sym_factor_poly CLOBBERS g_coeffs 同款副作用，两头已成文）；调用方若
+  持有求解层会话语据须重算。
+- **符号积分已知超集偏差 3 条**（JS 复用内核解析器，能力超集；对拍用例避开，
+  实现文件头成文）：空白分隔数字按内核隐式乘法接受（C EPARSE）、e^(完整
+  表达式) 按标准优先级读（C 的 e^ 只吃一个 pow 层）、x^2^3 右结合读成
+  (x^2)^3（C 文法止于单指数）。
+- v2.3.0 遗留 3 条 ODE 已知偏差（1 条 JS 渲染缺陷 + 2 条契约文本歧义各执
+  一端）仍待双组裁决，见 tests/ode-solutions.json `knownDeviations`。
+- `verify.ps1` 头注 banner 仍写「ProTEXT v1.4.0 verification」——该文件归
+  C 组（feat/c-eigen）独占，收尾组只跑不改，如实记录。
+
+### 测试口径
+
+- C 侧：`verify.ps1` **35 passed, 0 failed**（v2.3.0 基线 33 + SCHUR/SQFREE
+  两行）；pro_runner **574 checks, 0 failed**（488 + schur 46 + sqfree 40）；
+  `.bss` 三门禁 42608 / 42640 / 39408 逐字命中，degraded 38672（零增长）。
+- JS 侧：20 测试文件 **TOTAL: 1183 pass, 0 fail**（862 + 符号微分 116 +
+  符号积分 75 + sqfree 70 + 结式/Groebner 60）。
+- 跨语言：`node tests/bench/diff-smoke128.js` **50/50 用例一致**（exit 0）；
+  polynomials.json sqfree 区 70 例双侧实跑核对零分歧（见上）。
+
 ## v2.3.0 (2026-10-31)
 
 本全局版本节点同时更新 C、JS 两侧，主题为「补齐短板 + 低风险纵深」：JS 侧补上

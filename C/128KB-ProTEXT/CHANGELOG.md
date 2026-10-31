@@ -8,6 +8,45 @@ v1.4.0 之前的 Pro 层沿革（v1.2.0 起手三件套、v1.3.0 方向 A 多变
 特征向量与符号积分，以及 v2.1.0 全局版的稀疏线性方程组与任意精度定点小数）见根
 CHANGELOG 对应条目，此处不重复。
 
+## v1.6.0 (2026-10-31)
+
+**与全局版本节点的对应关系**：本组件版本对应全局 Tag **v2.4.0**。Pro 层新增
+特性按 semver **minor** 递进，组件版本 v1.5.0 → **v1.6.0**（与全局不同号是
+双轨制的预期行为）。本版两个新功能由 `feat/c-eigen` 分支并行交付
+（feat/js-symbol 承担 JS 侧符号微分/积分/sqfree/结式与 Groebner），收尾组
+串行收口。
+
+### Added
+
+- **一般实矩阵全部特征值**（`src/ac_pro_schur.c` 新）：Householder→Hessenberg
+  →Francis 隐式双移 QR（bulge chasing，全显式循环零递归）+ 2×2 块闭式解；
+  幂 2 精确缩放（纯指数加减零舍入）防 H² 溢出；单特征值 50 轮预算 +
+  EISPACK 同款异常位移，不收敛返 −2 绝不输出未收敛的垃圾特征值；可选反
+  迭代实特征向量（残差 ≤ 1e-9·(1+‖A‖)，6 组尝试全失败返 −3；复特征值不
+  产出向量、亏损特征值按几何重数重复给出同一条向量）。ac_pro.h:283-284
+  「非对称返 −2」成文缺口关闭（本文件的 −2 语义改为「QR 迭代不收敛」）。
+  schur 视图 2744 B ≤ 3848 吸收线，**.bss 零增长**。
+- **单变量多项式 square-free 分解与重根重数**（`src/ac_pro_sqfree.c` 新）：
+  整系数循环式 SFF（f 与 f′ 逐层 GCD + 精确除），重数由分解层指标精确决定、
+  浮点永不参与重数合并；输出 (根, 重数) 列表，≤8 次（1..4 次因子走上游
+  精确根式管线 @e / 5..8 次因子走 Durand-Kerner @d，按因子次数路由）。
+  字符串格式冻结于
+  [docs/contracts/sqfree-format-v24.md](../../docs/contracts/sqfree-format-v24.md)
+  （该契约为本组开工第 1 个 commit 先行落库，与 JS 侧互为镜像）。复用
+  poly/rat 槽零新视图，**.bss 零增长**。
+
+### 测试口径
+
+- pro_runner **488 → 574 checks, 0 failed**（schur 46 + sqfree 40）。
+- `.bss` 三门禁实测逐字命中：内核 **42608** / runner **42640** / 上游对照
+  39408，退化 38672（2026-10-31 `bss-check` 复测；schur 视图在 sparse 峰值
+  3848 吸收线内，sqfree 零新视图，两组均零增长）。
+- `verify.ps1` 全量验收 **33 → 35 passed, 0 failed**（feat/c-eigen 在本次
+  合并中把第 4 节挂上 SCHUR ≥12 / SQFREE ≥10 两行；2026-10-31 复跑）。
+- 跨语言契约 [tests/polynomials.json](../../tests/polynomials.json) sqfree 区
+  冻结 70 例（双侧区 64 + C 侧区 6），2026-10-31 双侧实跑核对零分歧
+  （C 侧区整题 5..8 次仅 C 断言期望串，JS 断言 −2；EOVER 例 cOnly）。
+
 ## v1.5.0 (2026-10-31)
 
 **与全局版本节点的对应关系**：本组件版本对应全局 Tag **v2.3.0**。Pro 层新增

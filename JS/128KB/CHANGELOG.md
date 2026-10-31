@@ -5,6 +5,80 @@
 的口径区分：根记录**全局版本节点**（仓库级 Tag，一次发布可只覆盖部分组件），本文件
 记录**组件版本**（见本目录 [VERSION](VERSION)）。
 
+## v2.4.0 (2026-10-31)
+
+**与全局版本节点的对应关系**：本组件版本对应全局 Tag **v2.4.0**（组件 v2.3.0 →
+**v2.4.0**）。本版四个功能块由 `feat/js-symbol` 分支并行交付（feat/c-eigen 承担
+C 侧 Francis QR 与 square-free），收尾组串行收口。
+
+### Added
+
+- **符号微分引擎**（`src/core_symboltree.js` 新）：parseExpression 的 RPN
+  token 流 → 扁平表达式树（Int32Array 512×4 节点池，type/left/right/value
+  四字段）→ 符号求导：四则 + 幂三支路（常指数/常底/一般 u^v）+ 17 种单参
+  函数（sin..atanh + abs；atan2 建树期拒绝）；多项式子树接 ratRootDescent
+  输出因式列表（factor 语义，镜像 C 侧 ac_sym_factor_poly）；隐函数
+  dy/dx = −F_x/F_y 对齐 C 侧 A6（0..4 错误码逐值复刻）。树侧两道上限
+  （节点 ≤100 / 树深 ≤48）与 preCheckExpression 括号深度的联动定义成文
+  （preCheck 只度量括号嵌套，管不了运算符链）。116 项测试。
+  池 35 232 B（20 组加载期一次分配）。
+- **符号积分**（`src/core_integrate.js` 新）：积分表 128 项与 C 侧
+  ac_pro_integrate.c 逐项对齐（anti 模板串 + 偏移表加载期解析等价
+  .rdata，加载期断言恰 128 项）+ 固定两层分部（parts_left 2→1→0 关死，
+  无同形自调用）；构造期归一逐条移植 C pro_int_add/sub/mul/div/neg/pow
+  （全迭代）；错误码复刻 AC_PRO_INT_\*（0/−1..−5 同值）。与 C 的文法边界
+  如实成文（已知超集偏差 3 条，见 Known issues）。75 项测试。
+  池 93 676 B（29 组加载期一次分配，含积分表偏移表哨兵槽）。
+- **square-free (根, 重数)**（`src/core_ratroot.js` 扩展 ApolloSqfree 段）：
+  按 [docs/contracts/sqfree-format-v24.md](../../docs/contracts/sqfree-format-v24.md)
+  逐字实现——整系数循环式 SFF，重数由分解层指标精确决定；输出 (根, 重数)
+  列表；JS 整题 ≥5 → EDEG（契约 §5.1 成文分叉，C 侧 5..8 次走 @e/@d）。
+  70 项测试。池 2 240 B（17 组加载期一次分配 + 复用结果对象）。
+- **结式 + 2 变量 Groebner 基**（`src/core_groebner.js` 新）：结式 =
+  Sylvester 矩阵（阶 ≤12）复用 v2.3.0 矩阵 pro 层 proSetA/proDet，数值路径
+  与 C 同语义（结果 0 = 公共根判据，非错误）；Groebner = M4GB 逐对归约
+  1:1 移植（lex 序、输入总次数 ≤4、基 8 槽/16 项/pair 32 熔断、Buchberger
+  第一判据、interreduce 不动点），错误码 = AC_PRO_GB_\* 全序。60 项测试。
+  池 6 648 B（18 组加载期一次分配）。
+
+### Changed
+
+- **压缩内核重建**：四块新功能并入后经 `node test/build-kernel.js --minify`
+  重建，`core_kernel.js` **49 747 → 103 325 B**（预算 131 072 B，余量
+  27 747 B；v2.4.0 累计 +53 578 B）。
+- **全项目静态池 30 112 → 167 908 B**（符号微分 35 232 + 符号积分 93 676 +
+  结式/Groebner 6 648 + sqfree 2 240，实测各模块加载期 TypedArray byteLength
+  之和）——已超 ROADMAP §五 口径的 98 304 B 水位门禁（见 Known issues）。
+
+### 测试口径
+
+- 20 测试文件 **TOTAL: 1183 pass, 0 fail**（v2.3.0 基线 862 + 符号微分 116 +
+  符号积分 75 + sqfree 70 + 结式/Groebner 60；16 → 20 文件）。
+- 跨语言 sqfree 契约 [tests/polynomials.json](../../tests/polynomials.json)
+  sqfree 区冻结 70 例（双侧区 64 + C 侧区 6），双侧实跑核对零分歧。
+
+### Known issues（如实口径 · 交付说明成文转写）
+
+- **静态池水位**：167 908 B 已超 ROADMAP §五 口径的 98 304 B 水位门禁；
+  门禁函数 `checkMemoryWatermark`（core_solvers.js:622-644）只累计基础内核
+  池、不含模块池，故测试仍全绿。**后续任何 JS 功能落位前应重估水位**。
+- **Groebner 系数域收窄（不称「对等」）**：JS 无 int64，系数域为 Float64
+  安全整数，所有系数加减乘结果 \|v\| > 2^53−1 即 EOVER（−6）熔断（实现
+  文件头与测试文件头成文）；经典用例（C GB-1..GB-12）幅值远低于熔断线，
+  但输入幅值 >1e6 量级的中间量两侧能力不对等。
+- **结式为数值路径**（C 同款）：det 条件数敏感，主元阈值 1e-12（proDet
+  契约）；结式为 0 是公共根判据而非错误。词法无总次数上限（与 C parse_into
+  同域），每变量指数 ≤15。
+- **sqfree 求解层副作用**：逐层求根复用求解层 `_coeffs`/`_root*`（C 侧
+  ac_sym_factor_poly CLOBBERS g_coeffs 同款副作用，两头成文）；调用方若
+  持有求解层会话语据须重算。
+- **符号积分已知超集偏差 3 条**（JS 复用内核解析器，能力超集；对拍用例
+  避开，core_integrate.js 头注成文）：空白分隔数字按内核隐式乘法接受
+  （C EPARSE）、e^(完整表达式) 按标准优先级读（C 的 e^ 只吃一个 pow 层）、
+  x^2^3 右结合读成 (x^2)^3（C 文法止于单指数）。
+- v2.3.0 的小正值实根渲染缺陷未在本版修复，仍见下方 v2.3.0 条目与
+  tests/ode-solutions.json `knownDeviations[0]`。
+
 ## v2.3.0 (2026-10-31)
 
 **与全局版本节点的对应关系**：本组件版本对应全局 Tag **v2.3.0**（组件 v2.2.0 →
