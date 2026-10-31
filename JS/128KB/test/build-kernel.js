@@ -53,6 +53,7 @@ var FILES = [
   "core_base.js",
   "core_solvers.js",
   "core_ratroot.js",
+  "core_symboltree.js",
   "core_multivar.js",
   "core_matrix.js",
   "core_special.js",
@@ -64,7 +65,7 @@ var FILES = [
 var EXPORT_BLOCK = `/* ============================================================
  * ApolloCalc · core_kernel.js — 内核统一入口
  * 由 build-kernel.js 自动拼接，禁止手动编辑
- * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → multivar → matrix → special → numtheory → ode（14 文件，v2.3.0 起随新模块追加）
+ * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → symboltree → multivar → matrix → special → numtheory → ode（15 文件，v2.3.0 起随新模块追加）
  * ============================================================ */
 
 /* 供 index.js 引用的内核接口（UI 层唯一访问点） */
@@ -172,7 +173,10 @@ export default {
   numtheory: ApolloNumtheory,
 
   /* ---- v2.3.0 ODE 通解（常系数线性齐次 1..4 阶，特征根复用求解层，契约 ode-format-v23） ---- */
-  ode: ApolloOde
+  ode: ApolloOde,
+
+  /* ---- v2.4.0 符号微分引擎（表达式树 + 17 函数求导 + factor 因式列表 + A6 隐函数） ---- */
+  symboltree: ApolloSymboltree
 };`;
 
 /* export 块引用的全部内核标识符（78 个；函数形参 i/v/mode/re/im/w/n/x/a/b/side/order/x0 除外） */
