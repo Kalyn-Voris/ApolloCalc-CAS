@@ -15,8 +15,9 @@
 > 单变量多项式 square-free 分解 (根,重数)，契约
 > [sqfree-format-v24](../../docs/contracts/sqfree-format-v24.md)
 
-> **阅读口径**：§1–§3D 按版本递增记录，各节保留落地时点的实测快照（如 v1.2 的
-> 41456 B、v1.3.5 的 259 checks——当时正确，此后演进而非笔误）；当前账本与验收
+> **阅读口径**：§1–§3D 按版本递增记录，各节保留落地时点的实测快照（如 §1 的
+> 41456 B——系 v1.3.0 入库时点账本，v1.2 工作区时期实为 41104 B；v1.3.5 的
+> 259 checks——当时正确，此后演进而非笔误）；当前账本与验收
 > 数字以 §0、§4 与 [CHANGELOG.md](CHANGELOG.md) 为准。
 
 ---
@@ -62,7 +63,7 @@ sqfree 复用既有槽零新视图——**`.bss` 自 v2.1.0 起零增长**，「
 
 ---
 
-## 1. 阶段一：修复上游遗留缺陷（v1.2 时点记录）
+## 1. 阶段一：修复上游遗留缺陷（v1.2 工作；账本数字为 v1.3.0 入库时点）
 
 ### 1.1 内存水位门禁（上游死代码 → Pro 两段式）
 
@@ -74,7 +75,7 @@ sqfree 复用既有槽零新视图——**`.bss` 自 v2.1.0 起零增长**，「
 
 ```c
 double ac_pro_memory_used(double extra_bytes) {
-    double used = (double)AC_PRO_STATIC_FOOTPRINT;   /* v1.2 时点 41456，编译期真实静态量（现为 42608） */
+    double used = (double)AC_PRO_STATIC_FOOTPRINT;   /* v1.3.0 入库时点 41456，编译期真实静态量（现为 42608） */
     used += (double)(g_token_count   << 3);          /* 动态项 */
     used += (double)(g_number_count  << 3);
     used += extra_bytes;                             /* 测试注入的假池 */
@@ -87,7 +88,7 @@ double ac_pro_memory_used(double extra_bytes) {
 1. **静态量取真实值**，不是上游那个 11176 B 的残缺基数 —— `AC_STATIC_FOOTPRINT = 38672`
    已包含 `g_ac_scratch` 与 `g_sym_nodes`，两块漏算一次性补齐。
 2. **Pro 增量单独加**：`AC_PRO_STATIC_EXTRA = 80 + 2688 + 16`，所以 idle 时 `used == 41456`
-   （v1.2 时点；现为 `80 + 3848 + 8`，idle 时 `used == 42608`）。
+   （v1.3.0 入库时点；现为 `80 + 3848 + 8`，idle 时 `used == 42608`）。
 3. **`extra_bytes` 参数**让门禁边界可以被真正测出来，而不是靠改全局变量造数据。
 
 **编译期硬约束**（不只是 Makefile 里的一行 echo）：
@@ -99,7 +100,7 @@ AC_STATIC_ASSERT(AC_PRO_STATIC_EXTRA == (int)sizeof(ac_pro_storage_t), pro_extra
 
 **测试**（`test_memory_watermark`，13 条测试）：
 - `used >= 38672`（不再低估）
-- `used == 41456`（idle，v1.2 时点账本）
+- `used == 41456`（idle，v1.3.0 入库时点账本）
 - 满池 `used == 47600`，仍 < 114688
 - 边界两侧各差 1000 必触发/必放行
 - **边界 ±1 B 的极限测试**：`114688` 恰好放行、`114689` 触发
@@ -131,7 +132,7 @@ AC_STATIC_ASSERT(sizeof(ac_pro_storage_t) == 2784, pro_storage_is_exactly_2784);
 
 ---
 
-## 2. 阶段二：Pro Union 与起手三件套（v1.2/v1.3 时点记录）
+## 2. 阶段二：Pro Union 与起手三件套（v1.2–v1.3 工作；账本数字为 v1.3.0 入库时点）
 
 ### 2.1 接入模式 β（Pro 独立 union）
 
@@ -155,8 +156,9 @@ AC_STATIC_ASSERT(sizeof(ac_pro_storage_t) == 2784, pro_storage_is_exactly_2784);
 
 PE/COFF 链接器把**每个**全局对象按 16 B 对齐起址，两个独立全局之间因此
 会被插入 16 B 填充。把两块装进一个 `ac_pro_storage_t` 后，整块只占一个
-分配单元，填充无从产生（v1.2 时点账本 2784 = 2352 + 80 + 16；现为
-3936 = 3848 + 80 + 8，`align_pad` 按 32 B 整数倍取最小填充）：
+分配单元，填充无从产生（storage 演进：v1.2 为 2432 = 2352 + 80，尚无
+align_pad；v1.3 峰值迁移后 2784 = 2688 + 80 + 16；现为
+3936 = 3848 + 80 + 8——`align_pad` 按 32 B 整数倍取最小填充）：
 
 | 写法 | `.bss` 增量 |
 |:---|---:|
@@ -415,8 +417,8 @@ int            ac_pro_eig_count(void);
 | 2 | 3×3 对称 | 12 | 全对 ✅ |
 | 3 | 重根 `diag(2,2,1)` | 13 | 残差 3.8e−13 ~ 4.7e−13 ✅ |
 | 4 | Hilbert 3×3（cond ≈ 5.2e5） | 12 | `1.408318927123654 / 0.122327065853906 / 0.002687340355774`，与解析解 17 位一致 ✅ |
-| 5 | deflation 正确性 | 27 | 两两正交、单位范数、`Av = λv` 残差 ✅ |
-| 6 | 边界与错误码合组 | — | 1×1、12×12 满维、零矩阵 → −4、负定矩阵、非对称 → −2、n 越界 → −1 ✅ |
+| 5 | 4×4 deflation 链 | 14 | 两两正交、单位范数、`Av = λv` 残差 ✅ |
+| 6 | 边界与错误码合组 | 13 | 1×1、12×12 满维、零矩阵 → −4、负定矩阵、非对称 → −2、n 越界 → −1 ✅ |
 
 ### 3A.2 B2：符号积分
 
