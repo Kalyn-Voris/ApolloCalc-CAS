@@ -84,6 +84,14 @@
 #define AC_PRO_SP_MAX_N         32                        /* 方程个数上限 */
 #define AC_PRO_SP_MAX_NNZ       320                       /* 非零元容量上限（输入与消元填充共用） */
 
+/* ---- v2.3.0 功能 5：单变量有理函数工具常量 ----
+ *   次数 ≤ 8（apart 分母 1..4 走上游精确根、5..8 走 DK，ROADMAP.md:117-119）。
+ *   系数域 |c| ≤ 9999：prem 中间量最坏 ~deg·C² = 8·1e8 ≈ 1e9，int64 充裕；
+ *   更大的输入直接 ECOEF 拒绝（整系数域契约，绝不静默回绕）。 */
+#define AC_PRO_RAT_MAX_DEG      8                         /* 多项式次数上限 */
+#define AC_PRO_RAT_SLOTS        6                         /* p/q/gcd/商/余式/工作区 */
+#define AC_PRO_RAT_COEF_MAX     9999                      /* 输入系数域 |c| 上限 */
+
 /* ---- A1/A2/A3 多变量基础设施常量（v1.3）----
  *
  * 设计说明 §3.1.2：2 变量、总次数 ≤ 6 的单项式数
@@ -292,6 +300,18 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_gb_view_t *)0)->b_coef) +
                  sizeof(((ac_pro_gb_view_t *)0)->w_pad) == 1888,
                  pro_gb_payload_is_1888);
 
+/* ==================== v2.3.0 功能 5：poly 视图类型 ====================
+ * 单变量整系数多项式槽：c[k] = x^k 的系数（升序），deg 另存于槽外数组。
+ * 布局账：9 × 8 = 72 B/槽 × 6 槽 = 432 + deg 24 + work 4 + 尾填 4 = 464。 */
+typedef struct {
+    ac_int_t c[AC_PRO_RAT_MAX_DEG + 1];                  /* 9 × 8 = 72 */
+} ac_pro_rat_poly_t;                                     /* sizeof = 72 */
+
+AC_STATIC_ASSERT(sizeof(ac_pro_rat_poly_t) == 72, pro_rat_poly_is_72);
+AC_STATIC_ASSERT(AC_PRO_RAT_SLOTS * (int)sizeof(ac_pro_rat_poly_t) +
+                 AC_PRO_RAT_SLOTS * (int)sizeof(int) + (int)sizeof(int) == 460,
+                 pro_rat_slots_are_460);
+
 /* ==================== Pro 独立 scratch union ==================== */
 typedef union {
     /* ---- B1：Durand-Kerner 数值求根，n ≤ 8 ----
@@ -403,6 +423,27 @@ typedef union {
      * （设计说明 §3 功能④ 预估 ≈42684，落地 42608，同量级）。 */
     ac_pro_sparse_view_t sparse;                          /* 合计 3848 B  <-- 峰值（v2.1.0 起） */
 
+    /* ---- v2.3.0 功能 5：单变量有理函数工具（poly 视图，v2.3.0 新增）----
+     *   6 槽整系数多项式（次数 ≤ 8，9 系数 × 8 B = 72 B/槽 = 432 B）+ 次数表
+     *   + 工作标记，载荷 460 B、8 字节对齐后 sizeof 464 ≤ 1536（任务书预算线）
+     *   < 3848（sparse 峰值）——被 union 完全吸收，.bss 零增长（lu/eig/dec/gb
+     *   之后「union 吸收」判据的第五次兑现）。
+     * 【整系数域契约 / Why integer-only】GCD/cancel 这类算法只在整系数域
+     *   良定（A1 prem 同纪律）：全程 ac_int_t，中间量溢出即拒绝
+     *   （AC_PRO_RAT_ECOEF），绝不回绕、绝不出浮点系数。
+     * 【槽位 / Slots】0 = p，1 = q，2 = gcd/商，3 = 余式，4/5 = 工作区。
+     * 【apart 的视图纪律 / apart view discipline】apart 的数值阶段（求根、
+     *   A_i、回乘验证）全部在栈上数组进行（次数 ≤ 8）：deg(q) 5..8 时
+     *   ac_pro_numroots 写 nr 视图，会整块覆写同 union 的 rat 数据 ——
+     *   所以先把 p/q 系数拷到栈、再求根、再回代，rat 视图此后不再读。
+     *   deg(q) ≤ 4 走上游 ac_solvers（上游 g_ac_scratch，物理不重叠），
+     *   rat 视图安全，但实现统一走栈拷贝，两条路径同构。 */
+    struct {
+        ac_pro_rat_poly_t s[AC_PRO_RAT_SLOTS];            /* 6 × 72 = 432 */
+        int deg[AC_PRO_RAT_SLOTS];                        /* 6 × 4 =  24；-1 = 零多项式 */
+        int work;                                         /*           4：标记/临时 */
+    } rat;                                                /* 合计 464 B（载荷 460 + 8 字节对齐尾填，v2.3.0 功能 5） */
+
     /* ---- ⑤ 任意精度小数：dec 定点十进制视图（v2.1.0 新增）----
      *   5 槽 × 96 B = 480 B ≤ 3848（sparse 峰值，对 mv 2688 亦然）——
      *   被峰值完全吸收，.bss 零增长（v1.3 的 lu、v1.3.5 的 eig、
@@ -443,6 +484,9 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->eig)    == 2592, pro_view_eig_i
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sparse) == 3848, pro_view_sparse_is_3848);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->dec)    ==  480, pro_view_dec_is_480);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->gb)     == 1888, pro_view_gb_is_1888);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)     ==  464, pro_view_rat_is_464);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      ==  460 + 4,
+                 pro_view_rat_is_8byte_aligned_464);
 
 /* 判据 1 在 Pro union 内部：每个视图都必须 ≤ 峰值，
    否则「union 尺寸 = max(视图)」这条前提被破坏。
@@ -463,6 +507,10 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->dec)     <= sizeof(((ac_pro_scr
                  pro_view_dec_absorbed);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->gb)      <= sizeof(((ac_pro_scratch_t *)0)->sparse),
                  pro_view_gb_absorbed);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      <= sizeof(((ac_pro_scratch_t *)0)->sparse),
+                 pro_view_rat_absorbed);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      <= 1536,
+                 pro_view_rat_under_task_budget);
 /* v1.3.5 的历史档案：mv 比 eig 恰好大 96 B（当年「.bss 零增长」的充要
    条件）。v2.1.0 峰值上移后这条等式仍然为真，保留作回归锚点。
    v2.1.0 ⑤：dec 480 < mv 2688（当年的峰值）—— lu（v1.3）、eig（v1.3.5）
@@ -580,6 +628,10 @@ extern ac_pro_storage_t g_ac_pro_storage;
 #define s_pro_gb_cp_b       (g_ac_pro_scratch.gb.cp_b)
 #define s_pro_gb_cp_n       (g_ac_pro_scratch.gb.cp_n)
 #define s_pro_gb_n          (g_ac_pro_scratch.gb.b_n)
+/* v2.3.0 功能 5：poly 视图。s_pro_rat_slot(i) 是第 i 个多项式槽（0..5），
+   s_pro_rat_deg(i) 是该槽次数（-1 = 零多项式）。 */
+#define s_pro_rat_slot(i)   (g_ac_pro_scratch.rat.s[(i)])
+#define s_pro_rat_deg(i)    (g_ac_pro_scratch.rat.deg[(i)])
 
 /* ---- 视图持有纪律（写进头注，而不是靠调用方自觉） ----
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，

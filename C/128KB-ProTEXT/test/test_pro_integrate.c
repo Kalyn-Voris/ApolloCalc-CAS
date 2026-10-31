@@ -82,15 +82,15 @@ pro_tally_t test_integrate_trig(void) {
     return t;
 }
 
-/* 只做一层：内层以 allow_parts = 0 查表收尾，绝不递归。
- * x*e^x 是任务书点名的用例。 */
+/* 分部积分：v2.3.0 功能 4 起固定两层（parts_left 2→1→0 关死，无同形自调用）。
+ * x*e^x 是任务书点名的用例；两层路径见 B2-10。 */
 pro_tally_t test_integrate_by_parts(void) {
     pro_tally_t t;
 
     t.checks = 0;
     t.failed = 0;
 
-    printf("[case B2-3] one-level integration by parts\n");
+    printf("[case B2-3] integration by parts (fixed two layers since v2.3.0)\n");
 
     expect_int(&t, "x*e^x", "exp(x)*(x-1)");
     expect_int(&t, "x*sin(x)", "-x*cos(x)+sin(x)");
@@ -100,23 +100,24 @@ pro_tally_t test_integrate_by_parts(void) {
     return t;
 }
 
-/* 表规模 64 是硬性要求，实现里还有编译期断言 pro_int_table_has_64_entries。 */
+/* 表规模 128 是硬性要求（v2.3.0 功能 4），实现里还有编译期断言
+ * pro_int_table_has_128_entries。老表 4 条回归 + 宏核对。 */
 pro_tally_t test_integrate_table(void) {
     pro_tally_t t;
 
     t.checks = 0;
     t.failed = 0;
 
-    printf("[case B2-4] 64-entry table hits\n");
+    printf("[case B2-4] 128-entry table hits\n");
 
     expect_int(&t, "sqrt(x)", "2*x*sqrt(x)/3");
     expect_int(&t, "ln(x)", "x*ln(x)-x");
     expect_int(&t, "1/(1+x^2)", "atan(x)");
     expect_int(&t, "1/x^2", "-1/x");
 
-    icheck(&t, AC_PRO_INT_TABLE_SIZE == 64,
-           "AC_PRO_INT_TABLE_SIZE == 64",
-           "table size macro is not 64");
+    icheck(&t, AC_PRO_INT_TABLE_SIZE == 128,
+           "AC_PRO_INT_TABLE_SIZE == 128",
+           "table size macro is not 128");
 
     return t;
 }
@@ -216,6 +217,117 @@ pro_tally_t test_integrate_errors(void) {
     rc = ac_pro_integrate("x^2", 0, 64);
     sprintf(detail, "rc=%d want %d (out=NULL)", rc, AC_PRO_INT_EOVER);
     icheck(&t, rc == AC_PRO_INT_EOVER, "NULL out -> EOVER", detail);
+
+    return t;
+}
+
+/* ---- v2.3.0 功能 4：128 项新表与固定两层分部 ---- */
+
+/* 二次核族（QUAD_L 线性内层 / QUAD_K 完全平方 k≥2 / XQUAD）。
+ * 「刚好拒绝」：1/(x²+8) 的 8 非完全平方，诚实 ETABLE。 */
+pro_tally_t test_integrate_quad_kernels(void) {
+    pro_tally_t t;
+    char out[64];
+    int rc;
+    char detail[160];
+
+    t.checks = 0;
+    t.failed = 0;
+
+    printf("[case B2-7] quadratic kernels (linear inner, perfect-square k)\n");
+
+    expect_int(&t, "1/(1+(2*x+1)^2)", "atan(2*x+1)/2");
+    expect_int(&t, "1/(x^2+4)", "atan(x/2)/2");
+    expect_int(&t, "1/(x^2-9)", "ln((x-3)/(x+3))/6");
+    expect_int(&t, "1/(9-x^2)", "atanh(x/3)/3");
+    expect_int(&t, "sqrt(x^2+4)", "(x*sqrt(x^2+4)+4*asinh(x/2))/2");
+    expect_int(&t, "x/(x^2+1)", "ln(x^2+1)/2");
+
+    out[0] = '\0';
+    rc = ac_pro_integrate("1/(x^2+8)", out, (int)sizeof(out));
+    sprintf(detail, "rc=%d want %d (8 is not a perfect square)", rc,
+            AC_PRO_INT_ETABLE);
+    icheck(&t, rc == AC_PRO_INT_ETABLE, "1/(x^2+8) -> ETABLE", detail);
+
+    return t;
+}
+
+/* 倒数函数族：sec/csc/cot/coth 拼法与 ln 核。 */
+pro_tally_t test_integrate_recip_funcs(void) {
+    pro_tally_t t;
+
+    t.checks = 0;
+    t.failed = 0;
+
+    printf("[case B2-8] reciprocal-function family\n");
+
+    expect_int(&t, "1/cos(x)", "ln(1/cos(x)+sin(x)/cos(x))");
+    expect_int(&t, "cos(x)/sin(x)", "ln(sin(x))");
+    expect_int(&t, "1/cos(x)^2", "sin(x)/cos(x)");
+    expect_int(&t, "1/sin(x)^2", "-cos(x)/sin(x)");
+    expect_int(&t, "sinh(x)/cosh(x)", "ln(sinh(x))");
+    expect_int(&t, "sin(x)*cos(x)", "sin(x)^2/2");
+    expect_int(&t, "1/cos(x)*tan(x)", "1/cos(x)");
+    expect_int(&t, "ln(x)/x", "ln(x)^2/2");
+    expect_int(&t, "1/(x*ln(x))", "ln(ln(x))");
+
+    return t;
+}
+
+/* 函数幂扩充：exp^n 与三角/双曲幂（倍角/恒等式模板）。 */
+pro_tally_t test_integrate_func_powers(void) {
+    pro_tally_t t;
+
+    t.checks = 0;
+    t.failed = 0;
+
+    printf("[case B2-9] function powers\n");
+
+    expect_int(&t, "exp(x)^2", "exp(2*x)/2");
+    expect_int(&t, "sin(x)^4", "3*x/8-sin(2*x)/4+sin(4*x)/32");
+    expect_int(&t, "tan(x)^3", "tan(x)^2/2+ln(cos(x))");
+    expect_int(&t, "sinh(x)^3", "cosh(x)^3/3-cosh(x)");
+
+    return t;
+}
+
+/* x^n·f(x) 扩充 + 固定两层分部：
+ *   x^6·sin  = 两层（x^5·cos → x^4·sin 入表）
+ *   x^7·exp  = 两层（x^6·exp → x^5·exp 入表）
+ * 「刚好拒绝」：x^7·sin 需要三层；x^6·ln 的 ln 不走分部且表止于 n=5。 */
+pro_tally_t test_integrate_two_layer(void) {
+    pro_tally_t t;
+    char out[64];
+    int rc;
+    char detail[160];
+
+    t.checks = 0;
+    t.failed = 0;
+
+    printf("[case B2-10] x^n*f(x) table additions and two-layer parts\n");
+
+    expect_int(&t, "x^4*sin(x)",
+               "-x^4*cos(x)+4*x^3*sin(x)+12*x^2*cos(x)-24*x*sin(x)-24*cos(x)");
+    expect_int(&t, "x^4*ln(x)", "x^5*ln(x)/5-x^5/25");
+    expect_int(&t, "x^2*atan(x)", "((2*x^3-x^2-1)*atan(x)+x)/6");
+    expect_int(&t, "x^6*sin(x)",
+               "-x^6*cos(x)+6*x^5*sin(x)+30*x^4*cos(x)-120*x^3*sin(x)"
+               "-360*x^2*cos(x)+720*x*sin(x)+720*cos(x)");
+    expect_int(&t, "x^7*exp(x)",
+               "x^7*exp(x)-7*x^6*exp(x)"
+               "+42*exp(x)*(x^5-5*x^4+20*x^3-60*x^2+120*x-120)");
+
+    out[0] = '\0';
+    rc = ac_pro_integrate("x^7*sin(x)", out, (int)sizeof(out));
+    sprintf(detail, "rc=%d want %d (three layers needed)", rc,
+            AC_PRO_INT_ETABLE);
+    icheck(&t, rc == AC_PRO_INT_ETABLE, "x^7*sin(x) -> ETABLE", detail);
+
+    out[0] = '\0';
+    rc = ac_pro_integrate("x^6*ln(x)", out, (int)sizeof(out));
+    sprintf(detail, "rc=%d want %d (ln not in parts, table stops at n=5)", rc,
+            AC_PRO_INT_ETABLE);
+    icheck(&t, rc == AC_PRO_INT_ETABLE, "x^6*ln(x) -> ETABLE", detail);
 
     return t;
 }

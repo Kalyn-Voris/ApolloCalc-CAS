@@ -314,21 +314,24 @@ double         ac_pro_eig_value(int k);
 const double  *ac_pro_eig_vector(int k);
 int            ac_pro_eig_count(void);
 
-/* ==================== v1.3.5 B2：符号积分（表匹配 + 一层分部积分）====================
+/* ==================== v1.3.5 B2：符号积分（表匹配 + 分部积分）====================
+ * v2.3.0 功能 4 修订：表 64 → 128 项（二次核族 / 倒数函数族 / 函数幂与
+ * x^n·f(x) 扩充）；分部积分从「只做一层」改为「固定两层」。
  *
  * 【算法 / Algorithm】
- *   ① 表匹配：64 项标准积分表（static const，落 .rdata，**不占 .bss**）。
+ *   ① 表匹配：128 项标准积分表（static const，落 .rdata，**不占 .bss**）。
  *      输入表达式先做线性替换归一化，再按「函数头 + 线性内层」的模式
  *      逐项匹配，命中即返回原函数。
- *   ② 分部积分：∫u dv = u·v − ∫v du，**只做一层**。当表匹配失败时，
- *      把被积函数拆成 u · dv 两部分，对 ∫v du 再试一次表匹配；仍失败
- *      则直接返回错误码（绝不递归、绝不无限展开）。
+ *   ② 分部积分：∫u dv = u·v − ∫v du，**固定两层**（v2.3.0 功能 4）。
+ *      层数是硬编码上界 2 的递减参数：外层把被积函数拆成 u·dv，对
+ *      ∫v du 允许再做一次分部，之后只查表/多项式，到 0 关死——无同形
+ *      自调用、无层数随输入增长的通路，绝不无限展开。
  *
  * 【节点预算 / Node budget —— 硬约束】
  *   复用上游 g_sym_nodes arena（AC_SYM_MAX_NODES = 512，全局共享）。
  *   进入前必须检查剩余预算：
- *       表匹配路径   ≤ 256 节点
- *       分部积分路径 ≤  96 节点（额外）
+ *       表匹配路径     ≤ 256 节点
+ *       分部积分路径   ≤ 2×96 节点（每层额外，合计 448 ≤ 512）
  *   预算不足时返回 AC_PRO_INT_EBUDGET，**绝不越界写 arena**。
  *   这条检查不是防御性编程的客套 —— g_sym_nodes 是上游 6 个 TU 共享的
  *   单一 arena，越界写会静默破坏其它模块的表达式树。
@@ -344,13 +347,13 @@ int ac_pro_integrate(const char *expr, char *out, int out_len);
 
 #define AC_PRO_INT_OK        0    /* 成功 */
 #define AC_PRO_INT_EPARSE   (-1)  /* 语法错误 / 空输入 / 非法字符 */
-#define AC_PRO_INT_ETABLE   (-2)  /* 64 项积分表未命中（且分部积分也未命中） */
-#define AC_PRO_INT_EBUDGET  (-3)  /* g_sym_nodes 预算不足（表 256 / 分部 96） */
+#define AC_PRO_INT_ETABLE   (-2)  /* 128 项积分表未命中（且两层分部也未命中） */
+#define AC_PRO_INT_EBUDGET  (-3)  /* g_sym_nodes 预算不足（表 256 / 分部 2×96） */
 #define AC_PRO_INT_EOVER    (-4)  /* 输出缓冲不足 */
 #define AC_PRO_INT_EDEGREE  (-5)  /* 次数/指数超限（如 x^1000） */
 
-/* 积分表规模（供测试核对表项数与设计说明一致）。 */
-#define AC_PRO_INT_TABLE_SIZE 64
+/* 积分表规模（供测试核对表项数与设计说明一致；v2.3.0 功能 4 起 128）。 */
+#define AC_PRO_INT_TABLE_SIZE 128
 
 /* ---- 多变量多项式积分的错误码（续 AC_PRO_INT_* 编号区）----
  * 通道选型：失败**直接以错误码为返回值**（细粒度通道），同时把粗因
@@ -359,6 +362,102 @@ int ac_pro_integrate(const char *expr, char *out, int out_len);
  * 上方 AC_PRO_INT_* 一一对应，复用同值即可，避免两套平行码漂移；
  * 只有本层独有的失败模式（非精确整除）才值得一个新码。 */
 #define AC_PRO_MVI_ENONEXACT (-6) /* 系数不能被 (指数+1) 整除：原函数非整系数 */
+
+/* ==================== v2.3.0 功能 5：单变量有理函数工具 ====================
+ * （GCD / cancel 约分 / apart 部分分式；实现于 src/ac_pro_rational.c）
+ *
+ * 【能力边界 / Envelope】
+ *   单变量 x、整系数域：次数 ≤ 8（AC_PRO_RAT_MAX_DEG）、输入系数
+ *   |c| ≤ 9999（AC_PRO_RAT_COEF_MAX）。中间量（prem/Euclid 的伪除系数）
+ *   溢出即拒绝，绝不回绕 —— GCD/cancel 只在整系数域良定（A1 prem 同纪律）。
+ *   视图：Pro union 的 rat 槽（464 B，v2.3.0 起，低于 sparse 峰值被吸收）。
+ *
+ * 【输入语法 / Input syntax】
+ *   多项式串：项 = [符号] [系数] [x[^n]]，隐式系数 1、隐式次数 1、`*` 可选，
+ *   空白任意；与前游 gb 解析器同风格（ac_pro_groebner.c:111）。**没有括号、
+ *   分数、除法、多变量** —— 有理式一律写成 "p/q"（恰一个顶层 '/'），
+ *   gcd 走两个独立参数。
+ *
+ * 【四个入口 / Entry points】
+ *   ac_pro_rat_arith(f, op, g, out,n) 多项式四则的 + - *（op ∈ '+','-','*'；
+ *                                     除法走伪除 pdivmod 支撑 gcd/cancel，
+ *                                     不单设——商带余式，字符串语义不唯一）。
+ *   ac_pro_rat_gcd(f, g, out, n)     最大公因式：本原化（容度 1、首项为正）
+ *                                    的本原最大公因式；互素输出 "1"。
+ *                                    gcd(0,g)=primitive(g)；gcd(0,0) 拒绝。
+ *   ac_pro_rat_cancel(f, out, n)     f = "p/q"：约分到 (P)/(Q)，Q 已本原化且
+ *                                    首项为正，P/Q 的整数容差也约尽；Q=1 时
+ *                                    直接输出 P；P=0 输出 "0"。
+ *   ac_pro_rat_apart(f, out, n)      f = "p/q"：部分分式。前置：真分式
+ *                                    (deg p < deg q ≥ 1)、q 的根互异且全实
+ *                                    （deg q ≤ 4 走上游精确根、5..8 走 DK）。
+ *                                    A_i = p(r_i)/q'(r_i)（互异单根闭式），
+ *                                    重根/复根/假分式 → EDOM。**回乘验证**：
+ *                                    Σ A_i·Π_{j≠i}(x−r_j) 与 p 在 dq 个采样点
+ *                                    的数值残差 ≤ 1e-9·max(1,|p|)，不过即
+ *                                    EDOM —— 绝不输出未验证的分解。
+ *
+ * 【输出语法 / Output syntax】
+ *   多项式：降幂 "3*x^2-x-1"（±1 折叠、负号并项）。cancel 恒 "(P)/(Q)"。
+ *   apart：项 = A_i/(x ∓ r_i)（r>0 "x - R"、r<0 "x + M"、r=0 "x"），按 r
+ *   降序 " + " 连接；A_i 与 r 的数值串走三级 fmt（整判 1e-9 / 有理重建
+ *   q≤1000 / 定点 12 位），与 ODE 契约 §5.1 同算法。
+ *
+ * 【返回 / Return —— 错误码就是返回值（零存储通道）】
+ *   失败时 out 内容未定义。 */
+int ac_pro_rat_arith(const char *f, char op, const char *g,
+                     char *out, int out_len);
+int ac_pro_rat_gcd(const char *f, const char *g, char *out, int out_len);
+int ac_pro_rat_cancel(const char *f, char *out, int out_len);
+int ac_pro_rat_apart(const char *f, char *out, int out_len);
+
+#define AC_PRO_RAT_OK       0    /* 成功 */
+#define AC_PRO_RAT_EPARSE  (-1)  /* 语法错误 / 空串 / 非法字符 / 缺 '/' */
+#define AC_PRO_RAT_EDEG    (-2)  /* 次数超限（>8）或 apart 分母次数 < 1 */
+#define AC_PRO_RAT_ECOEF   (-3)  /* 系数超域（|c| > 9999）或中间整数溢出 */
+#define AC_PRO_RAT_EDOM    (-4)  /* apart 语义拒绝：假分式 / 重根 / 复根 / 回乘验证不过 */
+#define AC_PRO_RAT_EOVER   (-5)  /* 输出缓冲不足 */
+
+/* ==================== v2.3.0 功能 3（C 侧）：常系数线性齐次 ODE ==========
+ * 行为边界由 docs/contracts/ode-format-v23.md **逐字冻结**（本节是该契约
+ * 的镜像，ac_pro_ode.c 头注同；契约变更须 C/JS 双组确认后先改契约）。
+ *
+ * 【能力边界 / Envelope】
+ *   未知函数固定 y、自变量固定 x（小写），阶数 n ∈ [1, 4]；整系数
+ *   |a_k| ≤ 999；ASCII 输入 ≤ 256 字节。非齐次（右端非 "0"）/ 变系数
+ *   （左端出现 x）/ 阶数 ≥ 5 / 恒等式 → 对应错误码，不硬解。
+ *
+ * 【输入文法 / Input syntax（契约 §3，逐字）】
+ *   项 := [符号][系数][x 因子...]y{撇号 0..4}；系数可缺省为 1、`*` 可选、
+ *   同阶项禁止重复、y 记号后只允许 空白/+/-/=/串尾；右端去空白后必须
+ *   恰为单个 '0'。判定全序（§6）：
+ *   EPARSE → EDEG（撇号计到 5 当场）→ EVARCOEF（x 标志延迟）→
+ *   ENONHOMO → ECOEF → [求根渲染期] EOVER / EINTERNAL。
+ *
+ * 【通解渲染 / Output（契约 §5，逐字）】
+ *   "y = " 前缀 + 逐项和，项 = C_i [*x^j] [*exp(fmt(λ或α)*x)]
+ *   [*cos/sin(fmt(β)*x)]；唯二特例：j=0 省 x 因子、指数整判 0 时整个
+ *   exp 因子省略。根序 = Re 降序、Re 相等（1e-9）Im 降序；共轭对先 cos
+ *   后 sin、重数按 x 幂层展开；任意常数 C₁..C₄（U+2081..2084）按渲染
+ *   顺序连续分配，总数 = n。fmt 三级：整判 1e-9 / 有理重建 q≤1000 /
+ *   定点 12 位。
+ *
+ * 【接口 / Interface】
+ *   int ac_pro_ode(const char *src, char *out, int out_len);
+ *   out 由调用方提供，契约冻结 out_len ≥ 256；不足 → EOVER 且不写部分
+ *   内容。无根访问器、无解析态访问器（特征多项式/根数组是内部量）。
+ *   返回 §6 错误码；失败时 out 内容未定义。 */
+int ac_pro_ode(const char *src, char *out, int out_len);
+
+#define AC_PRO_ODE_OK        0    /* 成功 */
+#define AC_PRO_ODE_EPARSE   (-1)  /* 词法/结构错误（契约 §6） */
+#define AC_PRO_ODE_EDEG     (-2)  /* 导数阶 ≥ 5 */
+#define AC_PRO_ODE_EVARCOEF (-3)  /* 变系数：左端出现 x 记号 */
+#define AC_PRO_ODE_ENONHOMO (-4)  /* 非齐次：右端非单个 '0' */
+#define AC_PRO_ODE_ECOEF    (-5)  /* 系数域：|a_k|>999 / 全零 / 无导数项 */
+#define AC_PRO_ODE_EOVER    (-6)  /* 输出缓冲不足 */
+#define AC_PRO_ODE_EINTERNAL (-7) /* 聚类失败 / 求根失败 / fmt 越域（绝不硬凑） */
+
 
 /* ==================== v2.1.0 方向④：稀疏线性方程组（方案 a）====================
  *

@@ -6,7 +6,7 @@
 #
 #       1) 三份产物构建（pro_runner / pro_kernel / degraded）
 #       2) .bss 三层账本精确比对（42608 / 42640 / 39408 / 38672）
-#       3) 测试套件执行（328 项测试，0 失败）
+#       3) 测试套件执行（488 项测试，0 失败）
 #       4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 / SP / BD 覆盖度
 #       5) 上游 C/128KB 零改动（git status + git diff 双证）
 #       6) 负向编译检查（AC_PRO=2 / AC_PRO=0 无 DEGRADED 必须编译失败）
@@ -71,7 +71,7 @@ function Get-Bss([string]$exe) {
 
 Write-Host ''
 Write-Host '============================================================'
-Write-Host ' ApolloCalc-CAS · ProTEXT v2.1.0 verification'
+Write-Host ' ApolloCalc-CAS · ProTEXT v1.4.0 verification'
 Write-Host '============================================================'
 
 # ---------- 1) 构建 ----------
@@ -124,6 +124,8 @@ $b2 = ([regex]::Matches($runOut, '\[case B2-\d+\]')).Count
 $sp = ([regex]::Matches($runOut, '\[case SP-\d+\]')).Count
 $bd = ([regex]::Matches($runOut, '\[case BD-\d+\]')).Count
 $gb = ([regex]::Matches($runOut, '\[case GB-\d+\]')).Count
+$rat = ([regex]::Matches($runOut, '\[case RAT-\d+\]')).Count
+$ode = ([regex]::Matches($runOut, '\[case ODE-\d+\]')).Count
 Write-Host "  B1 numeric roots  : $b1 cases"
 Write-Host "  A4 LU             : $a4 cases"
 Write-Host "  A6 implicit deriv : $a6 cases"
@@ -132,6 +134,8 @@ Write-Host "  B2 integrate      : $b2 cases"
 Write-Host "  SP sparse linsolve: $sp cases"
 Write-Host "  BD bigdec (v2.1.0): $bd cases"
 Write-Host "  GB groebner (v2.2.0): $gb cases"
+Write-Host "  RAT rational (v2.3.0 功能 5): $rat cases"
+Write-Host "  ODE ode (v2.3.0 功能 3): $ode cases"
 Verdict ($b1 -ge 5) 'B1 has >= 5 cases' "$b1"
 Verdict ($a4 -ge 5) 'A4 has >= 5 cases' "$a4"
 Verdict ($a6 -ge 5) 'A6 has >= 5 cases' "$a6"
@@ -140,6 +144,8 @@ Verdict ($b2 -ge 6) 'B2 has >= 6 cases' "$b2"
 Verdict ($sp -ge 8) 'SP has >= 8 cases (v2.1.0 direction 4)' "$sp"
 Verdict ($bd -ge 8) 'BD has >= 8 cases (v2.1.0 direction 5)' "$bd"
 Verdict ($gb -ge 10) 'GB has >= 10 cases (v2.2.0 direction 6)' "$gb"
+Verdict ($rat -ge 5) 'RAT has >= 5 cases (v2.3.0 feature 5)' "$rat"
+Verdict ($ode -ge 5) 'ODE has >= 5 cases (v2.3.0 feature 3)' "$ode"
 
 # ---------- 5) 上游零改动 ----------
 Write-Host ''

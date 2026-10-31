@@ -802,6 +802,10 @@ pro_multi_tally_t test_integrate_by_parts(void);
 pro_multi_tally_t test_integrate_table(void);
 pro_multi_tally_t test_integrate_budget(void);
 pro_multi_tally_t test_integrate_errors(void);
+pro_multi_tally_t test_integrate_quad_kernels(void);
+pro_multi_tally_t test_integrate_recip_funcs(void);
+pro_multi_tally_t test_integrate_func_powers(void);
+pro_multi_tally_t test_integrate_two_layer(void);
 
 /* v2.0.0：多变量符号求导（test/test_pro_diff_multi.c），同一跨 TU 约定。 */
 pro_multi_tally_t test_diff_multi(void);
@@ -832,6 +836,24 @@ pro_multi_tally_t test_gb_textbook(void);
 pro_multi_tally_t test_gb_degenerate(void);
 pro_multi_tally_t test_gb_accessors(void);
 pro_multi_tally_t test_gb_fuses(void);
+
+/* v2.3.0 功能 5：单变量有理函数工具（test/test_pro_rational.c，同跨 TU 约定） */
+pro_multi_tally_t test_rat_arith(void);
+pro_multi_tally_t test_rat_gcd(void);
+pro_multi_tally_t test_rat_cancel(void);
+pro_multi_tally_t test_rat_apart_exact(void);
+pro_multi_tally_t test_rat_apart_dk(void);
+pro_multi_tally_t test_rat_limits(void);
+pro_multi_tally_t test_rat_buffer(void);
+
+/* v2.3.0 功能 3 C 侧：常系数线性齐次 ODE（test/test_pro_ode.c，同跨 TU 约定） */
+pro_multi_tally_t test_ode_basic(void);
+pro_multi_tally_t test_ode_zero_repeat(void);
+pro_multi_tally_t test_ode_quartic(void);
+pro_multi_tally_t test_ode_rational(void);
+pro_multi_tally_t test_ode_reject(void);
+pro_multi_tally_t test_ode_order(void);
+pro_multi_tally_t test_ode_bounds(void);
 
 int main(void) {
     tally_t t;
@@ -922,11 +944,19 @@ int main(void) {
         pro_multi_tally_t i4 = test_integrate_table();
         pro_multi_tally_t i5 = test_integrate_budget();
         pro_multi_tally_t i6 = test_integrate_errors();
-        t.checks += i1.checks + i2.checks + i3.checks + i4.checks + i5.checks + i6.checks;
-        t.failed += i1.failed + i2.failed + i3.failed + i4.failed + i5.failed + i6.failed;
-        printf("--- v1.3.5 B2 integrate: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
+        pro_multi_tally_t i7 = test_integrate_quad_kernels();
+        pro_multi_tally_t i8 = test_integrate_recip_funcs();
+        pro_multi_tally_t i9 = test_integrate_func_powers();
+        pro_multi_tally_t i10 = test_integrate_two_layer();
+        t.checks += i1.checks + i2.checks + i3.checks + i4.checks + i5.checks + i6.checks
+                  + i7.checks + i8.checks + i9.checks + i10.checks;
+        t.failed += i1.failed + i2.failed + i3.failed + i4.failed + i5.failed + i6.failed
+                  + i7.failed + i8.failed + i9.failed + i10.failed;
+        printf("--- v1.3.5 B2 integrate: %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d, %d/%d (checks/failed) ---\n",
                i1.checks, i1.failed, i2.checks, i2.failed, i3.checks, i3.failed,
-               i4.checks, i4.failed, i5.checks, i5.failed, i6.checks, i6.failed);
+               i4.checks, i4.failed, i5.checks, i5.failed, i6.checks, i6.failed,
+               i7.checks, i7.failed, i8.checks, i8.failed, i9.checks, i9.failed,
+               i10.checks, i10.failed);
     }
 
     /* v2.0.0：多变量符号求导（test/test_pro_diff_multi.c） */
@@ -979,6 +1009,46 @@ int main(void) {
         printf("--- v2.2.0 groebner: textbook %d/%d, degenerate %d/%d, accessors %d/%d, fuses %d/%d (checks/failed) ---\n",
                g1.checks, g1.failed, g2.checks, g2.failed,
                g3.checks, g3.failed, g4.checks, g4.failed);
+    }
+
+    /* v2.3.0 功能 5：单变量有理函数工具（test/test_pro_rational.c，7 用例） */
+    {
+        pro_multi_tally_t r1 = test_rat_arith();
+        pro_multi_tally_t r2 = test_rat_gcd();
+        pro_multi_tally_t r3 = test_rat_cancel();
+        pro_multi_tally_t r4 = test_rat_apart_exact();
+        pro_multi_tally_t r5 = test_rat_apart_dk();
+        pro_multi_tally_t r6 = test_rat_limits();
+        pro_multi_tally_t r7 = test_rat_buffer();
+        t.checks += r1.checks + r2.checks + r3.checks + r4.checks
+                  + r5.checks + r6.checks + r7.checks;
+        t.failed += r1.failed + r2.failed + r3.failed + r4.failed
+                  + r5.failed + r6.failed + r7.failed;
+        printf("--- v2.3.0 rational: arith %d/%d, gcd %d/%d, cancel %d/%d, exact %d/%d, dk %d/%d, limits %d/%d, buffer %d/%d (checks/failed) ---\n",
+               r1.checks, r1.failed, r2.checks, r2.failed,
+               r3.checks, r3.failed, r4.checks, r4.failed,
+               r5.checks, r5.failed, r6.checks, r6.failed,
+               r7.checks, r7.failed);
+    }
+
+    /* v2.3.0 功能 3 C 侧：常系数线性齐次 ODE（test/test_pro_ode.c，7 用例） */
+    {
+        pro_multi_tally_t o1 = test_ode_basic();
+        pro_multi_tally_t o2 = test_ode_zero_repeat();
+        pro_multi_tally_t o3 = test_ode_quartic();
+        pro_multi_tally_t o4 = test_ode_rational();
+        pro_multi_tally_t o5 = test_ode_reject();
+        pro_multi_tally_t o6 = test_ode_order();
+        pro_multi_tally_t o7 = test_ode_bounds();
+        t.checks += o1.checks + o2.checks + o3.checks + o4.checks
+                  + o5.checks + o6.checks + o7.checks;
+        t.failed += o1.failed + o2.failed + o3.failed + o4.failed
+                  + o5.failed + o6.failed + o7.failed;
+        printf("--- v2.3.0 ode: basic %d/%d, zero %d/%d, quartic %d/%d, rational %d/%d, reject %d/%d, order %d/%d, bounds %d/%d (checks/failed) ---\n",
+               o1.checks, o1.failed, o2.checks, o2.failed,
+               o3.checks, o3.failed, o4.checks, o4.failed,
+               o5.checks, o5.failed, o6.checks, o6.failed,
+               o7.checks, o7.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
