@@ -1,0 +1,4 @@
+# GitHub language statistics: keep the tooling out of the byte counts.
+# The files stay tracked and versioned; this only stops linguist from
+# classifying the repo by them.
+tools/** linguist-vendored
