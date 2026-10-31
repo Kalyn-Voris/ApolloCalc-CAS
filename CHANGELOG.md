@@ -36,19 +36,19 @@
   → 扁平表达式树（512×4 节点池）→ 符号求导（四则/幂三支路 + 17 种单参函数）；
   多项式子树接 ratRootDescent 输出因式列表（factor 语义，镜像
   ac_sym_factor_poly）；隐函数 dy/dx 对齐 C 侧 A6（错误码逐值复刻）。
-  116 项测试，池 35 232 B。
+  116 项测试，池 35232 B。
 - **符号积分**（`core_integrate.js` 新）：积分表 128 项与 C 侧逐项对齐
   （anti 模板串 + 偏移表加载期解析，加载期断言恰 128 项）+ 固定两层分部
   （无自调用，不违反禁递归红线）；错误码复刻 AC_PRO_INT_\*。75 项测试，
-  池 93 676 B。
+  池 93676 B。
 - **square-free (根, 重数)**（`core_ratroot.js` 扩展 ApolloSqfree 段）：按契约
   逐字实现；JS 整题 ≥5 → EDEG（契约 §5.1 成文分叉，唯一双侧行为差异）。
-  70 项测试，池 2 240 B。
+  70 项测试，池 2240 B。
 - **结式 + 2 变量 Groebner 基**（`core_groebner.js` 新）：结式 = Sylvester
   矩阵（阶 ≤12）复用 v2.3.0 矩阵 pro 层 proDet；Groebner = M4GB 逐对归约
   1:1 移植（lex 序、输入 deg ≤4、基 8 槽/16 项/pair 32 熔断、Buchberger
   第一判据、interreduce 不动点），错误码 = AC_PRO_GB_\* 全序。60 项测试，
-  池 6 648 B。
+  池 6648 B。
 
 ### Added（跨语言契约与文档）
 
@@ -65,14 +65,14 @@
 
 - `C/128KB-ProTEXT/VERSION` v1.5.0 → **v1.6.0**（Pro 层新特性按 semver minor
   递进）；`JS/128KB/VERSION` v2.3.0 → **v2.4.0**；全局 Tag **v2.4.0**。
-- JS 压缩内核重建：`core_kernel.js` **49 747 → 103 325 B**（预算 131 072 B，
-  余量 27 747 B）；全项目 JS 静态池 30 112 → **167 908 B**（符号微分 35 232 +
-  符号积分 93 676 + 结式/Groebner 6 648 + sqfree 2 240，实测各模块加载期
+- JS 压缩内核重建：`core_kernel.js` **49747 → 103325 B**（预算 131072 B，
+  余量 27747 B）；全项目 JS 静态池 30112 → **167908 B**（符号微分 35232 +
+  符号积分 93676 + 结式/Groebner 6648 + sqfree 2240，实测各模块加载期
   TypedArray byteLength 之和）。
 
 ### Known issues（如实口径 · 收尾对拍与 JS 组交付说明转写）
 
-- **JS 静态池水位**：167 908 B 已超 ROADMAP §五 口径的 98 304 B 水位门禁；
+- **JS 静态池水位**：167908 B 已超 ROADMAP §五 口径的 98304 B 水位门禁；
   门禁函数 `checkMemoryWatermark`（core_solvers.js:622-644）只累计基础内核池、
   不含模块池，故测试仍全绿。**后续任何 JS 功能落位前应重估水位**。
 - **Groebner 系数域收窄（不称「对等」）**：JS 无 int64，系数域为 Float64
@@ -153,14 +153,14 @@
   [benchmark-eigenmath.md](docs/refs/benchmark-eigenmath.md)（SymPy / Giac(Xcas) /
   Eigenmath，ROADMAP §一 的可回查底稿）。
 - **docs/features.md 重写**：补齐 v2.3.0 全部新功能；修复停留在 v2.0.0 的滞后
-  数字（「281 项测试 / .bss 41 456 B」→ 实测 488 checks / 42608 B）。
+  数字（「281 项测试 / .bss 41456 B」→ 实测 488 checks / 42608 B）。
 
 ### Changed（版本管理 · 双轨递进）
 
 - `C/128KB-ProTEXT/VERSION` v1.4.0 → **v1.5.0**（Pro 层新特性按 semver minor
   递进）；`JS/128KB/VERSION` v2.2.0 → **v2.3.0**；全局 Tag **v2.3.0**。
-- JS 压缩内核重建：`core_kernel.js` **34 510 → 49 747 B**（预算 131 072 B）；
-  全项目 JS 静态池 22 416 → **30 112 B**（≈ 29.4 KiB，水位门禁 98 304 B 内）。
+- JS 压缩内核重建：`core_kernel.js` **34510 → 49747 B**（预算 131072 B）；
+  全项目 JS 静态池 22416 → **30112 B**（≈ 29.4 KiB，水位门禁 98304 B 内）。
 
 ### Known issues（收尾对拍发现，如实上报）
 
@@ -197,8 +197,8 @@
 ### Added（C 侧 · C/128KB-ProTEXT · 组件 v1.3.5 → v1.4.0）
 
 - **2 变量 Groebner 基**：M4GB 逐对归约、lex 序、deg ≤ 4、膨胀熔断。gb 视图
-  1888 B（≤ 1960 预算线）被 sparse 峰值 3 848 B 完全吸收，**`.bss` 零增长**——
-  账本闭合：内核口径 **42 608 B** / runner 口径 **42 640 B** / 上游对照 39 408 B
+  1888 B（≤ 1960 预算线）被 sparse 峰值 3848 B 完全吸收，**`.bss` 零增长**——
+  账本闭合：内核口径 **42608 B** / runner 口径 **42640 B** / 上游对照 39408 B
   （`bss-check` 实测逐字命中）。新增 68 项测试，pro_runner **396 checks, 0 failed**
   （RESULT: PASS）。
 
@@ -219,11 +219,11 @@
 ### Added（JS 侧 · JS/128KB · 组件 v2.2.0，首个组件版本记录）
 
 - **深度压缩管线**并入 `test/build-kernel.js --minify` 唯一重建入口：
-  `core_kernel.js` **175 142 → 57 523 B**（压缩率 **67.2%**，越过 > 50% 目标，
-  低于 ~87.6 KB 冲刺线；预算 131 072 B）。
+  `core_kernel.js` **175142 → 57523 B**（压缩率 **67.2%**，越过 > 50% 目标，
+  低于 ~87.6 KB 冲刺线；预算 131072 B）。
 - **terser 两段式压缩**（实测依据：terser 以 `module: true` 解析整文件时顶层符号
   按 ESM 语义非 global，即使 `mangle.toplevel: false` 也会改写顶层名——实测
-  36 747 B 但压缩体 eval 回归无法按名运行）：(a) 内核体按经典 script 压缩且
+  36747 B 但压缩体 eval 回归无法按名运行）：(a) 内核体按经典 script 压缩且
   `mangle.toplevel: false`，顶层名全保留；(b) EXPORT_BLOCK 单独按 module 压缩
   （其自由引用为 undeclared 符号不会改写，`mangle.properties` 默认关闭 → 对象
   属性名原样）。两段拼接后 `export default` 契约不变，压缩体可做全量 eval 回归。
@@ -234,7 +234,7 @@
   逐字零改写、原换行位置一律保留换行符（ASI/restricted production 零改动）、
   行内空白仅在相邻 token 可能粘连成词或合字成运算符（++/--/=>/<=）时保留一个
   空格、未闭合一律 throw fail-fast；已通过 16 项词法边界单测。回退实测
-  175 142 → 79 435 B（**54.6%**），同样达标——无 terser/无网络环境用同一命令
+  175142 → 79435 B（**54.6%**），同样达标——无 terser/无网络环境用同一命令
   仍可复现（已做 node_modules 移走演练验证）。
 
 ### Added（版本管理 · 双轨制落地）
@@ -255,7 +255,7 @@
   + Groebner 68）。
 - JS 侧：12 测试文件 **TOTAL: 603 pass, 0 fail**；重建命令
   `node test/build-kernel.js --minify`（JS/128KB 目录下）实跑输出末行
-  **BUILD OK, all tests passed**，57 523 B / 预算 131 072 B。
+  **BUILD OK, all tests passed**，57523 B / 预算 131072 B。
 
 ## v2.1.0 (2026-10-27)
 
@@ -276,7 +276,7 @@ JS 侧零改动。
   共享 320 总容量，绝不静默丢填充**。错误码走返回值（零静态存储通道——任何
   static 对象都会让 TU 净增 32 B `.bss`，直接破坏门禁）：OK 1 / EN −1 / ENNZ −2 /
   EPIVOT −3 / ESING −4 / EFILL −5 / EINDEX −6；结果经 `ac_pro_sparse_x/rhs/perm`
-  访问器读取。sparse 视图 3 848 B 成为 Pro union 新峰值。12 用例 35 项测试
+  访问器读取。sparse 视图 3848 B 成为 Pro union 新峰值。12 用例 35 项测试
   （[case SP-1..12]，期望值 node 离线核算后以常量写入，随机稠密对照组与 C 逐位一致）。
 - **任意精度定点十进制**（`src/ac_pro_bigdec.c`）：value = m·10^(−scale)，m 为上游
   `ac_bigint_t`（基数 1e9、20 limb、180 位十进制容量），标度 int32 ±2^31。
@@ -296,8 +296,8 @@ JS 侧零改动。
 
 - C 侧：`pro_runner.exe` **328 checks, 0 failed**（基线 281 + 稀疏 35 + 定点小数 12）；
   `bss-check` 三门禁精确命中（kernel **42608** / runner **42640** / upstream 39408），
-  账本 38 672 + 80 + 3 848（sparse 峰值）+ 8 = 42 608（研究估算 42 684，实际更省）；
-  退化对拍 38 672 B 不变；`verify.ps1` 全量验收通过（v2.1.0 banner，含 SP/BD 覆盖段）。
+  账本 38672 + 80 + 3848（sparse 峰值）+ 8 = 42608（研究估算 42684，实际更省）；
+  退化对拍 38672 B 不变；`verify.ps1` 全量验收通过（v2.1.0 banner，含 SP/BD 覆盖段）。
 - JS 侧：12 个测试文件 **603 pass, 0 fail** 不变（本迭代纯 C 侧）；
   `build-kernel.js` 83 项回归 + 78 标识符扫描 + 43 项 ESM 冒烟复核通过。
 
@@ -318,8 +318,8 @@ JS 侧多变量模块转正并补齐矩阵/特殊函数。上游 `C/128KB/` 逐�
   任务卡预留的 frac 视图（480 B）都未动用。
 - **sin/cos LUT 常量表化**（`src/ac_pro_math.c` 包装重写 + `tools/gen_lut_tables.js`）：
   1024 项 `const double` 预计算表经 `<math.h>` 先行 + 函数式宏劫持进上游 TU，
-  `#undef AC_MATH_USE_LUT` 阻断旧可变表。`.bss` 迁出收益 **−16 416 B**（对照组
-  实测 57 904 → 41 456），插值精度与运行时填充逐位一致（max |err| = 4.706e-6 ≈ h²/8）。
+  `#undef AC_MATH_USE_LUT` 阻断旧可变表。`.bss` 迁出收益 **−16416 B**（对照组
+  实测 57904 → 41456），插值精度与运行时填充逐位一致（max |err| = 4.706e-6 ≈ h²/8）。
   `AC_PRO_MATH_LUT_CONST` 开关默认开，=0 回退旧行为。
 
 ### Added（JS 侧 · JS/128KB）
@@ -339,7 +339,7 @@ JS 侧多变量模块转正并补齐矩阵/特殊函数。上游 `C/128KB/` 逐�
   33 条测试。
 - **内核 12 文件拼接**（`test/build-kernel.js`）：三模块进 FILES 与导出块
   （`multivar` / `matrix` / `special` 命名空间），静态扫描 78 标识符，ESM 严格
-  模式冒烟扩到 43 项。`core_kernel.js` 175 142 B（越过 128 KiB 文件线为 v2.0.0
+  模式冒烟扩到 43 项。`core_kernel.js` 175142 B（越过 128 KiB 文件线为 v2.0.0
   有意裁决，见 docs/js-128kb.md 内存账本节）。
 - **`test/test-browser.js`**：vm 沙箱模拟浏览器经典脚本环境（无 require/module），
   验证三模块第四加载通道 + 功能探针，10 条测试。
@@ -351,7 +351,7 @@ JS 侧多变量模块转正并补齐矩阵/特殊函数。上游 `C/128KB/` 逐�
 - C 侧：`pro_runner.exe` **281 checks, 0 failed**（基线 259 + 求导 12 + 积分 10），
   `bss-check` 三门禁精确命中（41456 / 41488 / 39408），退化对拍 38672 B。
 - JS 侧：12 个测试文件 **603 pass, 0 fail**（含一致性 59 pass + 4 improve）；
-  `--expose-gc` 三模块联合探针 20 000 次混合调用 allocCount 恒 6/3/0，
+  `--expose-gc` 三模块联合探针 20,000 次混合调用 allocCount 恒 6/3/0，
   堆增长 0.17 MB（JIT 噪声量级）。
 - Node 与浏览器（模拟经典脚本 + ESM import 双通道）全过。
 
@@ -544,7 +544,7 @@ v1.2 只存在于工作区、从未单独提交或打 tag——git 中它的代�
 
 ## v1.1.0 (2026-10-21)
 
-C/128KB 零堆内存压缩：`.bss` **57.64 KiB → 38.48 KiB（39.4 KB）**，减少 19,616 B（**−33.24%**）。
+C/128KB 零堆内存压缩：`.bss` **57.64 KiB → 38.48 KiB（39.4 KB）**，减少 19616 B（**−33.24%**）。
 功能零变更、性能零衰退（四个 stage 全部落在 ±3% 噪声带内）。
 
 ### Added
