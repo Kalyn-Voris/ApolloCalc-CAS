@@ -1,32 +1,897 @@
 {
-  "description": "ApolloCalc-CAS 共享一致性测试：多项式方程数值求根。expectedRoots 为 [re, im] 数对，按多重集合匹配（顺序无关），容差 per-case。",
+  "description": "ApolloCalc-CAS 共享一致性测试：多项式方程数值求根。expectedRoots 为 [re, im] 数对，按多重集合匹配（顺序无关），容差 per-case。v2.4.0 起增补 sqfree 区（键 sqfree）：单变量多项式 square-free (根, 重数) 跨语言契约用例，两层结构（双侧区 / C 侧区），见该键内说明。",
   "rootOrderInsensitive": true,
   "cases": [
-    { "input": "x^2-5x+6=0", "degree": 2, "expectedRoots": [[3, 0], [2, 0]], "tolerance": 1e-9 },
-    { "input": "x^2+1=0", "degree": 2, "expectedRoots": [[0, 1], [0, -1]], "tolerance": 1e-9 },
-    { "input": "x^2=9", "degree": 2, "expectedRoots": [[3, 0], [-3, 0]], "tolerance": 1e-9 },
-    { "input": "x^2-4x+4=0", "degree": 2, "expectedRoots": [[2, 0], [2, 0]], "tolerance": 1e-9 },
-    { "input": "2x^2+3x-2=0", "degree": 2, "expectedRoots": [[0.5, 0], [-2, 0]], "tolerance": 1e-9 },
-    { "input": "x^2+2x+5=0", "degree": 2, "expectedRoots": [[-1, 2], [-1, -2]], "tolerance": 1e-9 },
-    { "input": "3x^2-5x+2=0", "degree": 2, "expectedRoots": [[1, 0], [0.6666666666666666, 0]], "tolerance": 1e-9 },
-    { "input": "x^2+x-12=0", "degree": 2, "expectedRoots": [[3, 0], [-4, 0]], "tolerance": 1e-9 },
-    { "input": "x^2-4x+13=0", "degree": 2, "expectedRoots": [[2, 3], [2, -3]], "tolerance": 1e-9 },
-    { "input": "x^2-2x-1=0", "degree": 2, "expectedRoots": [[2.414213562373095, 0], [-0.41421356237309515, 0]], "tolerance": 1e-9 },
-    { "input": "x^2-6x+9=0", "degree": 2, "expectedRoots": [[3, 0], [3, 0]], "tolerance": 1e-9 },
-    { "input": "x^2=2x+3", "degree": 2, "expectedRoots": [[3, 0], [-1, 0]], "tolerance": 1e-9 },
-    { "input": "x^3-6x^2+11x-6=0", "degree": 3, "expectedRoots": [[1, 0], [2, 0], [3, 0]], "tolerance": 1e-9 },
-    { "input": "x^3=8", "degree": 3, "expectedRoots": [[2, 0], [-1, 1.7320508075688772], [-1, -1.7320508075688772]], "tolerance": 1e-9 },
-    { "input": "x^3-6x^2+12x-8=0", "degree": 3, "expectedRoots": [[2, 0], [2, 0], [2, 0]], "tolerance": 1e-9 },
-    { "input": "x^3-3x=0", "degree": 3, "expectedRoots": [[1.7320508075688772, 0], [0, 0], [-1.7320508075688772, 0]], "tolerance": 1e-9 },
-    { "input": "2x^3-x-1=0", "degree": 3, "expectedRoots": [[1, 0], [-0.5, 0.5], [-0.5, -0.5]], "tolerance": 1e-9 },
-    { "input": "x^3-1=0", "degree": 3, "expectedRoots": [[1, 0], [-0.5, 0.8660254037844386], [-0.5, -0.8660254037844386]], "tolerance": 1e-9 },
-    { "input": "x^3+x^2+x+1=0", "degree": 3, "expectedRoots": [[-1, 0], [0, 1], [0, -1]], "tolerance": 1e-9 },
-    { "input": "x^4-5x^2+4=0", "degree": 4, "expectedRoots": [[1, 0], [-1, 0], [2, 0], [-2, 0]], "tolerance": 1e-9 },
-    { "input": "x^4-1=0", "degree": 4, "expectedRoots": [[1, 0], [-1, 0], [0, 1], [0, -1]], "tolerance": 1e-9 },
-    { "input": "x^4-10x^3+35x^2-50x+24=0", "degree": 4, "expectedRoots": [[1, 0], [2, 0], [3, 0], [4, 0]], "tolerance": 1e-7 },
-    { "input": "x^4+5x^2+4=0", "degree": 4, "expectedRoots": [[0, 1], [0, -1], [0, 2], [0, -2]], "tolerance": 1e-9 },
-    { "input": "2x^4-x^3-14x^2-5x+6=0", "degree": 4, "expectedRoots": [[0.5, 0], [3, 0], [-2, 0], [-1, 0]], "tolerance": 1e-7 },
-    { "input": "x^4-4x^3+6x^2-4x+1=0", "degree": 4, "expectedRoots": [[1, 0], [1, 0], [1, 0], [1, 0]], "tolerance": 1e-9 },
-    { "input": "x^4+4=0", "degree": 4, "expectedRoots": [[1, 1], [1, -1], [-1, 1], [-1, -1]], "tolerance": 1e-9 }
-  ]
+    {
+      "input": "x^2-5x+6=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2+1=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          -1
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2=9",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          3,
+          0
+        ],
+        [
+          -3,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2-4x+4=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "2x^2+3x-2=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          0.5,
+          0
+        ],
+        [
+          -2,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2+2x+5=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          -1,
+          2
+        ],
+        [
+          -1,
+          -2
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "3x^2-5x+2=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          0.6666666666666666,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2+x-12=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          3,
+          0
+        ],
+        [
+          -4,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2-4x+13=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          -3
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2-2x-1=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          2.414213562373095,
+          0
+        ],
+        [
+          -0.41421356237309515,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2-6x+9=0",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^2=2x+3",
+      "degree": 2,
+      "expectedRoots": [
+        [
+          3,
+          0
+        ],
+        [
+          -1,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^3-6x^2+11x-6=0",
+      "degree": 3,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^3=8",
+      "degree": 3,
+      "expectedRoots": [
+        [
+          2,
+          0
+        ],
+        [
+          -1,
+          1.7320508075688772
+        ],
+        [
+          -1,
+          -1.7320508075688772
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^3-6x^2+12x-8=0",
+      "degree": 3,
+      "expectedRoots": [
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^3-3x=0",
+      "degree": 3,
+      "expectedRoots": [
+        [
+          1.7320508075688772,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          -1.7320508075688772,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "2x^3-x-1=0",
+      "degree": 3,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          -0.5,
+          0.5
+        ],
+        [
+          -0.5,
+          -0.5
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^3-1=0",
+      "degree": 3,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          -0.5,
+          0.8660254037844386
+        ],
+        [
+          -0.5,
+          -0.8660254037844386
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^3+x^2+x+1=0",
+      "degree": 3,
+      "expectedRoots": [
+        [
+          -1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          -1
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^4-5x^2+4=0",
+      "degree": 4,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          -1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          -2,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^4-1=0",
+      "degree": 4,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          -1,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          -1
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^4-10x^3+35x^2-50x+24=0",
+      "degree": 4,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "tolerance": 1e-7
+    },
+    {
+      "input": "x^4+5x^2+4=0",
+      "degree": 4,
+      "expectedRoots": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          -1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          -2
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "2x^4-x^3-14x^2-5x+6=0",
+      "degree": 4,
+      "expectedRoots": [
+        [
+          0.5,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          -2,
+          0
+        ],
+        [
+          -1,
+          0
+        ]
+      ],
+      "tolerance": 1e-7
+    },
+    {
+      "input": "x^4-4x^3+6x^2-4x+1=0",
+      "degree": 4,
+      "expectedRoots": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "tolerance": 1e-9
+    },
+    {
+      "input": "x^4+4=0",
+      "degree": 4,
+      "expectedRoots": [
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          -1
+        ],
+        [
+          -1,
+          1
+        ],
+        [
+          -1,
+          -1
+        ]
+      ],
+      "tolerance": 1e-9
+    }
+  ],
+  "sqfree": {
+    "description": "square-free 分解 (根, 重数) 跨语言契约用例（v2.4.0 功能 9）。由收尾组从两侧内嵌用例（C test_pro_sqfree.c SQFREE-1..10 / JS test-sqfree.js）提炼并双侧实跑核对后冻结；契约 docs/contracts/sqfree-format-v24.md §10-1 两层结构。",
+    "sqfreeFormatContract": "docs/contracts/sqfree-format-v24.md",
+    "errorCodes": {
+      "ok": 0,
+      "eparse": -1,
+      "edeg": -2,
+      "ecoef": -3,
+      "eover": -4,
+      "einternal": -5
+    },
+    "sideNotes": "（1）比对规则：成功用例 expected 为契约 §6 期望串逐字比对、code 精确比较；错误用例只冻结 code——失败输出不比对（C 侧失败时 out 未定义 / JS 侧失败时 out 恒空串，契约 §9 各自侧失败语义）。（2）双侧行为分叉唯一成文处：整题次数 5..8 的输入 JS 侧 EDEG（-2）、C 侧按因子次数路由求根（@e/@d 标注），收进 cOnlyCases（每例 JS 断言 jsCode=-2）。（3）code=-4（EOVER）仅 C 侧可产生（输出缓冲语义），对应用例标 cOnly=true，JS 消费方跳过。（4）排序契约 §5.3：Re 降序、Re 并列 Im 降序；±i 共轭对 i 在前。（5）覆盖说明：契约 §10-4 的 q=1000/1001 有理重建 q 边界两侧内嵌套件均未覆盖，按「两侧内嵌用例为准」不发明新用例、未纳入；其余 §10-4 边界（系数 999/1000、次数 4/5 与 8/9、重数 8、常数/全零、长度 128/129）均已收录。",
+    "verified": "2026-10-31 双侧实跑核对：C 侧 ac_pro_sqfree（out_len=512，EOVER 例 out_len=8）70/70；JS 侧 ApolloSqfree.sqfree 69/69（5 例 cOnly 区断言 jsCode=-2、1 例 cOnly EOVER 跳过）——70 例零分歧，无 knownDeviations。",
+    "dualCases": [
+      {
+        "id": "contract-6.2-1",
+        "input": "x^2-5x+6",
+        "code": 0,
+        "expected": "[3@e1, 2@e1]"
+      },
+      {
+        "id": "contract-6.2-2",
+        "input": "x^2-2x+1",
+        "code": 0,
+        "expected": "[1@e2]"
+      },
+      {
+        "id": "contract-6.2-3",
+        "input": "x^3+x^2-5x+3",
+        "code": 0,
+        "expected": "[1@e2, -3@e1]"
+      },
+      {
+        "id": "contract-6.2-4",
+        "input": "x^2+1",
+        "code": 0,
+        "expected": "[i@e1, -i@e1]"
+      },
+      {
+        "id": "contract-6.2-5",
+        "input": "2x^2-2",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "contract-6.2-6",
+        "input": "x^4+2x^2+1",
+        "code": 0,
+        "expected": "[i@e2, -i@e2]"
+      },
+      {
+        "id": "contract-6.2-9",
+        "input": "7",
+        "code": 0,
+        "expected": "[]"
+      },
+      {
+        "id": "fmt-有理重建复根",
+        "input": "2x^2-2x+1",
+        "code": 0,
+        "expected": "[1/2+1/2i@e1, 1/2-1/2i@e1]"
+      },
+      {
+        "id": "fmt-定点12位-根2",
+        "input": "x^2-2",
+        "code": 0,
+        "expected": "[1.414213562373@e1, -1.414213562373@e1]"
+      },
+      {
+        "id": "边界-系数999-纯虚根",
+        "input": "999*x^2+1",
+        "code": 0,
+        "expected": "[0.031638599858i@e1, -0.031638599858i@e1]"
+      },
+      {
+        "id": "常数-5",
+        "input": "5",
+        "code": 0,
+        "expected": "[]"
+      },
+      {
+        "id": "重数3",
+        "input": "x^3-3x^2+3x-1",
+        "code": 0,
+        "expected": "[1@e3]"
+      },
+      {
+        "id": "边界-重数4-整题4次界内",
+        "input": "x^4-4x^3+6x^2-4x+1",
+        "code": 0,
+        "expected": "[1@e4]"
+      },
+      {
+        "id": "排序-Re降序-实根",
+        "input": "x^2-9",
+        "code": 0,
+        "expected": "[3@e1, -3@e1]"
+      },
+      {
+        "id": "排序-共轭对-Re并列Im降序",
+        "input": "x^2+2x+5",
+        "code": 0,
+        "expected": "[-1+2i@e1, -1-2i@e1]"
+      },
+      {
+        "id": "排序-四根混合",
+        "input": "x^4-1",
+        "code": 0,
+        "expected": "[1@e1, i@e1, -i@e1, -1@e1]"
+      },
+      {
+        "id": "fmt-有理根-1/2",
+        "input": "2x-1",
+        "code": 0,
+        "expected": "[1/2@e1]"
+      },
+      {
+        "id": "fmt-定点12位-1/根3",
+        "input": "3x^2-1",
+        "code": 0,
+        "expected": "[0.57735026919@e1, -0.57735026919@e1]"
+      },
+      {
+        "id": "fmt-定点12位-四根-系数999",
+        "input": "999*x^4-1",
+        "code": 0,
+        "expected": "[0.177872425796@e1, 0.177872425796i@e1, -0.177872425796i@e1, -0.177872425796@e1]"
+      },
+      {
+        "id": "本原化-负首项",
+        "input": "-2x^2+2",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "词法-显式乘号",
+        "input": "3*x^2-3",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "词法-前导零指数",
+        "input": "x^02-1",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "词法-前导零系数",
+        "input": "03x^2-3",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "词法-项首符号消费",
+        "input": "+-x^2+1",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "词法-空白穿插",
+        "input": " x^2 - 1 ",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "排序-零根居中",
+        "input": "x^3-x",
+        "code": 0,
+        "expected": "[1@e1, 0@e1, -1@e1]"
+      },
+      {
+        "id": "边界-系数999-实根对",
+        "input": "999x^2-1",
+        "code": 0,
+        "expected": "[0.031638599858@e1, -0.031638599858@e1]"
+      },
+      {
+        "id": "边界-次数4-过",
+        "input": "x^4-16",
+        "code": 0,
+        "expected": "[2@e1, 2i@e1, -2i@e1, -2@e1]"
+      },
+      {
+        "id": "边界-本原化-999容度",
+        "input": "999x^2-999",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "重根单根混合",
+        "input": "x^3-x^2-x+1",
+        "code": 0,
+        "expected": "[1@e2, -1@e1]"
+      },
+      {
+        "id": "边界-长度128-过",
+        "input": "x^2-1                                                                                                                           ",
+        "code": 0,
+        "expected": "[1@e1, -1@e1]"
+      },
+      {
+        "id": "边界-长度129-拒",
+        "input": "x^2-1                                                                                                                            ",
+        "code": -1
+      },
+      {
+        "id": "reject-小数系数",
+        "input": "0.5*x^2+x",
+        "code": -1
+      },
+      {
+        "id": "reject-分数系数",
+        "input": "1/2*x^2",
+        "code": -1
+      },
+      {
+        "id": "reject-方程形式",
+        "input": "x^2-1=0",
+        "code": -1
+      },
+      {
+        "id": "reject-括号",
+        "input": "(x-1)^2",
+        "code": -1
+      },
+      {
+        "id": "reject-多变量",
+        "input": "x*y^2",
+        "code": -1
+      },
+      {
+        "id": "reject-大写X",
+        "input": "X^2-1",
+        "code": -1
+      },
+      {
+        "id": "reject-UTF8上标2",
+        "input": "x²-1",
+        "code": -1
+      },
+      {
+        "id": "reject-次数9当场",
+        "input": "x^9+1",
+        "code": -2
+      },
+      {
+        "id": "reject-次数12",
+        "input": "x^12",
+        "code": -2
+      },
+      {
+        "id": "reject-全零多项式",
+        "input": "0",
+        "code": -3
+      },
+      {
+        "id": "reject-系数1000",
+        "input": "1000*x^2+1",
+        "code": -3
+      },
+      {
+        "id": "reject-负系数1000",
+        "input": "-1000x",
+        "code": -3
+      },
+      {
+        "id": "reject-系数1000变体",
+        "input": "1000x^2-1",
+        "code": -3
+      },
+      {
+        "id": "reject-同次项重复",
+        "input": "x^2+2x^2",
+        "code": -1
+      },
+      {
+        "id": "reject-同次重复带系数",
+        "input": "x^2+3x^2",
+        "code": -1
+      },
+      {
+        "id": "reject-常数项重复",
+        "input": "1+2",
+        "code": -1
+      },
+      {
+        "id": "reject-悬空3星",
+        "input": "3*",
+        "code": -1
+      },
+      {
+        "id": "reject-悬空星x",
+        "input": "*x",
+        "code": -1
+      },
+      {
+        "id": "reject-x后系数",
+        "input": "x*3",
+        "code": -1
+      },
+      {
+        "id": "reject-裸符号",
+        "input": "+",
+        "code": -1
+      },
+      {
+        "id": "reject-悬空幂",
+        "input": "x^",
+        "code": -1
+      },
+      {
+        "id": "reject-零次幂",
+        "input": "x^0",
+        "code": -1
+      },
+      {
+        "id": "reject-幂后空白",
+        "input": "x^ 2",
+        "code": -1
+      },
+      {
+        "id": "reject-空串",
+        "input": "",
+        "code": -1
+      },
+      {
+        "id": "reject-纯空白",
+        "input": "   ",
+        "code": -1
+      },
+      {
+        "id": "reject-错误变量y",
+        "input": "y^2-1",
+        "code": -1
+      },
+      {
+        "id": "reject-x后星y",
+        "input": "x*3y",
+        "code": -1
+      },
+      {
+        "id": "reject-全序-EPARSE先于EDEG",
+        "input": "0.5+x^9",
+        "code": -1
+      },
+      {
+        "id": "reject-全序-EDEG当场",
+        "input": "x^9+0.5",
+        "code": -2
+      },
+      {
+        "id": "reject-全序-ECOEF",
+        "input": "1000*x^9",
+        "code": -3
+      },
+      {
+        "id": "reject-全序-EDEG先于系数域",
+        "input": "x^9+1000",
+        "code": -2
+      },
+      {
+        "id": "reject-x与幂间空白",
+        "input": "x ^ 2 - 1",
+        "code": -1
+      }
+    ],
+    "cOnlyCases": [
+      {
+        "id": "contract-6.2-10-DK",
+        "input": "x^5-15x^4+85x^3-225x^2+274x-120",
+        "code": 0,
+        "expected": "[5@d1, 4@d1, 3@d1, 2@d1, 1@d1]",
+        "jsCode": -2,
+        "note": "整题 undefined 次(JS 侧整题 ≥5 → EDEG,契约 §5.1 成文分叉):C 侧断言 expected 逐字,JS 侧断言 jsCode=-2、out 恒空串"
+      },
+      {
+        "id": "contract-6.2-11-DK",
+        "input": "x^8-1",
+        "code": 0,
+        "expected": "[1@d1, 0.707106781187+0.707106781187i@d1, 0.707106781187-0.707106781187i@d1, i@d1, -i@d1, -0.707106781187+0.707106781187i@d1, -0.707106781187-0.707106781187i@d1, -1@d1]",
+        "jsCode": -2,
+        "note": "整题 undefined 次(JS 侧整题 ≥5 → EDEG,契约 §5.1 成文分叉):C 侧断言 expected 逐字,JS 侧断言 jsCode=-2、out 恒空串"
+      },
+      {
+        "id": "contract-6.2-7-按因子路由",
+        "input": "x^6-4x^5+7x^4-8x^3+7x^2-4x+1",
+        "code": 0,
+        "expected": "[1@e4, i@e1, -i@e1]",
+        "jsCode": -2,
+        "note": "整题 undefined 次(JS 侧整题 ≥5 → EDEG,契约 §5.1 成文分叉):C 侧断言 expected 逐字,JS 侧断言 jsCode=-2、out 恒空串"
+      },
+      {
+        "id": "contract-6.2-8-重数8",
+        "input": "x^8-8x^7+28x^6-56x^5+70x^4-56x^3+28x^2-8x+1",
+        "code": 0,
+        "expected": "[1@e8]",
+        "jsCode": -2,
+        "note": "整题 undefined 次(JS 侧整题 ≥5 → EDEG,契约 §5.1 成文分叉):C 侧断言 expected 逐字,JS 侧断言 jsCode=-2、out 恒空串"
+      },
+      {
+        "id": "DK-五次单位圆",
+        "input": "x^5-1",
+        "code": 0,
+        "expected": "[1@d1, 0.309016994375+0.951056516295i@d1, 0.309016994375-0.951056516295i@d1, -0.809016994375+0.587785252292i@d1, -0.809016994375-0.587785252292i@d1]",
+        "jsCode": -2,
+        "note": "整题 undefined 次(JS 侧整题 ≥5 → EDEG,契约 §5.1 成文分叉):C 侧断言 expected 逐字,JS 侧断言 jsCode=-2、out 恒空串"
+      },
+      {
+        "id": "reject-eover-c-only",
+        "input": "x^2-1",
+        "code": -4,
+        "outLen": 8,
+        "cOnly": true,
+        "note": "输出缓冲不足(out_len=8):仅 C 侧可产生,JS 侧契约 §7 明文不产生 -4,JS 消费方跳过本用例"
+      }
+    ]
+  }
 }
