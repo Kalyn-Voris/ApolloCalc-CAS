@@ -111,8 +111,8 @@ CHANGELOG 对应条目，此处不重复。
 ### 测试口径
 
 - **账本零增长结论不变**：gb 视图 1888 B（≤ 1960 预算线）被 sparse 峰值
-  3 848 B 完全吸收；内核口径 **42 608 B** / runner 口径 **42 640 B** /
-  上游对照 39 408 B（`bss-check` 实测逐字命中）。
+  3848 B 完全吸收；内核口径 **42608 B** / runner 口径 **42640 B** /
+  上游对照 39408 B（`bss-check` 实测逐字命中）。
 - pro_runner **396 checks, 0 failed**（新增 68 项测试）+ RESULT: PASS。
 - verify.ps1 三种调用模式（默认绝对 OutDir / 仓库根相对 OutDir / ProTEXT 目录
   相对 OutDir）全部 **31 passed, 0 failed**；两道门禁复跑 exit 0。

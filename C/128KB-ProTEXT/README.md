@@ -1,39 +1,68 @@
-# C/128KB-ProTEXT · Pro v1.4.0 落地说明
+# C/128KB-ProTEXT · Pro v1.6.0 落地说明
 
 > **基线**：ApolloCalc-CAS v1.1.0（`C/128KB/`，C99 / Zero-GC / 全静态分配）
 > **上游状态**：`C/128KB/` **零改动**（`git status --porcelain -- C/128KB` 输出为空）
 > **门禁**：`.bss` ≤ 114688 B（112 KiB = 128 KiB × 87.5%）
+> **组件版本**：v1.6.0（本目录 [VERSION](VERSION)，对应全局版本节点 v2.4.0——双轨制，
+> 两个口径不必同号）
 > **v1.2 范围**：阶段一（修上游门禁缺陷）+ 阶段二（Pro union + 起手三件套 B1/A4/A6）+ 阶段三（验证与对拍）
 > **v1.3 增量**：方向 A 多变量层（A1 GCD / A2 因式分解 / A3 结式），复用同一块 union
 > **v1.3.5 增量**：A5 实特征向量 + Hotelling 收缩 deflation、B2 符号积分（64 项表 + 一层分部积分）
-> **v1.4.0 增量**（组件版本，对应全局版本节点 v2.2.0）：2 变量 Groebner 基（M4GB 逐对归约，
-> lex，deg ≤ 4，膨胀熔断）+ `verify.ps1` 三处修复；gb 视图 1888 B 被 sparse 峰值完全吸收，
-> `.bss` 零增长（内核口径 42 608 B），详见 [CHANGELOG.md](CHANGELOG.md)
+> **v1.4.0 增量**（对应全局 v2.2.0）：2 变量 Groebner 基（M4GB 逐对归约，lex，deg ≤ 4，膨胀熔断）+ `verify.ps1` 三处修复
+> **v1.5.0 增量**（对应全局 v2.3.0）：常系数线性齐次 ODE 通解、B2 积分表 64 → 128 项 +
+> 固定两层分部、单变量有理函数工具（GCD/cancel/apart）
+> **v1.6.0 增量**（对应全局 v2.4.0）：一般实矩阵全部特征值（Francis 隐式双移 QR）+
+> 单变量多项式 square-free 分解 (根,重数)，契约
+> [sqfree-format-v24](../../docs/contracts/sqfree-format-v24.md)
+
+> **阅读口径**：§1–§3D 按版本递增记录，各节保留落地时点的实测快照（如 v1.2 的
+> 41456 B、v1.3.5 的 259 checks——当时正确，此后演进而非笔误）；当前账本与验收
+> 数字以 §0、§4 与 [CHANGELOG.md](CHANGELOG.md) 为准。
 
 ---
 
-## 0. 结论速览
+## 0. 结论速览（2026-10-31 实测）
 
 | 指标 | 目标 | 实测 | 结论 |
 |:---|:---|:---|:---|
-| `sizeof(ac_pro_scratch_t)` | 2688 | **2688** | ✅ v1.3.5 未增长 |
-| `sizeof(g_ac_pro_storage)` | 2784 = 2688 + 80 + 16 | **2784** | ✅ |
-| 内核口径 `.bss` | 41456 | **41456** | ✅ 精确命中 |
-| runner 口径 `.bss` | 41488 = 41456 + 32 | **41488** | ✅ |
-| 上游对照 `.bss` | 39408 | **39408** | ✅ 未漂移 |
+| `sizeof(ac_pro_scratch_t)` | 3848 | **3848** | ✅ v2.1.0 起 `sparse` 为峰值 |
+| `sizeof(g_ac_pro_storage)` | 3936 = 3848 + 80 + 8 | **3936** | ✅ |
+| 内核口径 `.bss`（pro_kernel.exe） | 42608 | **42608** | ✅ 精确命中 |
+| runner 口径 `.bss`（pro_runner.exe） | 42640 = 42608 + 32 | **42640** | ✅ |
+| 上游对照 `.bss`（test_runner.exe） | 39408 | **39408** | ✅ 未漂移 |
 | 退化构建 `.bss` | 38672 | **38672** | ✅ 与上游同构 |
-| 测试数 | — | **259 checks / 0 failed** | ✅ |
-| 上游回归 | 全绿 | **1171 项测试 / 16 套件全绿** | ✅ |
+| `verify.ps1` 全量验收 | 全绿 | **35 passed / 0 failed** | ✅ |
+| pro_runner 测试 | — | **574 checks / 0 failed** | ✅ |
+| 上游回归 | 全绿 | **1171 项测试 / 16 套件全绿**（2026-10-31 复跑） | ✅ |
 | 上游目录改动 | 0 | **0** | ✅ |
 
-**账本闭合**：`38672 + 80 + 2688 + 16 = 41456`，占 114688 的 **36.15%**，余量 73232 B。
+**账本闭合**：`38672 + 80 + 3848 + 8 = 42608`，占 114688 的 **37.15%**，余量 72080 B。
 
-v1.3.5 加入 A5 后 `eig` 视图为 2592 B，比 v1.3 的峰值 `mv`（2688 B）**小 96 B**，
-被完全吸收，因此 union 尺寸与 `.bss` 一分未涨 —— 这是「union 吸收」判据的第二次兑现。
+Pro union 视图现状（峰值视图决定 `sizeof(ac_pro_scratch_t)`，全部由
+`ac_pro_scratch.h` 编译期断言钉死）：
+
+| 视图 | 尺寸 | 归属 | 备注 |
+|:---|---:|:---|:---|
+| `nr` | 264 B | B1 数值求根 | |
+| `sym` | 1792 B | A6 隐函数求导工作区 | |
+| `lu` | 2352 B | A4 LU 分解 | v1.2 峰值 |
+| `res` | 1152 B | A3 Sylvester 缓冲 | |
+| `mv` | 2688 B | A1/A2/A3 多变量项池（6 槽） | v1.3–v2.0.0 峰值 |
+| `eig` | 2592 B | A5 特征向量 + Hotelling deflation | 比 `mv` 小 96 B，被吸收 |
+| `rat` | 464 B | 单变量有理函数工具（6 槽 × 72 B） | v2.3.0；sqfree 复用其槽 |
+| `dec` | 480 B | 任意精度定点小数（5 × 96 B） | v2.1.0 |
+| `gb` | 1888 B | 2 变量 Groebner 基 | v2.2.0 |
+| `schur` | 2744 B | 一般实矩阵特征值 | v2.4.0 |
+| **`sparse`** | **3848 B** | **稀疏线性方程组（n ≤ 32 / nnz ≤ 320）** | **← 峰值（v2.1.0 起）** |
+
+union 峰值自 v2.1.0 起为 `sparse`（3848 B，超过 v1.3 峰值 `mv` 1160 B）；此后
+`gb`（1888）/ `dec`（480）/ `rat`（464）/ `schur`（2744）依次落在峰值线内被吸收，
+sqfree 复用既有槽零新视图——**`.bss` 自 v2.1.0 起零增长**，「union 吸收」判据
+持续兑现。
 
 ---
 
-## 1. 阶段一：修复上游遗留缺陷
+## 1. 阶段一：修复上游遗留缺陷（v1.2 时点记录）
 
 ### 1.1 内存水位门禁（上游死代码 → Pro 两段式）
 
@@ -45,7 +74,7 @@ v1.3.5 加入 A5 后 `eig` 视图为 2592 B，比 v1.3 的峰值 `mv`（2688 B�
 
 ```c
 double ac_pro_memory_used(double extra_bytes) {
-    double used = (double)AC_PRO_STATIC_FOOTPRINT;   /* 41456，编译期真实静态量 */
+    double used = (double)AC_PRO_STATIC_FOOTPRINT;   /* v1.2 时点 41456，编译期真实静态量（现为 42608） */
     used += (double)(g_token_count   << 3);          /* 动态项 */
     used += (double)(g_number_count  << 3);
     used += extra_bytes;                             /* 测试注入的假池 */
@@ -57,7 +86,8 @@ double ac_pro_memory_used(double extra_bytes) {
 
 1. **静态量取真实值**，不是上游那个 11176 B 的残缺基数 —— `AC_STATIC_FOOTPRINT = 38672`
    已包含 `g_ac_scratch` 与 `g_sym_nodes`，两块漏算一次性补齐。
-2. **Pro 增量单独加**：`AC_PRO_STATIC_EXTRA = 80 + 2688 + 16`，所以 idle 时 `used == 41456`。
+2. **Pro 增量单独加**：`AC_PRO_STATIC_EXTRA = 80 + 2688 + 16`，所以 idle 时 `used == 41456`
+   （v1.2 时点；现为 `80 + 3848 + 8`，idle 时 `used == 42608`）。
 3. **`extra_bytes` 参数**让门禁边界可以被真正测出来，而不是靠改全局变量造数据。
 
 **编译期硬约束**（不只是 Makefile 里的一行 echo）：
@@ -69,7 +99,7 @@ AC_STATIC_ASSERT(AC_PRO_STATIC_EXTRA == (int)sizeof(ac_pro_storage_t), pro_extra
 
 **测试**（`test_memory_watermark`，13 条测试）：
 - `used >= 38672`（不再低估）
-- `used == 41456`（idle）
+- `used == 41456`（idle，v1.2 时点账本）
 - 满池 `used == 47600`，仍 < 114688
 - 边界两侧各差 1000 必触发/必放行
 - **边界 ±1 B 的极限测试**：`114688` 恰好放行、`114689` 触发
@@ -82,7 +112,8 @@ AC_STATIC_ASSERT(AC_PRO_STATIC_EXTRA == (int)sizeof(ac_pro_storage_t), pro_extra
 ### 1.2 编译期断言从严（`>=` → `==`）
 
 上游 `ac_scratch.h:181` 用 `>= 8224`，允许静默增长（设计说明 §8.3）。
-Pro 侧对称改为**精确相等**，且逐视图分别钉死：
+Pro 侧对称改为**精确相等**，且逐视图分别钉死（下列为 v1.2 首版三视图 +
+v1.3 的 `mv` 峰值断言）：
 
 ```c
 AC_STATIC_ASSERT(sizeof(ac_pro_scratch_t) == 2688, pro_scratch_is_exactly_peak);
@@ -95,15 +126,17 @@ AC_STATIC_ASSERT(sizeof(ac_pro_storage_t) == 2784, pro_storage_is_exactly_2784);
 
 **受控实验**（`.tmp-build/verify_final.ps1`）：人为把 union 撑到 2360 B，
 编译立刻失败 —— `error: size of array 'ac_sa_pro_scratch_is_exactly_peak' is negative`。
-校验是真的会响，不是摆设。
+校验是真的会响，不是摆设。当前版本的对应断言已随峰值迁移到
+`pro_scratch_is_exactly_peak`（3848）与 `pro_storage_is_exactly_3936`。
 
 ---
 
-## 2. 阶段二：Pro Union 与起手三件套
+## 2. 阶段二：Pro Union 与起手三件套（v1.2/v1.3 时点记录）
 
 ### 2.1 接入模式 β（Pro 独立 union）
 
-`src/ac_pro_scratch.h` 定义 `ac_pro_scratch_t`，六个视图：
+`src/ac_pro_scratch.h` 定义 `ac_pro_scratch_t`。v1.2 首版三视图，v1.3 扩到六视图
+（当前全景见 §0）：
 
 | 视图 | 尺寸 | 归属 | 被吸收 |
 |:---|---:|:---|:---|
@@ -111,7 +144,7 @@ AC_STATIC_ASSERT(sizeof(ac_pro_storage_t) == 2784, pro_storage_is_exactly_2784);
 | `sym` | 1792 B | A6 隐函数求导工作区 | ✅ |
 | `lu` | 2352 B | A4 LU 分解 | ✅（v1.2 峰值） |
 | `res` | 1152 B | A3 Sylvester 缓冲 | ✅ |
-| **`mv`** | **2688 B** | **A1/A2/A3 多变量项池（6 槽）** | **← 峰值（v1.3 起）** |
+| **`mv`** | **2688 B** | **A1/A2/A3 多变量项池（6 槽）** | **← 峰值（v1.3–v2.0.0）** |
 | `eig` | 2592 B | A5 特征向量 + Hotelling deflation | ✅（v1.3.5，比峰值小 96 B） |
 
 8 字节对齐由 `offsetof(ac_pro_align_probe_t, s) == 8` 在编译期证明。
@@ -122,12 +155,13 @@ AC_STATIC_ASSERT(sizeof(ac_pro_storage_t) == 2784, pro_storage_is_exactly_2784);
 
 PE/COFF 链接器把**每个**全局对象按 16 B 对齐起址，两个独立全局之间因此
 会被插入 16 B 填充。把两块装进一个 `ac_pro_storage_t` 后，整块只占一个
-分配单元，填充无从产生：
+分配单元，填充无从产生（v1.2 时点账本 2784 = 2352 + 80 + 16；现为
+3936 = 3848 + 80 + 8，`align_pad` 按 32 B 整数倍取最小填充）：
 
 | 写法 | `.bss` 增量 |
 |:---|---:|
 | 两个独立全局 `g_ac_pro_scratch` + `g_var_val` | 多 16 B ❌ |
-| 单个 `ac_pro_storage_t` 含两块 | 2784 = 2688 + 80 + 16 ✅ |
+| 单个 `ac_pro_storage_t` 含两块 | 2784 = 2688 + 80 + 16 ✅（v1.3 时点） |
 
 **语义没有被牺牲**：struct 是「顺序排列」而非「重叠」，`g_var_val` 仍在 union
 之外，判据 3（跨调用会话态禁入 union）完全满足。只是把它们放进同一个 `.bss`
@@ -336,8 +370,8 @@ AC_STATIC_ASSERT(offsetof(ac_sym_node_t, value) - 12 == 4, pro_sym_node_hole_is_
 
 ## 3A. v1.3.5：A5 特征向量与 B2 符号积分
 
-两个新能力都跑在既有 union 上：A5 用新加的 `eig` 视图（2592 B），B2 的 64 项
-积分表是 `static const`，落 `.rdata` 不占任何视图。因此 `.bss` 仍是 41456 B。
+两个新能力都跑在既有 union 上：A5 用新加的 `eig` 视图（2592 B），B2 的积分表是
+`static const`，落 `.rdata` 不占任何视图。v1.3.5 时点 `.bss` 仍是 41456 B。
 
 ### 3A.1 A5：实特征向量 + Hotelling 收缩 deflation
 
@@ -370,10 +404,10 @@ int            ac_pro_eig_count(void);
 残差本身的下降停滞（`res > 0.9·res_prev`）后，残差落到 3.8e-13 ~ 4.7e-13。
 
 **错误码走返回值，不做 getter**：一个 `static int` 会让该 TU 产生 16 B 的 `.bss`
-段，叠加链接对齐后全程序净涨 32 B（41456 → 41488），门禁直接炸。返回值不需要任何
-静态存储。错误码：1 成功 / −1 n 越界 / −2 非对称 / −3 不收敛 / −4 零向量。
+段，叠加链接对齐后全程序净涨 32 B（v1.3.5 时点 41456 → 41488），门禁直接炸。
+返回值不需要任何静态存储。错误码：1 成功 / −1 n 越界 / −2 非对称 / −3 不收敛 / −4 零向量。
 
-**5 个测试用例，76 条测试**（要求 ≥12）：
+**6 个测试用例，76 条测试**（用例 6 为边界与错误码合组；要求 ≥12）：
 
 | # | 用例 | 校验 | 实测 |
 |:--|:---|---:|:---|
@@ -382,8 +416,7 @@ int            ac_pro_eig_count(void);
 | 3 | 重根 `diag(2,2,1)` | 13 | 残差 3.8e−13 ~ 4.7e−13 ✅ |
 | 4 | Hilbert 3×3（cond ≈ 5.2e5） | 12 | `1.408318927123654 / 0.122327065853906 / 0.002687340355774`，与解析解 17 位一致 ✅ |
 | 5 | deflation 正确性 | 27 | 两两正交、单位范数、`Av = λv` 残差 ✅ |
-
-另有边界：1×1、12×12 满维、零矩阵 → −4、负定矩阵、非对称 → −2、n 越界 → −1。
+| 6 | 边界与错误码合组 | — | 1×1、12×12 满维、零矩阵 → −4、负定矩阵、非对称 → −2、n 越界 → −1 ✅ |
 
 ### 3A.2 B2：符号积分
 
@@ -422,10 +455,10 @@ n=4、exp n=5、ln n=4/5、atan n=2/3、sqrt n=2/3）。
 
 **表按函数名长度降序排列**：否则 `"atanh"` 会被拆成 `"atan"` + `"h"`。
 
-**10 个测试用例，51 条测试**（要求 ≥16）：多项式、三角、分部积分（`∫x·eˣ dx`）、
-表匹配、节点预算耗尽、错误路径（空输入 / 非法字符 / 超次数 / 输出缓冲不足）、
-二次核族（含非完全平方刚好拒绝）、倒数函数族、函数幂、`x^n·f(x)` 与两层分部
-（含三层刚好拒绝）。
+**10 个测试用例，58 条测试**（v1.3.5 建 31 条，v2.3.0 功能 4 扩至 58；验收线 ≥16）：
+多项式、三角、分部积分（`∫x·eˣ dx`）、表匹配、节点预算耗尽、错误路径（空输入 /
+非法字符 / 超次数 / 输出缓冲不足）、二次核族（含非完全平方刚好拒绝）、倒数函数族、
+函数幂、`x^n·f(x)` 与两层分部（含三层刚好拒绝）。
 
 ### 3A.3 v1.3.5 的 `.bss` 零增长证明
 
@@ -473,20 +506,20 @@ mv − eig                 = 96        ← eig 完全被吸收
 - **`sin(cos(x))` 返回 ETABLE(−2)**：嵌套超越函数无初等原函数，表匹配失败后直接拒绝，
   这是正确行为。
 - **A5 只接受实对称矩阵**：Hotelling 收缩在非对称矩阵上不保谱，非对称输入返回 −2。
-  这是适用范围声明，不是实现缺陷。
+  这是 v1.3.5 的适用范围声明；一般实矩阵路径已由 v1.6.0 的 schur 补上（§3D.1），
+  非对称输入不再返 −2。
 
 ---
 
 ## 3B. v1.4.0：2 变量 Groebner 基
 
 组件版本 v1.3.5 → **v1.4.0**（Pro 层新特性按 semver minor 递进），对应全局版本节点
-v2.2.0——全局 Tag 与组件版本是两个口径，不必同号。组件细分记录见
-[CHANGELOG.md](CHANGELOG.md)。
+v2.2.0。组件细分记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 - **算法**：M4GB 逐对归约，lex 序，deg ≤ 4，膨胀熔断。
-- **内存**：gb 视图 1888 B（≤ 1960 预算线），被 sparse 峰值 3 848 B 完全吸收，
+- **内存**：gb 视图 1888 B（≤ 1960 预算线），被 sparse 峰值 3848 B 完全吸收，
   **`.bss` 零增长**——「union 吸收」判据的又一次兑现。
-- **账本**：内核口径 42 608 B / runner 口径 42 640 B / 上游对照 39 408 B
+- **账本**：内核口径 42608 B / runner 口径 42640 B / 上游对照 39408 B
   （`bss-check` 实测逐字命中）。
 - **校验**：pro_runner **396 checks, 0 failed**（新增 68 项测试）+ RESULT: PASS。
 - **验收脚本 `verify.ps1` 三处修复**：① 相对 `-OutDir` 在任何 `Push-Location`
@@ -496,38 +529,105 @@ v2.2.0——全局 Tag 与组件版本是两个口径，不必同号。组件细
   按 CP936 解码，中文注释多字节标点吞字节破坏解析结构）。三种调用模式全部
   **31 passed, 0 failed**，两道门禁复跑 exit 0。
 
-> 本节为 v1.4.0 增量；第 0–4 节的 41 456 B / 259 checks 等数字是 v1.3.5 时点快照
-> （v2.1.0 稀疏求解/定点小数与当前账本见 [CHANGELOG.md](CHANGELOG.md) 与根
-> CHANGELOG 的 v2.1.0 / v2.2.0 条目）。
+> 本节为 v1.4.0 增量；本节数字为 v2.2.0 时点快照（396 checks 现为 574）。
 
 ---
 
-## 4. 阶段三：验证与对拍
+## 3C. v1.5.0：ODE 通解 / 有理函数工具 / B2 扩表
 
-### 4.1 `.bss` 三层账本
+组件版本 v1.4.0 → **v1.5.0**（semver minor），对应全局版本节点 v2.3.0。
+`feat/c-symbolic` 分支交付，收尾组 feat/release-v2.3.0 收口。
+
+### 3C.1 常系数线性齐次 ODE 通解（`src/ac_pro_ode.c`，540 行）
+
+- 解析 `y''+3y'+2y=0` 型字符串 → 特征多项式 → 上游 ac_solvers 1..4 次精确根式 →
+  渲染通解：单根 `e^{λx}`、共轭对 cos/sin、实重根 `x^k·e^{λx}`、重根×共轭四类模板。
+- 非齐次/变系数/阶 ≥5 按错误码 −1..−5 从严拒绝，绝不硬解。
+- 字符串格式冻结于
+  [docs/contracts/ode-format-v23.md](../../docs/contracts/ode-format-v23.md)
+  （开工第 1 个 commit 先行落库，与 JS 侧互为镜像）。零 static 对象、渲染缓冲
+  调用方提供，**`.bss` 零增长**。
+- 7 用例 33 条测试（basic 4 / zero 4 / quartic 2 / rational 1 / reject 16 /
+  order 3 / bounds 3）。
+
+### 3C.2 单变量有理函数工具（`src/ac_pro_rational.c`，928 行）
+
+- 多项式四则 + 欧几里得 GCD（整系数域，伪除 + primitive 归一，浮点系数拒绝）+
+  cancel 约分 + apart 部分分式（分母根 1..4 次精确根式 / 5..8 次 DK 数值根，
+  仅互异单根）；分解回乘验证残差 ≤ 1e-9，不过即报错，绝不输出未验证分解。
+- rat 视图 464 B（6 槽 × 72 B 多项式 + 对齐尾填）在 sparse 峰值吸收线内，
+  **`.bss` 零增长**。7 用例 32 条测试。
+
+### 3C.3 B2 符号积分增强（`src/ac_pro_integrate.c`）
+
+积分表 64 → **128 项**、分部积分一层 → **固定两层**，技术细节已并入 §3A.2
+（该节按当前状态描述）。测试 31 → 58 条；表全 `static const` 落 `.rdata`，
+账本零增长。
+
+---
+
+## 3D. v1.6.0：一般实矩阵特征值 + square-free 分解
+
+组件版本 v1.5.0 → **v1.6.0**（semver minor），对应全局版本节点 v2.4.0。
+`feat/c-eigen` 分支交付，收尾组串行收口。
+
+### 3D.1 一般实矩阵全部特征值（`src/ac_pro_schur.c`，540 行）
+
+- Householder → Hessenberg → Francis 隐式双移 QR（bulge chasing，全显式循环
+  零递归）+ 2×2 块闭式解；幂 2 精确缩放（纯指数加减零舍入）防 H² 溢出。
+- 单特征值 50 轮预算 + EISPACK 同款异常位移，不收敛返 −2，**绝不输出未收敛的
+  垃圾特征值**。
+- 可选反迭代实特征向量：残差 ≤ 1e-9·(1+‖A‖)，6 组尝试全失败返 −3；复特征值
+  不产出向量、亏损特征值按几何重数重复给出同一条向量。
+- `ac_pro.h` 中「非对称返 −2」的成文缺口就此关闭（−2 语义改为「QR 迭代不收敛」，
+  与 §3A.5 / §6-7 记录的 v1.3.5 限制相区分）。
+- schur 视图 2744 B ≤ sparse 峰值 3848 吸收线，**`.bss` 零增长**。
+  13 用例 46 条测试（basic 11 / complex 8 / degen 10 / large 11 / reject 6）。
+
+### 3D.2 单变量多项式 square-free 分解与重根重数（`src/ac_pro_sqfree.c`，718 行）
+
+- 整系数循环式 SFF（f 与 f′ 逐层 GCD + 精确除），重数由分解层指标精确决定、
+  浮点永不参与重数合并；输出 (根, 重数) 列表，≤8 次。
+- 因子按次数路由：1..4 次走上游精确根式管线（`@e`）/ 5..8 次走
+  Durand-Kerner（`@d`）。
+- 字符串格式冻结于
+  [docs/contracts/sqfree-format-v24.md](../../docs/contracts/sqfree-format-v24.md)
+  （开工第 1 个 commit 先行落库，与 JS 侧互为镜像）；跨语言契约
+  [tests/polynomials.json](../../tests/polynomials.json) sqfree 区冻结 70 例
+  （双侧区 64 + C 侧区 6，2026-10-31 双侧实跑核对零分歧）。
+- 复用 poly/rat 槽零新视图，**`.bss` 零增长**。10 用例 40 条测试。
+
+---
+
+## 4. 阶段三：验证与对拍（当前口径）
+
+### 4.1 `.bss` 四层账本（2026-10-31 `bss-check` 实测）
 
 ```
 38672  16 个上游模块（内核口径，size 实测）
   + 80  g_var_val[10]
-+ 2688  g_ac_pro_scratch（Pro union，峰值视图 mv）
-+  16   align_pad（对齐到 32 的整数倍）
-= 41456  <- pro_kernel.exe（内核口径，任务书目标）
++ 3848  g_ac_pro_scratch（Pro union，峰值视图 sparse，v2.1.0 起）
++   8   align_pad（对齐到 32 的整数倍）
+= 42608  <- pro_kernel.exe（内核口径，账本目标）
 
-41456
+42608
   + 32  test/test_pro_runner.c 的 .bss 段 16 B + 链接对齐 16 B
-= 41488  <- pro_runner.exe（runner 口径）
+= 42640  <- pro_runner.exe（runner 口径）
 
 38672
  + 736  上游 test/ 侧：448 + 272 + 16
 = 39408  <- 上游 test_runner.exe（对照，防上游漂移）
+
+退化构建（AC_PRO=1 AC_PRO_DEGRADED=1）
+= 38672  <- degraded/pro_kernel.exe（Pro 增量全部编译出）
 ```
 
-`nm --print-size` 逐符号实测（`pro_kernel.exe`）：
+关键符号实测（`nm pro_kernel.exe`，2026-10-31；尺寸由编译期断言钉死）：
 
 ```
-00000000004272e0  0000000000002020  B  g_ac_scratch      8224   ← 上游 union
-00000000004242e0  0000000000003000  B  g_sym_nodes      12288   ← 上游 arena
-0000000000429700  0000000000000ae0  B  g_ac_pro_storage  2784   ← Pro 增量
+000000000043e2e0 B  g_sym_nodes       12288  ← 上游 arena（512 × 24 B）
+00000000004412e0 B  g_ac_scratch       8224  ← 上游 union
+0000000000443700 B  g_ac_pro_storage   3936  ← Pro 增量（pro_storage_is_exactly_3936）
 ```
 
 ### 4.2 `AC_PRO=0` 退化验证
@@ -536,13 +636,13 @@ v2.2.0——全局 Tag 与组件版本是两个口径，不必同号。组件细
 
 | 构建 | 宏 | 结果 |
 |:---|:---|:---|
-| 默认 | `AC_PRO=1` | Pro 增量全开，`.bss` = 41456 |
+| 默认 | `AC_PRO=1` | Pro 增量全开，`.bss` = 42608 |
 | 退化 | `AC_PRO=1 AC_PRO_DEGRADED=1` | Pro 增量全关，`.bss` = **38672** |
 | 非法 | `AC_PRO=2` | 编译失败：`AC_PRO must be exactly 0 or 1.` |
 | 非法 | `AC_PRO=0`（无 DEGRADED） | 编译失败：需要显式选择模式 |
 
-**逐位对拍**（`.tmp-build/parity_degraded.ps1`）：把上游全部 17 个 test 文件
-链到退化构建的 Pro 包装层上，与上游 runner 对比：
+**逐位对拍**（`.tmp-build/parity_degraded.ps1`，v1.2 时点实验记录）：把上游全部
+17 个 test 文件链到退化构建的 Pro 包装层上，与上游 runner 对比：
 
 ```
 upstream : text 202804  data 2716  bss 39408
@@ -551,8 +651,10 @@ output   : 636 chars vs 636 chars
 PARITY: PASS (byte-identical output)
 ```
 
-退化构建里三个 Pro TU 全部编译成**空对象**（`nm` 无任何符号），
-`ac_guard_degree` 符号名回到上游原样，`ac_pro_upstream_guard_degree` 不存在。
+上游 `test_runner.exe` 的 text/data/bss 三列 2026-10-31 复测仍为
+202804 / 2716 / 39408，逐字节未漂移。退化构建里三个 Pro TU 全部编译成**空对象**
+（`nm` 无任何符号），`ac_guard_degree` 符号名回到上游原样，
+`ac_pro_upstream_guard_degree` 不存在。
 
 ### 4.3 上游零改动
 
@@ -563,47 +665,98 @@ $ git diff --stat -- C/128KB
 （空）
 ```
 
-上游 `test_runner.exe` 重建后仍为 39408 B、1171 项测试 / 16 套件全绿。
+上游 `test_runner.exe` 重建后仍为 39408 B；2026-10-31 复跑 **1171 项测试 /
+16 套件全绿，0 失败**。
+
+### 4.4 `verify.ps1` 全量验收（35 项 verdict）
+
+2026-10-31 实测 **35 passed, 0 failed**。构成：构建 2 + `.bss` 账本 4 +
+测试套件 3 + 每功能覆盖 12 + 上游零改动 2 + 退化构建 1 + 负向编译 3 +
+符号唯一性 8 = 35。
+
+第 4 节每功能用例数（用例数以 pro_runner 输出的 `[case XX-n]` 计）：
+
+| 功能 | 用例数 | verify.ps1 验收线 |
+|:---|---:|:---|
+| B1 数值求根 | **7** | ≥ 5 |
+| A4 LU 分解 | **6** | ≥ 5 |
+| A6 隐函数求导 | **9** | ≥ 5 |
+| A5 特征向量/deflation | **6** | ≥ 5 |
+| B2 符号积分 | **10** | ≥ 6 |
+| SP 稀疏线性方程组 | **12** | ≥ 8 |
+| BD 任意精度定点小数 | **12** | ≥ 8 |
+| GB 2 变量 Groebner 基 | **12** | ≥ 10 |
+| RAT 有理函数工具 | **7** | ≥ 5 |
+| ODE 常系数线性齐次 ODE | **7** | ≥ 5 |
+| SCHUR 一般实矩阵特征值 | **13** | ≥ 12 |
+| SQFREE square-free 分解 | **10** | ≥ 10 |
+
+A1（8）/ A2（4）/ A3（4）三个 v1.3 功能未纳入 §4 门禁行，由基础校验覆盖
+（v1.2 基线 115 条 + A1 16 + A2 9 + A3 12）。
 
 ---
 
-## 5. 文件清单
+## 5. 文件清单（行数 2026-10-31 实测 `wc -l`）
 
-### 新增
+### src/（37 个文件：4 头文件 + 2 支撑 TU + 1 math 包装 + 1 拦截 TU + 1 smoke + 15 功能 TU + 13 接线桩）
 
 | 文件 | 行数 | 职责 |
 |:---|---:|:---|
-| `src/ac_pro.h` | 283 | Pro 层唯一公开头文件 |
-| `src/ac_pro_scratch.h` | 352 | `ac_pro_scratch_t` union（6 视图）+ 全部编译期断言 |
+| `src/ac_pro.h` | 749 | Pro 层唯一公开头文件 |
+| `src/ac_pro_scratch.h` | 725 | `ac_pro_scratch_t` union（11 视图）+ 全部编译期断言 |
+| `src/ac_pro_lut_tables.h` | 540 | sin/cos LUT 常量表（v2.0.0，1024 项 `const double` × 2） |
+| `src/ac_pro_config.h` | 148 | 两级开关 `AC_PRO` / `AC_PRO_ACTIVE`，账本常量 |
 | `src/ac_pro_extra_globals.c` | 39 | `g_ac_pro_storage` 唯一定义处 |
-| `src/ac_pro_solvers_ext.c` | 533 | 水位门禁重写 + B1 数值求根 + A4 LU |
-| `src/ac_pro_symbolic_ext.c` | 594 | A6 隐函数求导（填充洞方案） |
+| `src/ac_pro_scratch.c` | 9 | Pro 侧 scratch 符号定义 |
+| `src/ac_pro_math.c` | 118 | LUT 常量表包装（函数式宏劫持进上游 TU，v2.0.0） |
+| `src/ac_pro_solvers.c` | 26 | 宏重命名拦截 `ac_guard_degree` |
+| `src/ac_pro_smoke.c` | 86 | 家族共享一致性用例接线 |
+| `src/ac_pro_solvers_ext.c` | 533 | 水位门禁重写 + B1 数值求根 + A4 LU（v1.2） |
+| `src/ac_pro_symbolic_ext.c` | 594 | A6 隐函数求导（填充洞方案，v1.2） |
 | `src/ac_pro_multi.c` | 2482 | A1 多变量 GCD + A2 因式分解（v1.3） |
 | `src/ac_pro_resultant.c` | 253 | A3 Sylvester 结式（v1.3） |
 | `src/ac_pro_eigen.c` | 381 | A5 特征向量 + Hotelling deflation（v1.3.5） |
-| `src/ac_pro_integrate.c` | 2050 | B2 符号积分：128 项表 + 固定两层分部（v1.3.5 建，v2.3.0 功能 4 扩） |
+| `src/ac_pro_integrate.c` | 2050 | B2 符号积分：128 项表 + 固定两层分部（v1.3.5 建，v2.3.0 扩） |
+| `src/ac_pro_diff_multi.c` | 211 | 多变量符号求导（v2.0.0） |
+| `src/ac_pro_integrate_multi.c` | 257 | 多变量多项式积分（v2.0.0） |
+| `src/ac_pro_sparse.c` | 316 | 稀疏线性方程组，sparse 视图 3848 B（v2.1.0，现峰值） |
+| `src/ac_pro_bigdec.c` | 524 | 任意精度定点十进制（v2.1.0） |
+| `src/ac_pro_groebner.c` | 847 | 2 变量 Groebner 基 M4GB（v1.4.0 / 全局 v2.2.0） |
+| `src/ac_pro_rational.c` | 928 | 单变量有理函数工具 GCD/cancel/apart（v1.5.0） |
+| `src/ac_pro_ode.c` | 540 | 常系数线性齐次 ODE 通解（v1.5.0） |
+| `src/ac_pro_schur.c` | 540 | 一般实矩阵全部特征值 Francis QR（v1.6.0） |
+| `src/ac_pro_sqfree.c` | 718 | square-free 分解与重根重数（v1.6.0） |
+| `src/ac_pro_{base,bigint,calculus,complex,evaluator,exact,matrix,numtheory,parser,ratroot,special,symbolic,util}.c` | 各 3 | 13 个上游模块的 3 行接线桩 |
+
+### test/（14 个文件）
+
+| 文件 | 行数 | 职责 |
+|:---|---:|:---|
+| `test/pro_kernel_main.c` | 26 | 内核口径测量的 trivial main |
+| `test/test_pro_runner.c` | 1117 | 主 runner：**574 checks**（v1.2 建 115 条，逐版扩至 574） |
 | `test/test_pro_multi.c` | 242 | A1/A2/A3 用例（v1.3） |
 | `test/test_pro_eigen.c` | 460 | A5 用例，76 条测试（v1.3.5） |
-| `test/test_pro_integrate.c` | 335 | B2 用例，51 条测试（v1.3.5 建 31 条，v2.3.0 功能 4 扩至 51） |
-| `test/pro_kernel_main.c` | 26 | 内核口径测量的 trivial main |
+| `test/test_pro_integrate.c` | 335 | B2 用例，58 条测试（v1.3.5 建 31 条，v2.3.0 扩至 58） |
+| `test/test_pro_diff_multi.c` | 157 | 多变量求导用例（v2.0.0） |
+| `test/test_pro_integrate_multi.c` | 162 | 多变量积分用例（v2.0.0） |
+| `test/test_pro_sparse.c` | 401 | SP 用例，35 条测试（v2.1.0） |
+| `test/test_pro_bigdec.c` | 335 | BD 用例，12 条测试（v2.1.0） |
+| `test/test_pro_groebner.c` | 275 | GB 用例，68 条测试（v2.2.0） |
+| `test/test_pro_rational.c` | 240 | RAT 用例，32 条测试（v2.3.0） |
+| `test/test_pro_ode.c` | 203 | ODE 用例，33 条测试（v2.3.0） |
+| `test/test_pro_schur.c` | 445 | SCHUR 用例，46 条测试（v2.4.0） |
+| `test/test_pro_sqfree.c` | 188 | SQFREE 用例，40 条测试（v2.4.0） |
 
-### 修改
-
-| 文件 | 改动 |
-|:---|:---|
-| `src/ac_pro_config.h` | 两级开关 `AC_PRO` / `AC_PRO_ACTIVE`，账本常量 |
-| `src/ac_pro_solvers.c` | 宏重命名拦截 `ac_guard_degree` |
-| `Makefile` | `PRO_EXTRA`、`kernel`/`bss-check`/`degraded-check` 目标；v1.3.5 接线 2 个新 TU |
-| `test/test_pro_runner.c` | 259 条测试（原 152 条），v1.3.5 账本常量 + 11 个新入口 |
+上游 `C/128KB/` 的 16 个模块全部经 3 行接线桩包装进 Pro 构建，源文件零改动。
 
 ---
 
 ## 6. 遗留与建议
 
-1. **runner 口径 41488 vs 任务书 41456**：两个数都对，口径不同。41456 是
-   **内核口径**（不链接测试 TU），由 `pro_kernel.exe` 校验；41488 是 runner
+1. **runner 口径 42640 vs 内核口径 42608**：两个数都对，口径不同。42608 是
+   **内核口径**（不链接测试 TU），由 `pro_kernel.exe` 校验；42640 是 runner
    口径，多出测试 TU 的 16 B 段 + 16 B 对齐。这与上游「38672 内核 / 39408
-   README」的区分方式完全一致。若任务书要求 runner 也精确等于 41456，
+   README」的区分方式完全一致。若要求 runner 也精确等于 42608，
    需把 `s_kernel_live` 挪出 `.bss`（例如用 TLS 或链接期常量），但会牺牲
    Zero-GC 校验的可靠性 —— 不建议。
 2. **A6 不支持函数调用**：`sin(x)+y` 这类表达式会被拒绝。上游 `NODE_*` 只有
@@ -611,19 +764,20 @@ $ git diff --stat -- C/128KB
    若要支持，建议在 Pro 侧建独立的节点类型表，而不是改上游枚举。
 3. **A6 的 sym 视图 1792 B**：设计说明 §3.4.2 记为「8 B 栈上」，那是按复用上游
    `s_sym_stack`/`s_sym_dmap` 估算的。本实现刻意不复用（避免与上游内部实现
-   耦合），自带 1792 B，被 2688 B 的 `mv` 峰值完全吸收，`.bss` 零增长。
+   耦合），自带 1792 B，被 union 峰值完全吸收，`.bss` 零增长。
    这是判据 1「union 吸收」的正用法。
 4. **DK 对重根的处理**：残差兜底能正确接受重根，但**不保证**收敛到重根
-   的正确重数（DK 本身不区分重数）。若将来需要重数信息，需引入
-   square-free 分解。
+   的正确重数（DK 本身不区分重数）。重数能力已由 v1.6.0 的 square-free
+   分解补上（§3D.2）；B1 的 DK 路径本身仍不输出重数。
 5. **A1/A2 的规模上限**：总次数 ≤ 6、最多 28 项、6 个 union 槽。超过即由
    次数预检拒绝（错误码 1），不会越界。扩到 4 变量 / 8 次需要更大的项池，
    届时应同时调整 `AC_PRO_MV_TERMS` 与 union 尺寸，并重新走一遍 `.bss` 账本。
 6. **A2 只覆盖有理根**：不可约但无有理因子的多项式（如 x²+1）按原式返回，
    这是 v1.3 的契约而不是缺陷。真正的高次不可约分解需要 Zassenhaus，
    会引入堆分配，与 Zero-GC 冲突。
-7. **A5 只接受实对称矩阵**：Hotelling 收缩在非对称矩阵上不保谱，非对称输入
-   返回 −2。需要一般矩阵特征值时得另走 Schur 或 Hessenberg-QR，不在 v1.3.5 范围。
+7. **A5 只接受实对称矩阵**（v1.3.5 范围声明）：Hotelling 收缩在非对称矩阵上
+   不保谱。一般实矩阵路径已由 v1.6.0 的 `ac_pro_schur.c` 补上（§3D.1，
+   Francis 隐式双移 QR），非对称输入不再返 −2；`ac_pro_eig_all` 本身仍限实对称。
 8. **B2 不支持负指数**：`1/x` 走 `ln(x)` 正常，但 `x^-1` 报 EPARSE。补上它需要
    在解析层把负指数改写成除法，会牵动节点预算，收益不足以抵风险。
 9. **B2 分部积分固定两层**（v2.3.0 功能 4 修订，原文「只做一层」）：`∫x²·eˣ dx`、
@@ -633,4 +787,4 @@ $ git diff --stat -- C/128KB
 
 ---
 
-*文档版本：v1.4.0 · 基线 ApolloCalc-CAS v1.1.0 · Pro v1.4.0（全局 v2.2.0）· 实测 `.bss` 42608 B / 37.15%*
+*文档版本：v1.6.0 · 基线 ApolloCalc-CAS v1.1.0（`C/128KB/` 逐字节冻结） · Pro 组件 v1.6.0（全局 v2.4.0） · 实测 `.bss` 42608 B / 37.15%（2026-10-31）*
