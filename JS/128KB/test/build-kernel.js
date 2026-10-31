@@ -53,18 +53,21 @@ var FILES = [
   "core_base.js",
   "core_solvers.js",
   "core_ratroot.js",
+  "core_symboltree.js",
+  "core_integrate.js",
   "core_multivar.js",
   "core_matrix.js",
   "core_special.js",
   "core_numtheory.js",
-  "core_ode.js"
+  "core_ode.js",
+  "core_groebner.js"
 ];
 
 /* export 块：内容与交付约定逐字一致，禁止在此改动（改了会与 index.js 契约漂移） */
 var EXPORT_BLOCK = `/* ============================================================
  * ApolloCalc · core_kernel.js — 内核统一入口
  * 由 build-kernel.js 自动拼接，禁止手动编辑
- * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → multivar → matrix → special → numtheory → ode（14 文件，v2.3.0 起随新模块追加）
+ * 拼接顺序：parser → math_functions → complex → exact → evaluator → calculus → base → solvers → ratroot → symboltree → integrate → multivar → matrix → special → numtheory → ode → groebner（17 文件，v2.3.0 起随新模块追加）
  * ============================================================ */
 
 /* 供 index.js 引用的内核接口（UI 层唯一访问点） */
@@ -172,7 +175,16 @@ export default {
   numtheory: ApolloNumtheory,
 
   /* ---- v2.3.0 ODE 通解（常系数线性齐次 1..4 阶，特征根复用求解层，契约 ode-format-v23） ---- */
-  ode: ApolloOde
+  ode: ApolloOde,
+
+  /* ---- v2.4.0 符号微分引擎（表达式树 + 17 函数求导 + factor 因式列表 + A6 隐函数） ---- */
+  symboltree: ApolloSymboltree,
+
+  /* ---- v2.4.0 符号积分（128 项积分表 + 固定两层分部，错误码复刻 AC_PRO_INT_*） ---- */
+  integrate: ApolloIntegrate,
+
+  /* ---- v2.4.0 结式 + Groebner（Sylvester+12×12 det；M4GB 逐对归约，lex x>y，输入 deg≤4） ---- */
+  gb: ApolloGroebner
 };`;
 
 /* export 块引用的全部内核标识符（78 个；函数形参 i/v/mode/re/im/w/n/x/a/b/side/order/x0 除外） */
@@ -944,6 +956,22 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     ek("baseReset 经接口生效", (k.baseReset(), k.getSiValid() === 0 && k.getBaseLen() === 0));
 
     /* ---- v2.0.0：自包含三模块接线（multivar / matrix / special） ---- */
+    ek("symboltree 命名空间接线", typeof k.symboltree === "object" &&
+      typeof k.symboltree.build === "function" && typeof k.symboltree.implicitDyDx === "function");
+    k.symboltree.build("x^2");
+    ek("symboltree.build+diff 经接口", k.symboltree.diff() === 0 &&
+      k.symboltree.toString() === "2*x");
+    ek("integrate 命名空间接线", typeof k.integrate === "object" &&
+      typeof k.integrate.integrate === "function" && typeof k.integrate.getString === "function");
+    ek("integrate 经接口 x^2→x^3/3", k.integrate.integrate("x^2") === 0 &&
+      k.integrate.getString() === "x^3/3");
+    ek("gb 命名空间接线", typeof k.gb === "object" &&
+      typeof k.gb.groebner === "function" && typeof k.gb.resultant === "function");
+    ek("gb 经接口 GB-1", k.gb.groebner("x^2+y^2-1", "x^2-y") === 1 &&
+      k.gb.getString() === "x^2 - y | y^2 + y - 1");
+    ek("gb 经接口 A3-1", k.gb.resultant("y^2 - x", "y - 1", 4.0) === 1 &&
+      Math.abs(k.gb.getResultant() - (-3)) < 1e-10);
+
     k.multivar.parse("3x^2y + 2xy - 5", 0);
     ek("multivar parse+evalSlot 2,3→43", k.multivar.evalSlot(0, 2, 3) === 43);
     k.multivar.parse("x^2y + xy^2", 1);
@@ -968,7 +996,7 @@ function proceed(kernelBody, kernelFull, isMin, engine) {
     if (esmProblems.length > 0) {
       die("BUILD FAILED: ESM(严格模式)导出接口冒烟失败 " + esmProblems.length + " 项:\n  - " + esmProblems.join("\n  - "));
     }
-    console.log("[5/5] ESM 严格模式 import 冒烟: 导出接口链路 43/43 通过（含 getter/矩阵池写入/角度模式切换/复数域接线/微积分接线/泰勒接线/进制 SI 接线/多变量·矩阵·特殊函数三模块接线）");
+    console.log("[5/5] ESM 严格模式 import 冒烟: 导出接口链路 49/49 通过（含 getter/矩阵池写入/角度模式切换/复数域接线/微积分接线/泰勒接线/进制 SI 接线/多变量·矩阵·特殊函数三模块接线）");
     if (isMin) {
       var finalBytes = fs.statSync(OUT).size;
       var over = finalBytes > BYTE_BUDGET;
