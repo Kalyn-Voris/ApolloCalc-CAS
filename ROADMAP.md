@@ -1,7 +1,7 @@
 # ApolloCalc-CAS · v2.3.0 / v2.4.0 数学功能路线图
 
 > 成文基准:全局 v2.2.0(2026-10-27 发布,C 侧 Pro 层组件 v1.4.0、JS 内核组件 v2.2.0,双轨制)。
-> C 侧基线数字为 2026-10-30 本机实跑;JS 侧基线随 terser 单遍压缩管线落地(cc18d61..65b3a46)于 2026-10-31 复测更新,均为本机实测:
+> C 侧基线数字为 2026-10-30 本机实跑;JS 侧基线随 terser 单遍压缩管线落地于 2026-10-31 复测更新,均为本机实测:
 > - `powershell -NoProfile -ExecutionPolicy Bypass -File C/128KB-ProTEXT/verify.ps1` → **RESULT: 31 passed, 0 failed**(含 runner 396 checks 0 failed、.bss 账本 42608/42640/39408、degraded 38672、每功能用例数 B1=7/A4=6/A6=9/A5=6/B2=6/SP=12/BD=12/GB=12;2026-10-30 实跑)
 > - `node test/run-all.js`(JS/128KB)→ **TOTAL: 603 pass, 0 fail**(12/12 文件;2026-10-31 在 34 510 B 新内核上复跑确认)
 > - `node tests/bench/diff-smoke128.js` → **50/50 用例一致**,exit 0(2026-10-30 实跑)
@@ -198,7 +198,7 @@
 - 现有 12 个 test-*.js 是红线不可改;新功能测试加新文件即可——run-all.js 用 readdirSync 自动发现 test-*.js(run-all.js:20),零改动纳入,唯一可选项是其头注的文件计数文案(评审修订,原文「同步 run-all.js」系虚构触碰)。
 - 零 GC:禁对象/数组字面量、禁热路径字符串拼接、禁递归(含加载期 polyfill,CONTRIBUTING.md:82-86);新池全部加载期一次分配的 TypedArray。
 - 水位门禁 98 304 B(core_solvers.js:622),现全池 21.9 KiB(22 416 B,docs/js-128kb.md:135);本版全部 JS 功能合计 +10 KB 池内增量,余量充足,但每个新模块的 allocCount 必须可审计(core_multivar/matrix/special 先例)。
-- **本机实测陷阱(2026-10-31 更新)**:terser 已安装(node_modules/terser,2026-10-30 起),--minify 走 terser 单遍管线;但复跑仍会**覆盖**库内交付物(HEAD 34 510 B)——工具链版本或配置漂移都会让字节变化,复跑后核对 `git status`,有差异即 `git checkout -- JS/128KB/src/core_kernel.js` 还原。(评审修订:原文「本机无 terser / 回退剥离器产出 79 435 B」的描述随 terser 安装与 cc18d61..65b3a46 管线改造失效,其中评审证据所见 36 874 B 亦已被 E6 推进到 34 510 B。)
+- **本机实测陷阱(2026-10-31 更新)**:terser 已安装(node_modules/terser,2026-10-30 起),--minify 走 terser 单遍管线;但复跑仍会**覆盖**库内交付物(HEAD 34 510 B)——工具链版本或配置漂移都会让字节变化,复跑后核对 `git status`,有差异即 `git checkout -- JS/128KB/src/core_kernel.js` 还原。
 
 **跨语言**
 
