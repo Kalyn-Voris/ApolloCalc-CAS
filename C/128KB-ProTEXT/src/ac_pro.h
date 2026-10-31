@@ -458,6 +458,45 @@ int ac_pro_ode(const char *src, char *out, int out_len);
 #define AC_PRO_ODE_EOVER    (-6)  /* 输出缓冲不足 */
 #define AC_PRO_ODE_EINTERNAL (-7) /* 聚类失败 / 求根失败 / fmt 越域（绝不硬凑） */
 
+/* ==================== v2.4.0 功能 8:一般实矩阵特征值(schur)====================
+ * Francis 隐式双移 QR(实现于 src/ac_pro_schur.c)。
+ *
+ * 【能力边界 / Envelope】
+ *   n ≤ 12(AC_PRO_MATRIX_MAX_DIM)、行主序 n×n 稠密**实**矩阵,
+ *   **对称性不限** —— 非对称输入合法(与 A5 ac_pro_eig_all 的分界:
+ *   A5 要求实对称、非对称返 -2;本功能就是为关闭该缺口而立项,
+ *   ROADMAP.md:144。本文件的 -2 是「QR 迭代不收敛」,语义不同)。
+ *   视图:Pro union 的 schur 槽(2744 B ≤ 3848 吸收线,.bss 零增长)。
+ *
+ * 【算法 / Algorithm】
+ *   幂 2 精确缩放(条目压进 [0.5,1],Francis 的 H² 项绝无溢出)→
+ *   Householder 化 Hessenberg → Francis 隐式双移 QR(bulge chasing,
+ *   全显式循环零递归)→ 1×1/2×2 deflation;2×2 走闭式(Vieta 稳定形)。
+ *   每 10 步不 deflation 注入 EISPACK 同款异常位移,单特征值 50 步
+ *   预算,超限返回 -2 —— 绝不返回未收敛的垃圾特征值。
+ *   实特征向量:实特征值逐个做 M = A − λI 部分主元 LU + 两步反迭代,
+ *   残差 ‖Av − λv‖∞ ≤ 1e-9·(1+‖A‖) 才接受,6 组(扰动 × 初值)全败
+ *   返回 -3;复特征值不产出向量(v 列全零,vector(k) 返回 NULL,
+ *   绝不硬凑复向量)。亏损(Jordan)特征值按几何重数重复给出同一条
+ *   特征向量,不做正交化修饰。
+ *
+ * 【结果排序 / Ordering(写死,可测)】
+ *   键 = (|λ|, Re, Im) 降序的稳定排序;|λ| = sqrt(Re²+Im²) 按值比较,
+ *   精确并列保持提取序 → 确定性。复共轭对相邻且 +Im 在前。
+ *
+ * 【返回 / Return —— 错误码就是返回值(零存储通道)】
+ *   1  = 成功(特征值 + 实特征向量全部就绪,视图可读)
+ *   -1 = 空指针 / n < 1 或 n > 12
+ *   -2 = QR 迭代不收敛(单特征值 50 步预算耗尽)
+ *   -3 = 实特征向量反迭代 6 组尝试全败(此时特征值已正确但一并放弃
+ *        —— 失败时视图内容未定义,调用方不得读取)
+ *   调用期间不得嵌套任何其它 Pro 视图 API;调用方矩阵 a 全程只读。 */
+int            ac_pro_schur_all(const double *a, int n);
+int            ac_pro_schur_count(void);
+double         ac_pro_schur_re(int k);
+double         ac_pro_schur_im(int k);
+const double  *ac_pro_schur_vector(int k);
+
 
 /* ==================== v2.1.0 方向④：稀疏线性方程组（方案 a）====================
  *

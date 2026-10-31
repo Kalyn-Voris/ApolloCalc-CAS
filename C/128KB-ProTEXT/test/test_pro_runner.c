@@ -854,6 +854,13 @@ pro_multi_tally_t test_ode_rational(void);
 pro_multi_tally_t test_ode_reject(void);
 pro_multi_tally_t test_ode_order(void);
 pro_multi_tally_t test_ode_bounds(void);
+/* v2.4.0 功能 8:一般实矩阵特征值(test/test_pro_schur.c,13 用例) */
+typedef struct { int checks; int failed; } sch_tally_t;
+sch_tally_t test_schur_basic(void);
+sch_tally_t test_schur_complex(void);
+sch_tally_t test_schur_degenerate(void);
+sch_tally_t test_schur_large(void);
+sch_tally_t test_schur_reject(void);
 
 int main(void) {
     tally_t t;
@@ -1049,6 +1056,21 @@ int main(void) {
                o3.checks, o3.failed, o4.checks, o4.failed,
                o5.checks, o5.failed, o6.checks, o6.failed,
                o7.checks, o7.failed);
+    }
+
+    /* v2.4.0 功能 8:一般实矩阵特征值(test/test_pro_schur.c,13 用例) */
+    {
+        sch_tally_t s1 = test_schur_basic();
+        sch_tally_t s2 = test_schur_complex();
+        sch_tally_t s3 = test_schur_degenerate();
+        sch_tally_t s4 = test_schur_large();
+        sch_tally_t s5 = test_schur_reject();
+        t.checks += s1.checks + s2.checks + s3.checks + s4.checks + s5.checks;
+        t.failed += s1.failed + s2.failed + s3.failed + s4.failed + s5.failed;
+        printf("--- v2.4.0 schur: basic %d/%d, complex %d/%d, degen %d/%d, large %d/%d, reject %d/%d (checks/failed) ---\n",
+               s1.checks, s1.failed, s2.checks, s2.failed,
+               s3.checks, s3.failed, s4.checks, s4.failed,
+               s5.checks, s5.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
