@@ -1,0 +1,437 @@
+{
+  "description": "ApolloCalc-CAS 共享一致性测试：常系数线性齐次 ODE 通解（v2.3.0 功能 3，契约 docs/contracts/ode-format-v23.md）。成功用例 expected 为通解字符串逐字比对（UTF-8 任意常数下标 C₁..C₄）；错误用例 code 按 §6 数值精确比较。冻结口径：全部 cases 已于 2026-10-31 在双侧实跑核对——C 侧为 ac_pro_ode（out_len=256，与 test_pro_ode.c 同参），JS 侧为 core_ode.js solveOde，输出逐字节一致；契约 §5.4 全部 11 行、§6 错误码全序、§7 拒绝情形、§9-4 边界值全覆盖，另含无理根 fmt 12 位定点路径（§9-2 要求的双侧实跑核对项：√2/√3/∛2）。两侧输出不一致的输入不进入 cases（含有理重建 q=999 边界例，其 C 侧正确形态记录于对应 deviation），逐条记录于 knownDeviations（ROADMAP.md:178：两侧格式不一致即视为实现 bug，不允许返工兜底）。",
+  "odeFormatContract": "docs/contracts/ode-format-v23.md",
+  "errorCodes": {
+    "ok": 0,
+    "eparse": -1,
+    "edeg": -2,
+    "evarcoef": -3,
+    "enonhomo": -4,
+    "ecoef": -5,
+    "eover": -6,
+    "einternal": -7
+  },
+  "sideNotes": "code=-6（EOVER）仅 C 侧可产生：JS 无缓冲概念，契约 §6 明文 JS 侧不产生 -6；对应用例标 cOnly=true，JS 侧消费方应跳过。JS 侧失败时 out 恒为空串（契约 §8），比对只看 code。",
+  "cases": [
+    {
+      "id": "contract-5.4-1",
+      "input": "y''+3y'+2y=0",
+      "expected": "y = C₁*exp(-1*x) + C₂*exp(-2*x)"
+    },
+    {
+      "id": "contract-5.4-2",
+      "input": "y''-3y'+2y=0",
+      "expected": "y = C₁*exp(2*x) + C₂*exp(1*x)"
+    },
+    {
+      "id": "contract-5.4-3",
+      "input": "y''+2y'+5y=0",
+      "expected": "y = C₁*exp(-1*x)*cos(2*x) + C₂*exp(-1*x)*sin(2*x)"
+    },
+    {
+      "id": "contract-5.4-4",
+      "input": "y''+4y=0",
+      "expected": "y = C₁*cos(2*x) + C₂*sin(2*x)",
+      "note": "α=0 共轭对省 exp 因子（契约 §5.2-2 唯二特例之一）"
+    },
+    {
+      "id": "contract-5.4-5",
+      "input": "y''-4y'=0",
+      "expected": "y = C₁*exp(4*x) + C₂",
+      "note": "λ=0 实根省 exp 因子"
+    },
+    {
+      "id": "contract-5.4-6",
+      "input": "y''-2y'+y=0",
+      "expected": "y = C₁*exp(1*x) + C₂*x*exp(1*x)",
+      "note": "实重根 ×x 层"
+    },
+    {
+      "id": "contract-5.4-7",
+      "input": "y'''-y'=0",
+      "expected": "y = C₁*exp(1*x) + C₂ + C₃*exp(-1*x)"
+    },
+    {
+      "id": "contract-5.4-8",
+      "input": "y''''-y=0",
+      "expected": "y = C₁*exp(1*x) + C₂*cos(1*x) + C₃*sin(1*x) + C₄*exp(-1*x)",
+      "note": "四阶排序：实根 → 共轭对 → 实根（§4.2 Re 降序）"
+    },
+    {
+      "id": "contract-5.4-9",
+      "input": "y''''+2y''+y=0",
+      "expected": "y = C₁*cos(1*x) + C₂*sin(1*x) + C₃*x*cos(1*x) + C₄*x*sin(1*x)",
+      "note": "重根×共轭：±i 各 2 重，cos/sin 各带 x 幂"
+    },
+    {
+      "id": "contract-5.4-10",
+      "input": "y'=0",
+      "expected": "y = C₁"
+    },
+    {
+      "id": "contract-5.4-11",
+      "input": "2y''+2y'+y=0",
+      "expected": "y = C₁*exp(-1/2*x)*cos(1/2*x) + C₂*exp(-1/2*x)*sin(1/2*x)",
+      "note": "有理重建（§5.1-2）输出 p/q 形态"
+    },
+    {
+      "id": "repeat-triple",
+      "input": "y'''-3y''+3y'-y=0",
+      "expected": "y = C₁*exp(1*x) + C₂*x*exp(1*x) + C₃*x^2*exp(1*x)",
+      "note": "三重实根 x^2 拼写（§5.2-1）"
+    },
+    {
+      "id": "zero-triple",
+      "input": "y'''=0",
+      "expected": "y = C₁ + C₂*x + C₃*x^2"
+    },
+    {
+      "id": "first-order-nonzero",
+      "input": "y'+2y=0",
+      "expected": "y = C₁*exp(-2*x)"
+    },
+    {
+      "id": "first-order-rational",
+      "input": "2y'+y=0",
+      "expected": "y = C₁*exp(-1/2*x)",
+      "note": "n=1 线性根走有理重建"
+    },
+    {
+      "id": "complex-positive-real",
+      "input": "y''-2y'+5y=0",
+      "expected": "y = C₁*exp(1*x)*cos(2*x) + C₂*exp(1*x)*sin(2*x)"
+    },
+    {
+      "id": "pure-imaginary-3",
+      "input": "y''+9y=0",
+      "expected": "y = C₁*cos(3*x) + C₂*sin(3*x)"
+    },
+    {
+      "id": "fmt-irrational-sqrt2",
+      "input": "y''-2y=0",
+      "expected": "y = C₁*exp(1.414213562373*x) + C₂*exp(-1.414213562373*x)",
+      "note": "无理根走 fmt 定点 12 位（§5.1-3）"
+    },
+    {
+      "id": "explicit-star",
+      "input": "3*y''+3y'=0",
+      "expected": "y = C₁ + C₂*exp(-1*x)",
+      "note": "显式乘号与隐式相邻等价（§3.2）"
+    },
+    {
+      "id": "leading-zero-coef",
+      "input": "03y''+3y'=0",
+      "expected": "y = C₁ + C₂*exp(-1*x)",
+      "note": "前导零系数（§3.2）"
+    },
+    {
+      "id": "coef-999-boundary",
+      "input": "999y''=0",
+      "expected": "y = C₁ + C₂*x",
+      "note": "系数 999 刚好通过（§9-4）"
+    },
+    {
+      "id": "leading-star",
+      "input": "*y''=0",
+      "expected": "y = C₁ + C₂*x",
+      "note": "项首 * 等价系数缺省 1（gb 先例，双侧一致行为）"
+    },
+    {
+      "id": "degree-4-zero-root",
+      "input": "y''''=0",
+      "expected": "y = C₁ + C₂*x + C₃*x^2 + C₄*x^3",
+      "note": "阶 4 刚好通过，λ=0 四重（§9-4）"
+    },
+    {
+      "id": "coef-999-pair",
+      "input": "999y''+999y'=0",
+      "expected": "y = C₁ + C₂*exp(-1*x)"
+    },
+    {
+      "id": "mid-zero-coef",
+      "input": "y'''+0y''+y=0",
+      "expected": "y = C₁*exp(1/2*x)*cos(0.866025403784*x) + C₂*exp(1/2*x)*sin(0.866025403784*x) + C₃*exp(-1*x)",
+      "note": "契约 §3.4 例：中间零系数原样保留；共轭对 fmt(√3/2) 定点 12 位"
+    },
+    {
+      "id": "fmt-negative-rational",
+      "input": "2y''+y'-3y=0",
+      "expected": "y = C₁*exp(1*x) + C₂*exp(-3/2*x)",
+      "note": "负既约分数 -3/2（负号在前，§5.1-2）"
+    },
+    {
+      "id": "fmt-cubic-irrational",
+      "input": "y'''-2y=0",
+      "expected": "y = C₁*exp(1.259921049895*x) + C₂*exp(-0.629960524947*x)*cos(1.091123635972*x) + C₃*exp(-0.629960524947*x)*sin(1.091123635972*x)",
+      "note": "三次 Cardano 无理实根 ∛2 + 共轭对，双侧 12 位定点一致"
+    },
+    {
+      "id": "fmt-quartic-biquadratic",
+      "input": "y''''-5y''+6y=0",
+      "expected": "y = C₁*exp(1.732050807569*x) + C₂*exp(1.414213562373*x) + C₃*exp(-1.414213562373*x) + C₄*exp(-1.732050807569*x)",
+      "note": "四次 Ferrari 路径 ±√3/±√2 全无理根"
+    },
+    {
+      "id": "reject-nonhomo-const",
+      "input": "y''+y=1",
+      "code": -4
+    },
+    {
+      "id": "reject-nonhomo-x",
+      "input": "y''=x",
+      "code": -4
+    },
+    {
+      "id": "reject-nonhomo-y",
+      "input": "y''=y",
+      "code": -4
+    },
+    {
+      "id": "reject-nonhomo-00",
+      "input": "y''=00",
+      "code": -4,
+      "note": "右端去空白后须恰为单个 '0'（§3.3-4）"
+    },
+    {
+      "id": "reject-nonhomo-signed",
+      "input": "y''=+0",
+      "code": -4
+    },
+    {
+      "id": "reject-nonhomo-yprime",
+      "input": "y''=y'",
+      "code": -4
+    },
+    {
+      "id": "reject-varcoef-lead",
+      "input": "x*y''+y=0",
+      "code": -3
+    },
+    {
+      "id": "reject-varcoef-mid",
+      "input": "y''+x*y=0",
+      "code": -3
+    },
+    {
+      "id": "reject-varcoef-nonhomo-first",
+      "input": "x*y''=1",
+      "code": -3,
+      "note": "判定全序：EVARCOEF 先于 ENONHOMO（§6）"
+    },
+    {
+      "id": "reject-edeg-5primes",
+      "input": "y'''''+y=0",
+      "code": -2
+    },
+    {
+      "id": "reject-edeg-before-flags",
+      "input": "y'''''+x=0",
+      "code": -2,
+      "note": "判定全序：EDEG 词法当场先于一切标志（§6）"
+    },
+    {
+      "id": "reject-ecoef-no-deriv",
+      "input": "y=0",
+      "code": -5
+    },
+    {
+      "id": "reject-ecoef-no-deriv-3",
+      "input": "3y=0",
+      "code": -5
+    },
+    {
+      "id": "reject-ecoef-identity",
+      "input": "0y=0",
+      "code": -5
+    },
+    {
+      "id": "reject-ecoef-identity-2",
+      "input": "0y''+0y=0",
+      "code": -5
+    },
+    {
+      "id": "reject-ecoef-1000",
+      "input": "1000y''+y=0",
+      "code": -5,
+      "note": "系数 1000 刚好拒绝（§9-4）"
+    },
+    {
+      "id": "reject-ecoef-1000-low",
+      "input": "y''+1000y=0",
+      "code": -5
+    },
+    {
+      "id": "reject-eparse-caret",
+      "input": "y^2+y=0",
+      "code": -1,
+      "note": "^ 记号一律非法（§3.3-3）"
+    },
+    {
+      "id": "reject-eparse-upper",
+      "input": "Y''=0",
+      "code": -1,
+      "note": "只认小写 y/x（§3.1）"
+    },
+    {
+      "id": "reject-eparse-dup-order",
+      "input": "y''+y''=0",
+      "code": -1,
+      "note": "同阶项禁止重复（§3.3-2）"
+    },
+    {
+      "id": "reject-eparse-dup-coef",
+      "input": "y'+3y'=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-star-after-y",
+      "input": "y''*3+y=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-apostrophe-gap",
+      "input": "y ''=0",
+      "code": -1,
+      "note": "撇号序列内部不允许空白（§3.1）"
+    },
+    {
+      "id": "reject-eparse-dollar",
+      "input": "x$+y''=0",
+      "code": -1,
+      "note": "判定全序：结构错优先于 x 标志（§6）"
+    },
+    {
+      "id": "reject-eparse-utf8",
+      "input": "y''+√2y=0",
+      "code": -1,
+      "note": "非 ASCII 码元 → EPARSE（§3.1）"
+    },
+    {
+      "id": "reject-eparse-double-star",
+      "input": "3**y''=0",
+      "code": -1,
+      "note": "每项至多一个 *（§3.2）"
+    },
+    {
+      "id": "reject-eparse-no-y-x",
+      "input": "x=0",
+      "code": -1,
+      "note": "缺 y 的项（§3.3-1）"
+    },
+    {
+      "id": "reject-eparse-no-term",
+      "input": "=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-split-coef",
+      "input": "3 5y''=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-yy",
+      "input": "yy=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-trailing-sep",
+      "input": "y''+=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-no-eq",
+      "input": "y''+y",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-no-y-2",
+      "input": "2=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-no-y-3",
+      "input": "0=0",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-empty-rhs",
+      "input": "y''=",
+      "code": -1,
+      "note": "右端空（§3.3-4）"
+    },
+    {
+      "id": "reject-eparse-rhs-garbage",
+      "input": "y''=;",
+      "code": -1
+    },
+    {
+      "id": "reject-eparse-rhs-slash",
+      "input": "y''+y=1/x",
+      "code": -1,
+      "note": "右端含文法外字符 '/'（§3.3-4）"
+    },
+    {
+      "id": "reject-eparse-empty-input",
+      "input": "",
+      "code": -1,
+      "note": "空串（§3.1）"
+    },
+    {
+      "id": "reject-eparse-len-257",
+      "input": "y''+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y",
+      "code": -1,
+      "note": "257 字节超长（§9-4；实际用例为 y'' 后接 84 组 +y' 再 +y，无尾随空格）"
+    },
+    {
+      "id": "reject-eparse-len-256-sep",
+      "input": "y''+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+y'+",
+      "code": -1,
+      "note": "256 字节但尾随分隔符结构错（长度先行通过后仍 EPARSE；实际用例为 y'' 后接 84 组 +y' 再单个 +，无尾随空格）"
+    },
+    {
+      "id": "reject-eover-c-only",
+      "input": "y''+3y'+2y=0",
+      "code": -6,
+      "cOnly": true,
+      "note": "输出缓冲不足（out_len=8）：仅 C 侧可产生，JS 侧契约 §6 明文不产生 -6，JS 消费方跳过本用例"
+    },
+    {
+      "id": "degree-4-legal-length",
+      "input": "y'=0",
+      "expected": "y = C₁",
+      "note": "256 字节界内合法形态回归（跟在两条超长边界后）"
+    }
+  ],
+  "knownDeviations": [
+    {
+      "id": "dev-small-positive-real-root",
+      "input": "999y''+998y'-y=0",
+      "cOutput": "y = C₁*exp(1/999*x) + C₂*exp(-1*x)",
+      "jsOutput": "y = C₁ + C₂*exp(-1*x)",
+      "arbitration": "数学事实：P(λ)=999λ²+998λ−1 的根为 1/999 与 −1（判别式恰 1e6），C 侧输出正确；JS 侧把 1/999 渲染成 λ=0（exp 因子被省略）。",
+      "rootCause": "JS 实现缺陷（core_ode.js）：_isZeroInt 三条退出路径两条返回 JS boolean（return d<0 ? -d<TOL : d<TOL）、一条返回数字 0（if(m!==0) return 0），而实根渲染门 _isZeroInt(lam)===0 以严格等于比较——凡 0<|λ|<0.5 且 llround(λ)=0 的实根（1/3、1/999、−1/3 等）返回 false，false===0 为 false，exp 因子被误省略，根被当作 λ=0 渲染；共轭分支调用点用真值判断不受影响。负的小根（如 −1/2）因 llround 取整到 −1≠0 走数字 0 路径而幸免，故两侧内嵌测试（小根用例只有 −1/2）均未暴露。",
+      "evidence": "2026-10-31 双侧探针实跑（C：ac_pro_ode out_len=256；JS：solveOde），另 JS 侧独立验证 solveQuadratic 本身返回 re0=0.001001001001001001 正确、错误发生在 core_ode.js 渲染层；同类触发例 3y''+2y'-y=0（根 1/3）与 100y''+99y'-y=0（根 1/100）JS 侧同样误渲染为 C₁。",
+      "disposition": "按 ROADMAP.md:178 如实上报为 JS 侧实现 bug，不许返工契约；该输入暂不进入 cases（冻结须双侧一致），修复后经双侧复跑补入。"
+    },
+    {
+      "id": "dev-caret-with-x-flag",
+      "input": "x^2*y=0",
+      "cOutput": "-3 (EVARCOEF)",
+      "jsOutput": "-1 (EPARSE)",
+      "arbitration": "契约文本自相矛盾：§6 错误码表 EVARCOEF 行以 x^2*y=0 为示例（支持 C 侧行为），但 §3.3-3「^ 一律非法→EPARSE」加 §6 判定全序「EVARCOEF 仅当全串无 1/2 类错误时升级」（x$+y''=0→EPARSE 同理）指向 EPARSE（支持 JS 侧行为）。",
+      "rootCause": "C 侧解析器（ac_pro_ode.c 因子序列循环）有意容忍 x 后跟 ^<digits>（消费幂值、仅置 EVARCOEF 标志，头注明言「其形态(x、x^2、3x、x*y'')只需能走到项边界」）并被 test_pro_ode.c:142 期望 -3 固化；JS 侧按 §3.3-3+§6 全序对 ^ 当场 EPARSE。两侧各执契约矛盾文本的一端。",
+      "evidence": "2026-10-31 双侧探针实跑；两侧内嵌测试各自自洽（C 测试 pin -3，JS 测试无此输入），矛盾仅在跨语言对拍中显形。",
+      "disposition": "按 ROADMAP.md:178 上报为两侧实现不一致（根因含契约文本矛盾）；修复方向（改某一侧或经双组确认修订契约 §3.3-3/§6 表述）属双组裁决，本文件不预设立场，该输入暂不进入 cases。"
+    },
+    {
+      "id": "dev-trailing-x-after-y",
+      "input": "y''x=0",
+      "cOutput": "-1 (EPARSE)",
+      "jsOutput": "-3 (EVARCOEF)",
+      "arbitration": "契约文本歧义：§3.2 词法单元表「自变量 x 任意位置出现→置变系数标志」（支持 JS 侧），与 §3.3-1「导数记号后只允许 空白/+/-/=/串尾，出现其他→EPARSE」（支持 C 侧）在「x 紧跟导数记号」这一位置冲突；§6 全序示例未覆盖该形态。",
+      "rootCause": "C 侧在 y 记号后设项尾硬校验（y'' 后的 x 命中「其他」→ EPARSE）；JS 侧按 §3.2 对任意位置的 x 只置标志不报结构错（test-ode.js 内嵌用例 pin -3）。两侧各执歧义文本的一端。",
+      "evidence": "2026-10-31 双侧探针实跑；JS test-ode.js「左端 x 记号尾随」pin -3，C test_pro_ode.c 无此输入。",
+      "disposition": "同 dev-caret-with-x-flag：上报两侧不一致（根因含契约歧义），裁决后回填，该输入暂不进入 cases。"
+    }
+  ]
+}
