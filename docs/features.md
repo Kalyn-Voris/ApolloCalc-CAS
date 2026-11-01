@@ -1,10 +1,10 @@
 # ApolloCalc-CAS 功能对照表
 
 四版本家族（JS 与 C99 × 64KB 与 128KB）+ Pro 层的内核功能矩阵。
-JS/128KB（v2.4.0）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组件 v1.6.0）
+JS/128KB（v2.4.1）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组件 v1.6.1）
 为代数能力最强的参考实现（`.bss` 内核口径 42608 B，上游 `C/128KB/` 冻结）。
 版本文档：[js-128kb.md](js-128kb.md) / [c99-128kb.md](c99-128kb.md) /
-设计说明。
+[ROADMAP.md](../ROADMAP.md)。
 
 **基线数字（2026-10-31 实测，非转抄）**：
 
@@ -23,7 +23,7 @@ JS/128KB（v2.4.0）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组�
 
 ## 内核功能
 
-| 功能 | JS 64KB | JS 128KB（v2.4.0） | C99 64KB | C99 128KB |
+| 功能 | JS 64KB | JS 128KB（v2.4.1） | C99 64KB | C99 128KB |
 |---|---|---|---|---|
 | 表达式解析与求值（隐式乘法 / 右结合幂 / RAD-DEG） | ✅ | ✅ | ✅ | ✅ |
 | 二次 / 三次 / 四次方程求解（含复根） | ✅ | ✅ | ✅ | ✅ |
@@ -81,9 +81,9 @@ v2.3.0）**、**常系数线性齐次 ODE 通解（字符串进字符串出，�
 重根重数（整系数 SFF，契约 [sqfree-format-v24](contracts/sqfree-format-v24.md)，
 v2.4.0）**。
 `.bss` 内核口径 **42 608 B** / runner 口径 42640 B / 上游对照 39408 B / 退化 38672 B
-（v2.2.0 起 Groebner 落地后零增长，2026-10-31 `bss-check` 复测），pro_runner
-**574 checks, 0 failed**（2026-10-31 实测）。
-详见设计说明与 [RELEASE-v2.0.0.md](RELEASE-v2.0.0.md)。
+（v2.2.0 起 Groebner 落地后零增长，2026-11-01 `bss-check` 复测），pro_runner
+**579 checks, 0 failed**（2026-11-01 实测，v2.4.1 含 ODE 修复回归 5 项）。
+详见 [c99-128kb.md](c99-128kb.md) 与 [RELEASE-v2.0.0.md](RELEASE-v2.0.0.md)。
 
 ## v2.3.0 双侧新功能（2026-10-31）
 

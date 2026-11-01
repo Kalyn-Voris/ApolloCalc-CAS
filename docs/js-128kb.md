@@ -1,6 +1,6 @@
 # JS/128KB — 零 GC 计算代数内核（增强版）
 
-- **状态**：v2.0.0（8/8 步 + 多变量引擎升级；12 文件内核拼接）
+- **状态**：v2.4.1（组件版本；20 文件内核拼接，terser 单遍 minify 交付）
 - **堆限制**：128KB（全局状态水位目标 ≤ 96KB）
 - **目标平台**：不限——任何支持 ES5 + TypedArray 的 JS 环境（Lite Wearable / JerryScript / 浏览器 / Node）
 - **内存模型**：与 64KB 版一致——TypedArray + 全局标量，零临时对象，禁止递归与热路径字符串拼接
@@ -124,24 +124,28 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 | _baseBuf（Int32，进制/SI） | — | 64×4 = 256 B |
 | **既有静态池合计** | **~5.2 KB** | **11 992 B ≈ 11.7 KB** |
 | `core_multivar.js` 池（独立模块） | — | 10 208 B（9.97 KiB） |
-| `core_matrix.js` 池（独立模块） | — | 216 B（3 × 3×3 Float64Array） |
+| `core_matrix.js` 池（独立模块） | — | 5 160 B（v2.4.0 升 12×12，实测） |
 | `core_special.js` 池（独立模块） | — | **0 B**（纯标量，无池） |
 
-> 水位门禁降级估算口径（含 _baseBuf）为 11 992 B；计入最坏游标
-> （512 token × 8 + 256 number × 8）与 2KB 运行时冗余约 19.7 KB，
-> 距 96KB 门禁仍有充足余量。门禁阈值维持 96KB（128KB × 75%）不变。
+> **v2.4.1 全项目静态池实测**：20 文件全部模块加载期 TypedArray byteLength 求和为
+> **170 304 B（166.3 KiB，2026-11-01 实测，逐模块脚本可复现）**。大头：
+> `core_integrate.js` 93 676 B（128 项积分表落 TypedArray）、`core_symboltree.js`
+> 35 232 B（表达式树 512 节点池 + diff 工作区）、`core_multivar.js` 10 208 B、
+> `core_groebner.js` 6 648 B、`core_matrix.js` 5 160 B（v2.4.0 升 12×12）、
+> `core_parser.js` 6 368 B、`core_evaluator.js` 4 648 B。v2.0.0 时代的
+> 「全项目 22 416 B」是 12 文件快照，已被 v2.1.0 稀疏/小数与 v2.3.0/v2.4.0
+> 五轮功能扩张取代。
 >
-> 三个 v2.0.0 自包含模块的池是**独立**增量，与上表不重叠。全项目静态池相加
-> 22 416 B（21.9 KiB），仍在 96KB 门禁内。但若未来把 multivar
-> 直接挂到主求值器上，两池会同时常驻，届时需要重新核算水位。
+> **口径澄清**：静态池是 TypedArray **外部内存**，不计入 V8 `heapUsed`；
+> 96KB 水位门禁（core_solvers.js:608）管的是**堆**水位，与静态池预算是两条
+> 独立的线——全量 1 188 项测试通过即堆水位健康。上表「既有静态池合计
+> 11 992 B」仍是核心求值链路的逐池明细，外挂模块池另计。
 >
-> **内核文件体积口径**：12 文件拼接后的 `core_kernel.js` 为 175 142 B，
-> 越过 128 KiB 文件线。这是 v2.0.0 的**有意裁决**而非漂移：项目名中的
-> "128KB" 指目标设备堆预算（内存水位门禁 96KB，实测静态池 21.9 KiB，
-> 余量充足），文件线随多变量引擎的加入被功能完整性覆盖；如需回到
-> 128 KiB 文件线，单独走一轮压缩构建（空白/注释剥离预估可减 ~30%）。
-> C 侧对照：`C/128KB-ProTEXT` v2.0.0 同期以 `.bss` 41 456 B 零增长
-> 落地同等能力（`feat/multi-diff`、`feat/multi-integrate`、`feat/lut-const`）。
+> **内核文件体积口径（v2.4.1 终态）**：20 文件拼接，经 v2.2.0 落地的 terser
+> 单遍 minify 管线压缩后 `core_kernel.js` 为 **103 575 B ≤ 131 072 B**（128KB
+> 文件线），余量 27 497 B；`--minify` 是压缩产物唯一重建入口
+> （test/build-kernel.js，复跑后核对 `git status` 防工具链漂移）。
+> C 侧对照：`C/128KB-ProTEXT` v2.4.1 以 `.bss` 42 608 B 零增长承载同等能力。
 
 ## 与 64KB 的架构差异
 
@@ -192,13 +196,16 @@ node test/test-multivar.js       # 多变量多项式 + 符号求导 + 高阶三
 node test/test-matrix.js         # 矩阵基础运算（39 项）
 node test/test-special.js        # 特殊函数 erf/gamma/lgamma（33 项）
 node test/test-browser.js        # 浏览器经典脚本环境模拟（vm 沙箱，10 项）
-node test/build-kernel.js        # 拼接 12 文件 core_kernel.js + 83 项回归 + ESM 严格模式冒烟（43 项）
+node test/build-kernel.js        # 拼接 20 文件 core_kernel.js + 83 项回归 + ESM 严格模式冒烟（49 项）
 ```
 
 零依赖，Node ≥ 14 即可（`test-browser.js` 的 vm 沙箱与 `--expose-gc` 探针
 在任意主流 Node 版本可用）。共享一致性用例在 [tests/](../tests/)。
-12 个测试文件合计 **603 pass, 0 fail**（49+46+63+28+23+33+26+59+194+39+33+10），
-另有 build-kernel 内嵌 83 项 eval 回归 + 43 项 ESM 导出链路冒烟全过。
+20 个测试文件合计 **1188 pass, 0 fail**（base 63 / browser 10 / calculus 28 /
+complex 23 / consistency 59 / evaluator 49 / groebner 60 / guard 16 /
+integrate 75 / matrix-pro 82 / matrix 39 / multivar 194 / numtheory 89 /
+ode 77 / ratroot 33 / solvers 46 / special 33 / sqfree 70 / symboltree 116 /
+taylor 26），另有 build-kernel 内嵌 83 项 eval 回归 + 49 项 ESM 导出链路冒烟全过。
 
 ## 一致性测试判定规则
 

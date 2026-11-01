@@ -52,6 +52,12 @@ checkOut("实重根三阶", "y'''-3y''+3y'-y=0",
 checkOut("三重零根", "y'''=0", "y = C₁ + C₂*x + C₃*x^2");
 checkOut("一阶非零根", "y'+2y=0", "y = C₁*exp(-2*x)");
 checkOut("一阶有理根", "2y'+y=0", "y = C₁*exp(-1/2*x)");
+checkOut("小正有理根(q=999 边界,v2.4.1 回归)", "999y''+998y'-y=0",
+         "y = C₁*exp(1/999*x) + C₂*exp(-1*x)");
+checkOut("小正有理根(1/3,v2.4.1 回归)", "3y''+2y'-y=0",
+         "y = C₁*exp(1/3*x) + C₂*exp(-1*x)");
+checkOut("小正有理根(1/100,v2.4.1 回归)", "100y''+99y'-y=0",
+         "y = C₁*exp(1/100*x) + C₂*exp(-1*x)");
 checkOut("复根正实部", "y''-2y'+5y=0",
          "y = C₁*exp(1*x)*cos(2*x) + C₂*exp(1*x)*sin(2*x)");
 checkOut("纯虚根 3", "y''+9y=0", "y = C₁*cos(3*x) + C₂*sin(3*x)");
@@ -83,6 +89,7 @@ checkCode("纯右端(=0)", "=0", -1);
 checkCode("系数单元被空白打断", "3 5y''=0", -1);
 checkCode("y 后接 y", "yy=0", -1);
 checkCode("尾随分隔符", "y''+=0", -1);
+checkCode("导数记号后尾随 x(y''x=0,§3.3-1 项尾硬校验,v2.4.1 裁决)", "y''x=0", -1);
 /* 257 字节(超长,§9-4 边界) */
 var long257 = "y''";
 var li;
@@ -104,7 +111,8 @@ checkCode("五撇号+变系数标志(EDEG 先于一切标志)", "y'''''+x=0", -2
 checkCode("变系数(x*y''+y)", "x*y''+y=0", -3);
 checkCode("变系数(y''+x*y)", "y''+x*y=0", -3);
 checkCode("变系数先于非齐次(x*y''=1)", "x*y''=1", -3);
-checkCode("左端 x 记号尾随(y''x=0)", "y''x=0", -3);
+checkCode("变系数 x 幂(x^2*y=0,多项式语义,v2.4.1 裁决)", "x^2*y=0", -3);
+checkCode("x 幂值可空(x^y''=0,镜像 C 侧)", "x^y''=0", -3);
 
 /* 错误码:ENONHOMO(−4) */
 checkCode("非齐次常数", "y''+y=1", -4);

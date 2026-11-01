@@ -99,6 +99,7 @@ var ApolloOde = (function () {
     if (cc >= 48 && cc <= 57) { return 1; }             /* 0-9 */
     if (cc === 43 || cc === 45) { return 1; }           /* + - */
     if (cc === 42 || cc === 61 || cc === 39) { return 1; }  /* * = ' */
+    if (cc === 94) { return 1; }                        /* ^(仅系数位置 x 幂,§3.3-3) */
     if (cc === 120 || cc === 121) { return 1; }         /* x y(只认小写) */
     return 0;
   }
@@ -135,6 +136,8 @@ var ApolloOde = (function () {
     var termOpen = 0;
     var termEver = 0;
     var signRun = 0;
+    var xSeen = 0;              /* 本项已消费 x 因子(镜像 C saw_x:含 x 的项缺 y 时 '+'/'=' → EPARSE) */
+    var xPow = 0;               /* ^ 紧跟 x 的许可(§3.3-3 多项式语义,v2.4.1) */
     var coefOverflow = 0;
     var wsGap = 0;                      /* 内容 token 之间出现过空白(语法从严:系数 token
                                          * 被空白打断后再遇数字 = 第二个系数单元 → EPARSE) */
@@ -145,22 +148,43 @@ var ApolloOde = (function () {
       cc = src.charCodeAt(i);
       if (cc === 32 || cc === 9) { wsGap = 1; i++; continue; }
       if (cc === 61) { break; }                          /* '=' 右端开始 */
-      if (cc === 120) { _varcoef = 1; i++; continue; }   /* 左端 x:置标志跳过 */
+      if (cc === 120) {
+        if (hasY === 1) { return _fail(-1); }  /* y''x:导数记号后尾随 x → EPARSE(§3.3-1,v2.4.1 裁决) */
+        _varcoef = 1; xSeen = 1; xPow = 1; i++; continue;   /* 左端 x:置标志;xPow 许可其后 ^幂 */
+      }
+      if (cc === 94) {
+        /* ^ 仅允许紧跟 x(可选空白,可选空白后再数字):消费幂值(可空)、不报结构错——
+         * 与 C 侧 ac_pro_ode.c:270-273 逐字一致(v2.4.1 裁决,多项式语义) */
+        if (xPow === 0) { return _fail(-1); }
+        i++;
+        while (i < len) {
+          var w = src.charCodeAt(i);
+          if (w !== 32 && w !== 9) { break; }
+          i++;
+        }
+        while (i < len) {
+          var dv = src.charCodeAt(i);
+          if (dv < 48 || dv > 57) { break; }
+          i++;
+        }
+        xPow = 0;
+        continue;
+      }
       if (cc === 43 || cc === 45) {
         if (hasY === 1) {
           /* 前项完成:提交;此字符即下一项的符号(单字符规则) */
           if (_commit(sgn, coef, coefSeen, k) !== 0) { return _err; }
           sgn = (cc === 45) ? -1 : 1;
-          coef = 0; coefSeen = 0; starSeen = 0; hasY = 0; k = 0;
+          coef = 0; coefSeen = 0; starSeen = 0; hasY = 0; k = 0; xSeen = 0; xPow = 0;
           termOpen = 1; termEver = 1; signRun = 1;
           i++;
           continue;
         }
-        if (coefSeen === 0 && starSeen === 0 && signRun < 2) {
+        if (coefSeen === 0 && starSeen === 0 && xSeen === 0 && signRun < 2) {
           /* 项首符号(输入头第一个,或分隔符后再带的一个) */
           sgn = (cc === 45) ? -1 : 1;
           signRun++;
-          termOpen = 1; termEver = 1;
+          termOpen = 1; termEver = 1; xSeen = 0; xPow = 0;
           i++;
           continue;
         }
@@ -172,7 +196,7 @@ var ApolloOde = (function () {
         if (coefSeen === 1 && wsGap === 1) { return _fail(-1); }  /* 系数单元被空白打断 */
         if (coef > COEF_GUARD) { coefOverflow = 1; }
         else { coef = coef * 10 + (cc - 48); }
-        coefSeen = 1; termOpen = 1; termEver = 1; wsGap = 0;
+        coefSeen = 1; termOpen = 1; termEver = 1; wsGap = 0; xPow = 0;
         i++;
         continue;
       }
@@ -181,7 +205,7 @@ var ApolloOde = (function () {
         if (starSeen === 1) { return _fail(-1); }    /* 每项至多一个 * */
         /* 星号无条件消费(gb 先例 ac_pro_groebner.c:136 同款:
          * 系数缺省 1,契约 §3.2 例 "x*y''" 依赖此语义) */
-        starSeen = 1; termOpen = 1; termEver = 1;
+        starSeen = 1; termOpen = 1; termEver = 1; xPow = 0;
         i++;
         continue;
       }
@@ -192,7 +216,7 @@ var ApolloOde = (function () {
       }
       if (cc === 121) {                              /* 'y' */
         if (hasY === 1) { return _fail(-1); }        /* 一项一个导数记号 */
-        hasY = 1; termOpen = 1; termEver = 1; k = 0;
+        hasY = 1; termOpen = 1; termEver = 1; k = 0; xPow = 0;
         i++;
         while (i < len && src.charCodeAt(i) === 39) {
           k++;
@@ -366,12 +390,15 @@ var ApolloOde = (function () {
     return 0;
   }
 
-  /* α/λ 的整数零判定(§5.2-2 唯二特例):|λ − round(λ)| < 1e-9 且 round=0 */
+  /* α/λ 的整数零判定(§5.2-2 唯二特例):|λ − round(λ)| < 1e-9 且 round=0。
+   * 恒返 0/1 数字(v2.4.1 修复:原三条退出路径混返 boolean/数字,实根渲染门
+   * _isZeroInt(lam)===0 严格比较失配,0<|λ|<0.5 的实根 exp 因子被误省略)。 */
   function _isZeroInt(x) {
     var m = _llround(x);
     if (m !== 0) { return 0; }
     var d = x - m;
-    return d < 0 ? -d < TOL : d < TOL;
+    if (d < 0) { d = -d; }
+    return d < TOL ? 1 : 0;
   }
 
   /* x 幂因子(§5.2-1):j=0 省;j=1 "*x";j≥2 "*x^j" */

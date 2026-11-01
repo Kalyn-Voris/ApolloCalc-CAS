@@ -11,7 +11,7 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 | JS 128KB | ✅ 已完成（v2.0.0） | 603（各套件合计，见下）+ 83 回归 + 43 ESM 接线 | [js-128kb.md](js-128kb.md) |
 | C 64KB | ✅ 已完成（v1.0.0） | 565（默认）/ 578（`LUT=1`） | [c99-64kb.md](c99-64kb.md) |
 | C 128KB | ✅ 已完成（v1.1.0，冻结） | 1171（默认）/ 1184（`LUT=1`） | [c99-128kb.md](c99-128kb.md) |
-| C 128KB-ProTEXT | ✅ 已完成（v2.1.0） | 328（`pro_runner.exe`，含上游回归） | 设计说明 |
+| C 128KB-ProTEXT | ✅ 已完成（v2.4.1） | 579（`pro_runner.exe`，含上游回归） | [C/128KB-ProTEXT/README.md](../C/128KB-ProTEXT/README.md) |
 
 **JS 128KB 测试明细**（实测，`node test/<suite>.js`）：
 
@@ -135,7 +135,7 @@ C 128KB 的主要占用（v1.1.0 实测 `nm --size-sort`）：符号节点池 `g
 > `.data + .bss` = 39680 B（38.75 KiB）。手段为 C99 `union` 编译期重叠（20 个 scratch 池折叠）、
 > 栈别名、token 原地切片、CRC/Base64 常量表。功能与性能均无回归：
 > 1171 项测试全绿、53 行 smoke CSV 与 v1.0.0 逐位一致、C128 vs JS128 50/50 一致、
-> 100 万次压测四 stage 全在 ±3% 内。详见设计说明。
+> 100 万次压测四 stage 全在 ±3% 内。详见 [benchmark.md](benchmark.md)。
 
 四版本均远低于各自预算与水位门禁。
 

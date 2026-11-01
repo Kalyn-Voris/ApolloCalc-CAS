@@ -125,6 +125,15 @@ pro_tally_t test_ode_rational(void) {
                "y = C\xe2\x82\x81*exp(-1/2*x)*cos(1/2*x)"
                " + C\xe2\x82\x82*exp(-1/2*x)*sin(1/2*x)",
                "2y''+2y'+y=0");
+    expect_ode(&t, "999y''+998y'-y=0", AC_PRO_ODE_OK,
+               "y = C\xe2\x82\x81*exp(1/999*x) + C\xe2\x82\x82*exp(-1*x)",
+               "999y''+998y'-y=0 (q=999 边界,v2.4.1 回归)");
+    expect_ode(&t, "3y''+2y'-y=0", AC_PRO_ODE_OK,
+               "y = C\xe2\x82\x81*exp(1/3*x) + C\xe2\x82\x82*exp(-1*x)",
+               "3y''+2y'-y=0 (1/3,v2.4.1 回归)");
+    expect_ode(&t, "100y''+99y'-y=0", AC_PRO_ODE_OK,
+               "y = C\xe2\x82\x81*exp(1/100*x) + C\xe2\x82\x82*exp(-1*x)",
+               "100y''+99y'-y=0 (1/100,v2.4.1 回归)");
 
     return t;
 }
@@ -142,6 +151,7 @@ pro_tally_t test_ode_reject(void) {
     expect_ode(&t, "x*y''+y=0", AC_PRO_ODE_EVARCOEF, "", "变系数 → -3");
     expect_ode(&t, "y''+x*y=0", AC_PRO_ODE_EVARCOEF, "", "变系数 → -3");
     expect_ode(&t, "x^2*y=0", AC_PRO_ODE_EVARCOEF, "", "x^2*y → -3");
+    expect_ode(&t, "x^y''=0", AC_PRO_ODE_EVARCOEF, "", "x 幂值可空 → -3(v2.4.1 镜像)");
     expect_ode(&t, "y'''''+y=0", AC_PRO_ODE_EDEG, "", "5 撇号 → -2");
     expect_ode(&t, "y=0", AC_PRO_ODE_ECOEF, "", "无导数项 → -5");
     expect_ode(&t, "0y''+0y=0", AC_PRO_ODE_ECOEF, "", "恒等式 → -5");
@@ -150,6 +160,7 @@ pro_tally_t test_ode_reject(void) {
     expect_ode(&t, "Y''=0", AC_PRO_ODE_EPARSE, "", "大写 Y → -1");
     expect_ode(&t, "y''+y''=0", AC_PRO_ODE_EPARSE, "", "同阶重复 → -1");
     expect_ode(&t, "y''*3+y=0", AC_PRO_ODE_EPARSE, "", "y 后 '*' → -1");
+    expect_ode(&t, "y''x=0", AC_PRO_ODE_EPARSE, "", "y 后尾随 x → -1(v2.4.1 裁决)");
     expect_ode(&t, "y''+y", AC_PRO_ODE_EPARSE, "", "缺 '=' → -1");
     expect_ode(&t, "2=0", AC_PRO_ODE_EPARSE, "", "缺 y → -1");
     expect_ode(&t, "y''+y=1/x", AC_PRO_ODE_EPARSE, "", "右端含文法外 '/' → -1");

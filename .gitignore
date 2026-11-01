@@ -12,6 +12,7 @@ smoke_runner
 map.txt
 build/
 out/
+obj/
 
 # IDE
 .idea/
