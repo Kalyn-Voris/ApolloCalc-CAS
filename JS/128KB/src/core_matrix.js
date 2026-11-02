@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc-CAS · JS/128KB · core_matrix.js — 基础矩阵运算：乘法 / 转置 / 行列式 / 逆矩阵（≤3×3 闭式），自包含。
  * v2.3.0 功能 2：pro 层升级 12×12——部分主元 det/inv/rank、LU 分解
  * （P·A=L·U+piv 访问器，契约对齐 C/128KB-ProTEXT ac_pro.h A4）、

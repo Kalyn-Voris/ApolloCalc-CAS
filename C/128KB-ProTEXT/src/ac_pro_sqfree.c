@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_sqfree.c — 单变量多项式 square-free 分解 + 重根重数(字符串进、字符串出)
 
    v2.4.0 功能 9(C 侧):单变量多项式 square-free 分解与重根重数,字符串进、

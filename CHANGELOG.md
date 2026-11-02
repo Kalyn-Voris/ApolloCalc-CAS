@@ -7,6 +7,20 @@
 各组件目录的 `VERSION` + `CHANGELOG.md` 记录**组件版本**，按该组件自身变更独立递进，
 两个口径不必同号。
 
+## v2.4.3 (2026-11-03)
+
+生态构建版本：无功能性代码变更，面向开源使用者。
+
+- **十分钟接入文档**（docs/getting-started.md）：实测逐字 Demo（C 5 行 / JS 3 行，
+  3×3 实对称特征值 + ODE 通解，C/JS 输出逐字一致）、Keil / ESP-IDF / npm 移植指南、
+  复制粘贴即可跑的构建命令；README 增设「十分钟接入」入口。
+- **性能与体积实测对比**（README + getting-started）：与 SymPy 1.14.0 / Eigenmath master
+  同机同任务实测——交付物体积、常驻内存、启动→首个结果；所有数字本机实测非转抄。
+- **MIT 许可证头覆盖全部核心源文件**：C/128KB-ProTEXT、JS/128KB、C/64KB、JS/64KB
+  四条产品线 81 个 .c/.h/.js 统一 `SPDX-License-Identifier: MIT` + 版权声明；
+  冻结上游 `C/128KB/`（verify §5 零改动红线）按既有 LICENSE 豁免。
+- 内核字节零变化（注释被 minify 剥离），全部门禁与 v2.4.2 相同。
+
 ## v2.4.2 (2026-11-03)
 
 补丁版本：ODE 判定差分收口——370 条确定性语料 C/JS 差分 fuzz 归零，遗留分叉全部关闭。

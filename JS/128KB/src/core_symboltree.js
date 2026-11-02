@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_symboltree.js — 符号微分引擎
    (v2.4.0 功能 6,JS 侧;补齐 C 侧 ac_symbolic + A6 隐函数求导)
 

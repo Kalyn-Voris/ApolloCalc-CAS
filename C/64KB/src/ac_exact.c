@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_exact.c — 双模态精确数值系统（第 3 轮）
  * 行为基准：JS/64KB/src/core_exact.js，逐函数对齐（含无效判定边界）

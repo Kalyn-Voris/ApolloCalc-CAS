@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_symbolic_ext.c — 隐函数求导 dy/dx = −F_x / F_y
 
    本项目最关键的一次「不改上游」:设计说明 §1.4 判据 2 发现

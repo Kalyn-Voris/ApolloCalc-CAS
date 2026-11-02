@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_groebner.js — 结式 + 2 变量 Groebner 基
    (v2.4.0 功能 10,JS 侧;对齐 C 侧 ac_pro_resultant.c A3 + ac_pro_groebner.c GB)
 

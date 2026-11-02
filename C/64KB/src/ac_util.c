@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_util.c — 工具层（第 9 轮，C 独有）
  * 功能：CRC32（0xEDB88320 反射多项式，256 项表懒初始化，可链式

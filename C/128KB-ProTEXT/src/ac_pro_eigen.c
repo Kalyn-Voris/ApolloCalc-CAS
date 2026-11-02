@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_eigen.c — A5 实对称矩阵的全部特征对(n ≤ 12)
 
    幂迭代 + Rayleigh 商 + Hotelling 收缩 deflation。

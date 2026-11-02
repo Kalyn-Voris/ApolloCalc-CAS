@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_ode.c — 常系数线性齐次 ODE 的字符串进,字符串出
 
    v2.3.0 功能 3(C 侧):解析 "y''+3y'+2y=0" 形态 → 特征多项式 → 上游

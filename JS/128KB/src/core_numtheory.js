@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc-CAS · JS/128KB · core_numtheory.js — 数论模块(v2.3.0 功能 1)
  * 算法 1:1 移植 C/128KB/src/ac_numtheory.c(+ ac_numtheory.h 契约注释),
  * 与 C 侧唯一能力差异:安全整数域从 int64 收窄为 Float64 安全整数

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_config.h — Pro 层编译期开关与 .bss 账本常量
 
    Pro 层的每个包装文件都在第一行引入本头文件,从而保证「编译期开关」在所有

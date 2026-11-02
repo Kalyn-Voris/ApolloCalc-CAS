@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_multi.c — 2 变量稀疏多项式 + 子结式 PRS 的 GCD(A1) + 内容提取式因式分解(A2)
 
    方向 A 基础设施。设计说明 §3.1.2:2 变量,总次数 ≤ 6 的单项式数

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_lut_tables.h — sin/cos 1024 项 const 预计算查找表
 
    生成物，勿手编。再生成命令（在 C/128KB-ProTEXT/ 目录下）:

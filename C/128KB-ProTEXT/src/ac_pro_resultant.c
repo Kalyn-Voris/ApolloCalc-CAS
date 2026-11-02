@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_resultant.c — A3 结式(Sylvester 矩阵 + 行列式)
 
    Res_y(f, g) 的数值路径:把 f、g 视为 y 的多项式,系数是 x 的多项式,但本

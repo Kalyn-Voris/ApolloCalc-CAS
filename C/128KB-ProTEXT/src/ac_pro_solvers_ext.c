@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_solvers_ext.c — 内存水位门禁重写 + 数值求根 + 次数路由
 
    阶段一的内存水位门禁重写,阶段二 B1 的数值求根与次数路由。

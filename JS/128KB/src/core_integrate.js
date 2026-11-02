@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_integrate.js — 符号积分
    (v2.4.0 功能 7,JS 侧;对齐 C/128KB-ProTEXT/src/ac_pro_integrate.c B2)
 

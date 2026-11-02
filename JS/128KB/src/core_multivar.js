@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_multivar.js — 二元稀疏多项式（x, y）+ 高阶三角/复数补充，自包含。
    exps 编码与 C 版 ac_pro_term_t 一致：低 4 bit = y，高 4 bit = x；
    MAX_TOTAL_DEG = 6 时不同单项式正好 N(6) = C(8,2) = 28。

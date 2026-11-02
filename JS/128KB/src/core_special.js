@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc-CAS · JS/128KB · core_special.js — 高阶特殊函数：误差函数 erf、伽马函数 gamma、对数伽马 lgamma。自包含。
  *
  * 纯标量数值函数：无池、无寄存器、无递归；加载期与热路径分配均为 0

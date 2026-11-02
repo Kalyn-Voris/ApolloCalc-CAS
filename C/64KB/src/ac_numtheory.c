@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_numtheory.c — 数论层（第 7 轮，C 独有）
  * JS 64KB / JS 128KB 均无此层，测试基准为数学手册标准值。

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_bigdec.c — v2.1.0 方向⑤ 任意精度定点十进制
 
    上游 ac_bigint_t(基数 1e9,20 limb,180 位十进制)之上的定点十进制 dec

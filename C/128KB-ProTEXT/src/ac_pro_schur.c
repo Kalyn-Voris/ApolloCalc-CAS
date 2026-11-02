@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_schur.c — 一般实矩阵全部特征值 + 可选实特征向量
 
    v2.4.0 功能 8:全部特征值(实/复共轭对)与可选实特征向量(反迭代)。

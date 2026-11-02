@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_calculus.js — 数值微积分（文件 7）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：一阶导数（中心差分）、二阶导数（五点公式）、

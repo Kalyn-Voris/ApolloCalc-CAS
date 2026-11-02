@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_evaluator.c — RPN 求值器（第 2 轮）
  * C99 64KB / 静态内存 / Zero-GC：禁 malloc、禁 VLA、禁递归

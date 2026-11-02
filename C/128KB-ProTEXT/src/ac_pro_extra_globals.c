@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_extra_globals.c — Pro 层存储块的唯一定义处
 
    Pro 层存储块的唯一定义处(设计说明 §2.3 判据 2 / 判据 3):

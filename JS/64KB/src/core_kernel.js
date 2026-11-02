@@ -1,42 +1,41 @@
-/* ============================================================
- * ApolloCalc · core_parser.js — Token 解析器（文件 1/4）
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
+/* ApolloCalc · core_parser.js — Token 解析器（文件 1/6）
  * Lite Wearable / JerryScript / 堆上限 64KB / Zero-GC
- * Token 编码: word = (type << 8) | payload ；word === 0 即 T_END 哨兵
- * 铁律：热路径零堆分配、零字符串操作、零递归、零对象字面量
- * ============================================================ */
+ * Token 编码: word = (type << 8) | payload；word === 0 即 T_END 哨兵
+ * 铁律：热路径零堆分配、零字符串操作、零递归、零对象字面量 */
 
-/* ==================== 全局内存池（全内核唯一声明处，后续文件直接引用） ==================== */
-var tokenPool = new Int32Array(256);     /* Token 流 */
+/* 全局内存池：全内核唯一声明处，后续文件直接引用 */
+var tokenPool = new Int32Array(256);
 var tokenCount = 0;
-var numberPool = new Float64Array(128);  /* 数字常量池，Token 只存索引 */
+var numberPool = new Float64Array(128);  /* Token 只存索引 */
 var numberCount = 0;
 var evalStack = new Float64Array(64);    /* RPN 求值栈 */
 var matrixPool = new Float64Array(42);   /* 6 元线性方程组增广矩阵 (6x7) */
 
-/* ---------- 精确数值系统（core_exact.js 使用） ---------- */
+/* 精确数值系统（core_exact.js 使用） */
 var exactNum = 0;          /* 分子 */
 var exactDen = 1;          /* 分母，恒为正 */
 var exactRad = 1;          /* 根号内数（无平方因子），1 表示无根式 */
-var exactIsValid = false;  /* 精确模式有效标志 */
-var approxValue = 0.0;     /* 双精度近似值 */
+var exactIsValid = false;
+var approxValue = 0.0;
 
-/* ---------- 复数临时量（core_complex.js 使用） ---------- */
+/* 复数临时量（core_complex.js 使用） */
 var _tmpRe = 0.0;
 var _tmpIm = 0.0;
 
-/* ---------- 迭代运算寄存器 ---------- */
+/* 迭代运算寄存器 */
 var iterVar = 0;
 var iterStart = 0;
 var iterEnd = 0;
 var iterAccum = 0;
 var iterProd = 1;
 
-/* ---------- 全局状态 ---------- */
+/* 全局状态 */
 var angleMode = "DEG";             /* "DEG" | "RAD" */
 var DEG_TO_RAD = Math.PI / 180;
 var RAD_TO_DEG = 180 / Math.PI;
 
-/* ==================== Token 类型 ==================== */
 var T_END = 0;
 var T_NUM = 1;       /* payload: numberPool 索引 */
 var T_VAR = 2;       /* payload: 0 = x（预留多变量扩展） */
@@ -49,14 +48,14 @@ var T_EQ = 8;
 var T_COMMA = 9;
 var T_UMINUS = 10;
 
-/* ---------- 二元运算符 payload ---------- */
+/* 二元运算符 payload */
 var OP_ADD = 0;
 var OP_SUB = 1;
 var OP_MUL = 2;
 var OP_DIV = 3;
 var OP_POW = 4;
 
-/* ---------- 函数 payload ---------- */
+/* 函数 payload */
 var F_SIN = 1;
 var F_COS = 2;
 var F_TAN = 3;
@@ -70,23 +69,22 @@ var F_LOG = 10;
 var F_EXP = 11;
 var F_ABS = 12;
 
-/* ---------- 常数 payload ---------- */
+/* 常数 payload */
 var C_E = 0;
 var C_PI = 1;
 
-/* ---------- 解析错误码 ---------- */
+/* 解析错误码 */
 var ERR_NONE = 0;
-var ERR_BADCHAR = 1;     /* 非法字符 */
+var ERR_BADCHAR = 1;
 var ERR_OVERFLOW = 2;    /* tokenPool / numberPool 溢出 */
-var ERR_PAREN = 3;       /* 括号不匹配 */
-var ERR_EMPTY = 4;       /* 空表达式 */
+var ERR_PAREN = 3;
+var ERR_EMPTY = 4;
 
-/* ---------- 扫描游标 ---------- */
+/* 扫描游标 */
 var parseError = ERR_NONE;
 var scanPos = 0;
 var scanLen = 0;
 
-/* ==================== 内联助手 ==================== */
 function emitToken(type, payload) {
   if (tokenCount >= 256) { parseError = ERR_OVERFLOW; return -1; }
   tokenPool[tokenCount] = (type << 8) | payload;
@@ -116,11 +114,10 @@ function isUnaryContext(prevType) {
   return (prevType === T_END || prevType === T_OP || prevType === T_LP || prevType === T_EQ || prevType === T_COMMA || prevType === T_UMINUS) ? 1 : 0;
 }
 
-/* ==================== 数字扫描（小数 + 科学计数法） ====================
+/* 数字扫描（小数 + 科学计数法）
  * 直接写 numberPool，返回索引；失败返回 -1
  * Horner 累积 v = v*10 + d；小数只记位数，最后一次性除权还原
- * 'e' 歧义：后跟数字（或 +/- 数字）→ 科学计数法；否则终止扫描，'e' 交回主循环当自然常数
- */
+ * 'e' 歧义：后跟数字（或 +/- 数字）→ 科学计数法；否则终止扫描，'e' 交回主循环当自然常数 */
 function scanNumber(src) {
   var v = 0;
   var fracDigits = 0;
@@ -176,9 +173,8 @@ function scanNumber(src) {
   return pushNumber(v);
 }
 
-/* ==================== 函数名硬编码字符树 ====================
- * 命中：返回函数 ID 并消费字符；未命中：返回 0 且不消费
- */
+/* 函数名硬编码字符树
+ * 命中：返回函数 ID 并消费字符；未命中：返回 0 且不消费 */
 function matchFunction(src) {
   var c0 = src.charCodeAt(scanPos);
   var c1 = (scanPos + 1 < scanLen) ? src.charCodeAt(scanPos + 1) : 0;
@@ -214,11 +210,10 @@ function matchFunction(src) {
   return f;
 }
 
-/* ==================== 主入口：parseExpression ====================
+/* 主入口：parseExpression
  * 输入：表达式字符串（"2x^2+3x-5=0" / "sin(30)"）
  * 输出：tokenPool / numberPool / tokenCount / parseError（全局）
- * 返回：parseError（0 = 成功）
- */
+ * 返回：parseError（0 = 成功） */
 function parseExpression(src) {
   tokenCount = 0;
   numberCount = 0;
@@ -235,10 +230,10 @@ function parseExpression(src) {
   while (scanPos < scanLen) {
     c = src.charCodeAt(scanPos);
 
-    /* ---- 空白 ---- */
+    /* 空白 */
     if (c === 32 || c === 9 || c === 13 || c === 10) { scanPos++; continue; }
 
-    /* ---- 数字 / 小数点 ---- */
+    /* 数字 / 小数点 */
     if ((c >= 48 && c <= 57) || c === 46) {
       f = scanNumber(src);
       if (f < 0) { break; }
@@ -250,7 +245,7 @@ function parseExpression(src) {
       continue;
     }
 
-    /* ---- 负号：'-' / '−'(8722) ---- */
+    /* 负号：'-' / '−'(8722) */
     if (c === 45 || c === 8722) {
       if (isUnaryContext(prevType) === 1) {
         if (emitToken(T_UMINUS, 0) < 0) { break; }
@@ -263,7 +258,7 @@ function parseExpression(src) {
       continue;
     }
 
-    /* ---- 加号：一元正号丢弃 / 二元加 ---- */
+    /* 加号：一元正号丢弃 / 二元加 */
     if (c === 43) {
       if (isUnaryContext(prevType) === 1) { scanPos++; continue; }
       if (emitToken(T_OP, OP_ADD) < 0) { break; }
@@ -323,7 +318,7 @@ function parseExpression(src) {
       continue;
     }
 
-    /* ---- 字母：函数名 / 变量 x / 常数 e / pi ---- */
+    /* 字母：函数名 / 变量 x / 常数 e / pi */
     if ((c >= 97 && c <= 122) || c === 88) {
       f = matchFunction(src);
       if (f > 0) {
@@ -370,7 +365,7 @@ function parseExpression(src) {
       break;
     }
 
-    /* ---- 数学特殊符号 ---- */
+    /* 数学特殊符号 */
     if (c === 8730) {                      /* '√' → sqrt */
       if (canFollowImplicit(prevType, T_FUNC) === 1) {
         if (emitToken(T_OP, OP_MUL) < 0) { break; }
@@ -400,7 +395,7 @@ function parseExpression(src) {
   return ERR_NONE;
 }
 
-/* ==================== UI 层调试输出（唯一允许转字符串处，内核路径禁调） ==================== */
+/* UI 层调试输出（唯一允许转字符串处，内核路径禁调） */
 function funcName(id) {
   if (id === F_SIN) { return "sin"; }
   if (id === F_COS) { return "cos"; }
@@ -447,43 +442,40 @@ function dumpTokenStream() {
   return s;
 }
 
-/* ============================================================
- * ApolloCalc · core_math_functions.js — 数学执行层（文件 2/4）
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
+/* ApolloCalc · core_math_functions.js — 数学执行层（文件 2/6）
  * Lite Wearable / JerryScript / 堆上限 64KB / Zero-GC
  * 依赖文件 1 全局（只引用，不重复声明）：
  *   angleMode("DEG"|"RAD") / DEG_TO_RAD / RAD_TO_DEG
  *   F_SIN..F_ABS 函数 ID
  * 必须在 core_parser.js 之后加载
- * 铁律：热路径零堆分配、零字符串操作、零递归、零对象字面量
- * ============================================================ */
+ * 铁律：热路径零堆分配、零字符串操作、零递归、零对象字面量 */
 
-/* ==================== 文件 2 专属全局变量（唯一声明处） ==================== */
+/* 文件 2 专属全局变量（唯一声明处） */
 var _dmsDeg = 0;    /* 度：带符号整数。分秒恒非负，符号全挂在度上 */
 var _dmsMin = 0;    /* 分：非负整数 0..59 */
 var _dmsSec = 0.0;  /* 秒：非负浮点 [0,60) */
 
-/* ---------- Math.log10 兜底（仅加载期执行一次，热路径不经过） ----------
+/* Math.log10 兜底（仅加载期执行一次，热路径不经过）
  * 个别 JerryScript 裁剪构建未启用 ES6 Math.log10，缺失时以 log*LOG10E 顶替 */
 if (Math.log10 === undefined) {
   Math.log10 = function (v) { return Math.log(v) * Math.LOG10E; };
 }
 
-/* ==================== 模块一：三角函数（DEG / RAD 双模式） ==================== */
+/* 模块一：三角函数（DEG / RAD 双模式） */
 
 function mathSin(v) {
-  /* 零分配：原生 sin，DEG 模式入参乘一次常量，全程栈上完成 */
   if (angleMode === "DEG") { return Math.sin(v * DEG_TO_RAD); }
   return Math.sin(v);
 }
 
 function mathCos(v) {
-  /* 零分配：原生 cos，DEG 模式入参乘一次常量，全程栈上完成 */
   if (angleMode === "DEG") { return Math.cos(v * DEG_TO_RAD); }
   return Math.cos(v);
 }
 
 function mathTan(v) {
-  /* 零分配：原生 tan + 奇点防护，无 GC 压力 */
   var r = 0.0;
   if (angleMode === "DEG") { r = Math.tan(v * DEG_TO_RAD); }
   else { r = Math.tan(v); }
@@ -493,55 +485,47 @@ function mathTan(v) {
 }
 
 function mathAsin(v) {
-  /* 零分配：原生 asin，DEG 模式出参乘 RAD_TO_DEG；|v|>1 由原生返回 NaN 交上层判错 */
   if (angleMode === "DEG") { return Math.asin(v) * RAD_TO_DEG; }
   return Math.asin(v);
 }
 
 function mathAcos(v) {
-  /* 零分配：原生 acos，DEG 模式出参乘 RAD_TO_DEG；|v|>1 由原生返回 NaN 交上层判错 */
   if (angleMode === "DEG") { return Math.acos(v) * RAD_TO_DEG; }
   return Math.acos(v);
 }
 
 function mathAtan(v) {
-  /* 零分配：原生 atan，DEG 模式出参乘 RAD_TO_DEG */
   if (angleMode === "DEG") { return Math.atan(v) * RAD_TO_DEG; }
   return Math.atan(v);
 }
 
 function mathAtan2(y, x) {
-  /* 零分配：原生 atan2 自带全象限判定（含 x=0 边界），DEG 模式出参乘 RAD_TO_DEG */
   if (angleMode === "DEG") { return Math.atan2(y, x) * RAD_TO_DEG; }
   return Math.atan2(y, x);
 }
 
-/* ==================== 模块二：对数 / 指数 / 绝对值 ==================== */
+/* 模块二：对数 / 指数 / 绝对值 */
 
 function mathLn(v) {
-  /* 零分配：原生 log（自然对数），直通 C 底层数学库，不手写泰勒级数 */
   return Math.log(v);
 }
 
 function mathLog10(v) {
-  /* 零分配：原生 log10（缺失时已由加载期兜底接管） */
   return Math.log10(v);
 }
 
 function mathExp(v) {
-  /* 零分配：原生 exp，直接走 C 底层数学库 */
   return Math.exp(v);
 }
 
 function mathAbs(v) {
-  /* 零分配：原生 abs */
   return Math.abs(v);
 }
 
-/* ==================== 模块三：度分秒（D°M′S″）转换 ==================== */
+/* 模块三：度分秒（D°M′S″）转换 */
 
 function degToDms(deg) {
-  /* 零分配：floor + 取余纯算术，结果写全局 _dmsDeg/_dmsMin/_dmsSec，无堆对象无字符串 */
+  /* 结果写全局 _dmsDeg/_dmsMin/_dmsSec（零分配，无字符串） */
   var sign = 1;
   var a = deg;
   var d = 0;
@@ -570,11 +554,11 @@ function dmsToDeg(d, m, s) {
   return d + m / 60.0 + s / 3600.0;
 }
 
-/* ==================== 模块四：函数派发入口 ==================== */
+/* 模块四：函数派发入口 */
 
 /* funcId：文件 1 的 F_* 常量。
  * atan2 双参：arg1 = y（对边），arg2 = x（邻边）；其余函数只读 arg1。
- * 零分配：switch 整型派发直通原生数学，全程栈上完成，无对象创建 */
+ * 零分配：switch 整型派发直通原生数学，无对象创建 */
 function applyFunction(funcId, arg1, arg2) {
   switch (funcId) {
     case F_SIN: return mathSin(arg1);
@@ -593,39 +577,31 @@ function applyFunction(funcId, arg1, arg2) {
   }
 }
 
-/*
- * ApolloCalc 文件 3: core_complex.js
- * 极简复数运算层（零分配），供文件 6 方程求解器使用。
- * 依赖文件 1 已声明的全局结果寄存器 _tmpRe / _tmpIm，此处不重复声明。
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
+/* ApolloCalc · core_complex.js — 极简复数运算层（零分配），供文件 6 方程求解器使用。
+ * 依赖文件 1 已声明的全局结果寄存器 _tmpRe / _tmpIm，此处不重复声明 */
 
-/* ============================================================
- * 文件 3 专属全局变量（唯一声明处）
- * ============================================================ */
-var _aRe = 0.0;   /* 操作数 A 实部 */
-var _aIm = 0.0;   /* 操作数 A 虚部 */
-var _bRe = 0.0;   /* 操作数 B 实部 */
-var _bIm = 0.0;   /* 操作数 B 虚部 */
+/* 文件 3 专属全局变量（唯一声明处） */
+var _aRe = 0.0;
+var _aIm = 0.0;
+var _bRe = 0.0;
+var _bIm = 0.0;
 
-/* ============================================================
- * 模块一：基础四则运算
- * ============================================================ */
+/* 模块一：基础四则运算 */
 
 function cAdd() {
-  /* 零分配：仅操作全局标量，无 GC */
   _tmpRe = _aRe + _bRe;
   _tmpIm = _aIm + _bIm;
 }
 
 function cSub() {
-  /* 零分配：仅操作全局标量，无 GC */
   _tmpRe = _aRe - _bRe;
   _tmpIm = _aIm - _bIm;
 }
 
 function cMul() {
-  /* 零分配：4 次浮点乘加原地完成，用局部 let 暂存避免读写序污染 */
-  /* 零分配：局部标量存放于寄存器/JerryScript 值槽，不进堆 */
+  /* 局部 let 暂存：直接写 _tmpRe 会污染后用的 _aRe/_bRe */
   let re = _aRe * _bRe - _aIm * _bIm;
   let im = _aRe * _bIm + _aIm * _bRe;
   _tmpRe = re;
@@ -633,10 +609,9 @@ function cMul() {
 }
 
 function cDiv() {
-  /* 零分配：分母模平方 + 分子复数乘法展开，无临时对象 */
   let d = _bRe * _bRe + _bIm * _bIm;
   if (d === 0.0) {
-    /* 分母为零：整体置 NaN，交由上层判定无效根 */
+    /* 分母为零：置 NaN，由上层判无效根 */
     _tmpRe = NaN;
     _tmpIm = NaN;
     return;
@@ -647,36 +622,27 @@ function cDiv() {
   _tmpIm = im;
 }
 
-/* ============================================================
- * 模块二：模长、辐角与共轭
- * ============================================================ */
+/* 模块二：模长、辐角与共轭 */
 
 function cAbs() {
-  /* 返回普通 Number，零分配 */
   return Math.sqrt(_aRe * _aRe + _aIm * _aIm);
 }
 
 function cArg() {
-  /* 返回普通 Number，零分配 */
   return Math.atan2(_aIm, _aRe);
 }
 
 function cConj() {
-  /* 零分配：仅翻转虚部符号 */
   _tmpRe = _aRe;
   _tmpIm = -_aIm;
 }
 
-/* ============================================================
- * 模块三：复数开方（核心，精度敏感）
- * ============================================================ */
+/* 模块三：复数开方（核心，精度敏感） */
 
 function cSqrt() {
-  /* 零分配：仅全局标量与局部 let，Math.* 走原生 C 底层 */
   let re = _aRe;
   let im = _aIm;
 
-  /* 零元情形：0 + 0i 的开方仍为 0 + 0i */
   if (re === 0.0 && im === 0.0) {
     _tmpRe = 0.0;
     _tmpIm = 0.0;
@@ -705,17 +671,14 @@ function cSqrt() {
   _tmpIm = sr * Math.sin(half);
 }
 
-/* ============================================================
- * 模块四：复数乘幂（快速幂，平方-乘法）
- * ============================================================ */
+/* 模块四：复数乘幂（快速幂，平方-乘法） */
 
 function cPowInt(n) {
-  /* 零分配：累加器全部为局部 let 标量，平方-乘法无对象产生 */
   let baseRe = _aRe;
   let baseIm = _aIm;
   let exp = n;
 
-  /* 负指数：先取倒数，再按正指数求幂 */
+  /* 负指数：先取倒数转为正指数幂 */
   if (exp < 0) {
     let d = baseRe * baseRe + baseIm * baseIm;
     if (d === 0.0) {
@@ -731,7 +694,6 @@ function cPowInt(n) {
     exp = -exp;
   }
 
-  /* 结果累加器初始化为 1 + 0i */
   let accRe = 1.0;
   let accIm = 0.0;
 
@@ -739,7 +701,6 @@ function cPowInt(n) {
   let e = exp;
   for (;;) {
     if ((e & 1) === 1) {
-      /* acc = acc * base（4 次浮点乘加，局部标量暂存） */
       let nRe = accRe * baseRe - accIm * baseIm;
       let nIm = accRe * baseIm + accIm * baseRe;
       accRe = nRe;
@@ -749,7 +710,6 @@ function cPowInt(n) {
     if (e === 0) {
       break;
     }
-    /* base = base * base（原地平方） */
     let sqRe = baseRe * baseRe - baseIm * baseIm;
     let sqIm = 2.0 * baseRe * baseIm;
     baseRe = sqRe;
@@ -760,12 +720,10 @@ function cPowInt(n) {
   _tmpIm = accIm;
 }
 
-/* ============================================================
- * 模块五：复位辅助
- * ============================================================ */
+/* 模块五：复位辅助 */
 
 function cReset() {
-  /* 零分配：六寄存器整体清零，供方程求解器每轮迭代前调用 */
+  /* 六寄存器整体清零；求解器每轮迭代前调用 */
   _aRe = 0.0;
   _aIm = 0.0;
   _bRe = 0.0;
@@ -774,25 +732,22 @@ function cReset() {
   _tmpIm = 0.0;
 }
 
-/* ============================================================
- * ApolloCalc 文件 4：core_exact.js
- * 双模态精确数值系统（精确分数/根式 <-> 8 位小数近似）
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
+/* ApolloCalc · core_exact.js — 双模态精确数值系统（精确分数/根式 <-> 8 位小数近似）
  * 内部表示固定为：(exactNum / exactDen) * √(exactRad)
  *   - exactDen 恒为正整数
  *   - exactRad 为无平方因子的正整数（1 表示无根式）
  *   - 任一分量超出 9007199254740991（2^53-1）即置 exactIsValid = false
- * 本文件直接引用文件 1（core_parser.js）已声明的全局变量：
+ * 直接引用文件 1（core_parser.js）已声明的全局变量：
  *   exactNum / exactDen / exactRad / exactIsValid / approxValue
- * 本文件无需额外全局暂存量：所有中间量均为函数内 let 标量（零分配）。
- * ============================================================
+ * 无需额外全局暂存：所有中间量均为函数内 let 标量（零分配）
  */
 
-/* ============================================================
- * 模块一：基础工具
- * ============================================================ */
+/* 模块一：基础工具 */
 
 function exactGcd(a, b) {
-  /* 欧几里得算法（迭代版）：零分配，仅局部标量，无递归 */
+  /* 欧几里得算法（迭代版，无递归） */
   let x = a;
   let y = b;
   let t = 0;
@@ -805,7 +760,7 @@ function exactGcd(a, b) {
 }
 
 function exactSimplifyFraction() {
-  /* 零分配：原地约分 exactNum / exactDen，保证分母恒为正 */
+  /* 原地约分；保证分母恒为正 */
   if (exactDen === 0) {
     /* 分母为零非法：精确模式失效 */
     exactIsValid = false;
@@ -832,11 +787,11 @@ function exactSimplifyFraction() {
 function exactSimplifyRadical(D) {
   /* 提取完全平方因子：返回外系数 k，原地写 exactRad 为无平方因子部分
      试除法：命中 i*i 即从 D 中除尽、外系数乘 i
-     零分配：仅局部标量 d / k / i */
+     仅局部标量 d / k / i（零分配） */
   let d = D;
   let k = 1;
   if (d <= 0) {
-    /* 调用方保证 D >= 0；D === 0 时外系数为 0，根号内置 1 */
+    /* 调用方保证 D >= 0；D === 0 时外系数 0、根号内 1 */
     exactRad = 1;
     return 0;
   }
@@ -850,12 +805,10 @@ function exactSimplifyRadical(D) {
   return k;
 }
 
-/* ============================================================
- * 模块二：智能构造函数（规范化入口）
- * ============================================================ */
+/* 模块二：智能构造函数（规范化入口） */
 
 function exactSetFraction(n, d) {
-  /* 设置精确数值为分数 n/d；零分配，原地更新 exactNum/exactDen/exactRad */
+  /* 设置精确数值为分数 n/d（原地更新三个全局量） */
   if (d === 0) {
     exactInvalidate();
     return;
@@ -863,7 +816,7 @@ function exactSetFraction(n, d) {
   let an = n < 0 ? -n : n;
   let ad = d < 0 ? -d : d;
   if (an > 9007199254740991 || ad > 9007199254740991) {
-    /* 分量超限：精确模式失效，保留近似值供显示层兜底 */
+    /* 分量超限：精确模式失效，仍写 approxValue 供显示层兜底 */
     exactIsValid = false;
     approxValue = n / d;
     return;
@@ -877,7 +830,7 @@ function exactSetFraction(n, d) {
 }
 
 function exactSetRadical(k, m) {
-  /* 设置精确数值为 k√m；零分配，原地更新 */
+  /* 设置精确数值为 k√m（原地更新） */
   if (m < 0) {
     /* 负数开方产生复数，不进入精确系统 */
     exactInvalidate();
@@ -921,7 +874,7 @@ function exactSetRadical(k, m) {
 }
 
 function exactSetPureReal(v) {
-  /* 设置精确数值为浮点数 v：仅整数可进入精确系统，其余只保留近似值 */
+  /* 设置精确数值为浮点 v：仅整数可进入精确系统，其余只留近似值 */
   if (v === Math.floor(v) && v <= 9007199254740991 && v >= -9007199254740991) {
     exactSetFraction(v, 1);
     return;
@@ -931,12 +884,12 @@ function exactSetPureReal(v) {
 }
 
 function exactInvalidate() {
-  /* 精确模式失效：仅保留 approxValue（调用方负责同步） */
+  /* 精确模式失效（调用方负责同步 approxValue） */
   exactIsValid = false;
 }
 
 function exactReset() {
-  /* 复位全部精确数值状态（零分配，纯标量赋值） */
+  /* 复位全部精确数值状态 */
   exactNum = 0;
   exactDen = 1;
   exactRad = 1;
@@ -944,23 +897,19 @@ function exactReset() {
   approxValue = 0;
 }
 
-/* ============================================================
- * 模块三：近似值同步
- * ============================================================ */
+/* 模块三：近似值同步 */
 
 function exactUpdateApprox() {
-  /* 零分配：仅浮点运算，approxValue 原地重算 */
+  /* approxValue 原地重算 */
   approxValue = (exactNum / exactDen) * Math.sqrt(exactRad);
 }
 
-/* ============================================================
- * 模块四：精确数值的四则运算（原地更新 exactNum/exactDen/exactRad）
- * ============================================================ */
+/* 模块四：精确数值的四则运算（原地更新 exactNum/exactDen/exactRad） */
 
 function exactAdd(num2, den2, rad2) {
   /* 当前精确数 + (num2/den2)·√rad2
      仅纯分数（exactRad === rad2 === 1）可精确相加，其余失效
-     零分配：交叉相乘全部使用局部标量，先溢出预检再写全局 */
+     交叉相乘用局部标量；先溢出预检，再写全局 */
   if (!exactIsValid) {
     exactInvalidate();
     return;
@@ -985,7 +934,7 @@ function exactAdd(num2, den2, rad2) {
   }
   let p1 = exactNum * den2;      /* n1*d2，模已验 ≤ 2^53-1，精确 */
   let p2 = num2 * exactDen;      /* n2*d1，同上 */
-  /* 同号相加结果可能越过 2^53：用减法预检（差值本身精确） */
+  /* 同号相加可能越过 2^53：改用减法预检（差值本身精确） */
   if ((p1 >= 0 && p2 >= 0) || (p1 < 0 && p2 < 0)) {
     let ap1 = p1 < 0 ? -p1 : p1;
     let ap2 = p2 < 0 ? -p2 : p2;
@@ -1001,7 +950,7 @@ function exactAdd(num2, den2, rad2) {
 }
 
 function exactSub(num2, den2, rad2) {
-  /* 当前精确数 - (num2/den2)·√rad2：与 exactAdd 对称，硬编码展开 */
+  /* 当前精确数 - (num2/den2)·√rad2；与 exactAdd 对称但展开硬编码 */
   if (!exactIsValid) {
     exactInvalidate();
     return;
@@ -1149,14 +1098,12 @@ function exactDiv(num2, den2, rad2) {
   exactUpdateApprox();
 }
 
-/* ============================================================
- * 模块五：从判别式 D 提取精确根
- * ============================================================ */
+/* 模块五：从判别式 D 提取精确根 */
 
 function exactFromDiscriminant(D) {
-  /* 文件 5 方程求解器接口：由判别式 D 提取 √D = (num/den)·√rad
+  /* 文件 6 方程求解器接口：由判别式 D 提取 √D = (num/den)·√rad
      D < 0（复数根）或非有限值不进入精确系统
-     零分配：仅局部标量 */
+     仅局部标量（零分配） */
   if (!isFinite(D) || D < 0) {
     exactInvalidate();
     return;
@@ -1167,7 +1114,7 @@ function exactFromDiscriminant(D) {
     return;
   }
   if (D === Math.floor(D)) {
-    /* 整数判别式：直接化简根式 k√m（exactSimplifyRadical 原地写 exactRad） */
+    /* 整数判别式：直接化简为 k√m（exactSimplifyRadical 原地写 exactRad） */
     if (D > 9007199254740991) {
       exactInvalidate();
       return;
@@ -1179,7 +1126,7 @@ function exactFromDiscriminant(D) {
     exactUpdateApprox();
     return;
   }
-  /* 简单分数判定：寻找最小分母 d 使 D*d 为整数（D>0，无符号负担） */
+  /* 简单分数判定：找最小 d 使 D*d 为整数（D > 0，无符号负担） */
   let foundDen = 0;
   let foundNum = 0;
   for (let d = 2; d <= 1000000; d++) {
@@ -1214,6 +1161,8 @@ function exactFromDiscriminant(D) {
   exactUpdateApprox();
 }
 
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ============================================================
  * ApolloCalc · core_evaluator.js — RPN 求值器（文件 5/6）
  * Lite Wearable / JerryScript / 堆上限 64KB / Zero-GC
@@ -1222,19 +1171,19 @@ function exactFromDiscriminant(D) {
  * 铁律：热路径零堆分配、零字符串操作、零递归、零对象/数组字面量
  * ============================================================ */
 
-/* ==================== 文件 5 专属全局变量（唯一声明处） ==================== */
-var _rpnLen = 0;                          /* 逆波兰 Token 流长度 */
+/* 文件 5 专属全局变量（唯一声明处） */
+var _rpnLen = 0;
 var _rpnToken = new Int32Array(256);      /* 逆波兰 Token 流（与 tokenPool 同编码） */
-var _evalX = 0.0;                         /* 当前代入的 x 值 */
+var _evalX = 0.0;
 var _evalError = 0;                       /* 0=OK 1=除零 2=域错误 3=溢出 4=内部错 */
-var _evalResult = 0.0;                    /* 最近一次求值结果 */
-var _evalSp = 0;                          /* evalStack 栈指针 */
+var _evalResult = 0.0;
+var _evalSp = 0;
 
 var _opStack = new Int32Array(64);        /* Shunting-yard 运算符栈（存完整 Token word） */
-var _opSp = 0;                            /* 运算符栈指针 */
+var _opSp = 0;
 
-var _lhsToken = new Int32Array(128);      /* 方程等号左侧 Token 段 */
-var _rhsToken = new Int32Array(128);      /* 方程等号右侧 Token 段 */
+var _lhsToken = new Int32Array(128);
+var _rhsToken = new Int32Array(128);
 var _lhsCount = 0;
 var _rhsCount = 0;
 var _lhsResult = 0.0;
@@ -1242,11 +1191,9 @@ var _rhsResult = 0.0;
 
 var _coeffs = new Float64Array(5);        /* 多项式系数 [常数项..最高次项] */
 
-/* ==================== 内联助手：运算符优先级（整数化，×2 避开 2.5） ====================
- * +− = 2   ×÷ = 4   一元负号 = 5（高于乘除低于乘方）   ^ = 6
+/* 运算符优先级（整数化 ×2，避开 2.5；+− = 2  ×÷ = 4  一元负号 = 5  ^ = 6）
  * 右结合：^ 与 T_UMINUS；其余左结合
- * 返回 0 表示该 Token 不是可比较优先级的运算符（LP / FUNC 等）
- */
+ * 返回 0 表示该 Token 不是可比较优先级的运算符（LP / FUNC 等） */
 function opPrec(word) {
   var t = word >> 8;
   var p = word & 255;
@@ -1259,11 +1206,10 @@ function opPrec(word) {
   return 0;
 }
 
-/* ==================== 模块一：Shunting-yard 中缀转后缀 ====================
- * 读取 srcPool[0..srcCount-1]，输出到 dstPool[0.._rpnLen-1]，返回 _rpnLen
- * 运算符栈 _opStack 存完整 Token word（一元负号入栈时无条件压栈，
- * 保证 a^-b 不弹缺右操作数的 ^）；方程等号必须由 evalEquationAt 分段后传入
- */
+/* 模块一：Shunting-yard 中缀转后缀
+ * 读 srcPool[0..srcCount-1]，写 dstPool[0.._rpnLen-1]，返回 _rpnLen
+ * 一元负号入栈时无条件压栈：保证 a^-b 不会把 ^ 弹走导致缺右操作数
+ * 方程等号必须先由 evalEquationAt 分段后传入 */
 function toRPN(srcPool, srcCount, dstPool) {
   _rpnLen = 0;
   _opSp = 0;
@@ -1279,7 +1225,7 @@ function toRPN(srcPool, srcCount, dstPool) {
     t = w >> 8;
     p = w & 255;
 
-    /* ---- 操作数：直接输出 ---- */
+    /* 操作数：直接输出 */
     if (t === T_NUM || t === T_VAR || t === T_CONST) {
       if (_rpnLen >= 256) { _evalError = 4; return _rpnLen; }
       dstPool[_rpnLen] = w;
@@ -1287,7 +1233,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 函数 / 左括号 / 一元负号：无条件压栈 ---- */
+    /* 函数 / 左括号 / 一元负号：无条件压栈 */
     if (t === T_FUNC || t === T_LP || t === T_UMINUS) {
       if (_opSp >= 64) { _evalError = 4; return _rpnLen; }
       _opStack[_opSp] = w;
@@ -1295,7 +1241,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 右括号：弹到左括号；括号前若是函数则一并弹出 ---- */
+    /* 右括号：弹到左括号；括号前若是函数则一并弹出 */
     if (t === T_RP) {
       while (_opSp > 0) {
         _opSp--;
@@ -1315,7 +1261,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 逗号：弹到左括号（双参函数参数分隔，如 atan2） ---- */
+    /* 逗号：弹到左括号（双参函数参数分隔，如 atan2） */
     if (t === T_COMMA) {
       while (_opSp > 0 && (_opStack[_opSp - 1] >> 8) !== T_LP) {
         _opSp--;
@@ -1327,7 +1273,7 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 二元运算符：按优先级弹栈后压栈 ---- */
+    /* 二元运算符：按优先级弹栈后压栈 */
     if (t === T_OP) {
       cur = w;
       /* OP_POW 右结合，+−×÷ 左结合 */
@@ -1351,11 +1297,11 @@ function toRPN(srcPool, srcCount, dstPool) {
       continue;
     }
 
-    /* ---- 等号不该流到这里：必须先经 evalEquationAt 分段 ---- */
+    /* 等号不该流到这里：必须先经 evalEquationAt 分段 */
     if (t === T_EQ) { _evalError = 4; return _rpnLen; }
   }
 
-  /* ---- 收尾：清空运算符栈；残余左括号 = 括号不匹配 ---- */
+  /* 收尾：清空运算符栈；残余左括号 = 括号不匹配 */
   while (_opSp > 0) {
     _opSp--;
     if ((_opStack[_opSp] >> 8) === T_LP) { _evalError = 4; return _rpnLen; }
@@ -1366,10 +1312,9 @@ function toRPN(srcPool, srcCount, dstPool) {
   return _rpnLen;
 }
 
-/* ==================== 模块二：RPN 求值器 ====================
- * 读取 rpnPool[0..rpnLen-1]，evalStack + _evalSp 栈式求值
- * 结果写 _evalResult 并返回；任何错误置 _evalError 后立即返回 NaN
- */
+/* 模块二：RPN 求值器
+ * 读 rpnPool[0..rpnLen-1]，用 evalStack + _evalSp 栈式求值
+ * 结果写 _evalResult 并返回；任何错误置 _evalError 后立即返回 NaN */
 function evalRPN(rpnPool, rpnLen) {
   _evalSp = 0;
   var w = 0;
@@ -1385,7 +1330,7 @@ function evalRPN(rpnPool, rpnLen) {
     t = w >> 8;
     p = w & 255;
 
-    /* ---- 压栈类操作数 ---- */
+    /* 压栈类操作数 */
     if (t === T_NUM) {
       if (_evalSp >= 64) { _evalError = 3; return NaN; }    /* 栈溢出 */
       evalStack[_evalSp] = numberPool[p];
@@ -1405,14 +1350,14 @@ function evalRPN(rpnPool, rpnLen) {
       continue;
     }
 
-    /* ---- 一元负号 ---- */
+    /* 一元负号 */
     if (t === T_UMINUS) {
       if (_evalSp < 1) { _evalError = 4; return NaN; }      /* 栈下溢 */
       evalStack[_evalSp - 1] = -evalStack[_evalSp - 1];     /* 原地取负，栈深不变 */
       continue;
     }
 
-    /* ---- 双参函数 atan2(y, x)：先弹 x 后弹 y ---- */
+    /* 双参函数 atan2(y, x)：先弹 x 后弹 y */
     if (t === T_FUNC && p === F_ATAN2) {
       if (_evalSp < 2) { _evalError = 4; return NaN; }
       b = evalStack[--_evalSp];                              /* x */
@@ -1425,7 +1370,7 @@ function evalRPN(rpnPool, rpnLen) {
       continue;
     }
 
-    /* ---- 单参函数 ---- */
+    /* 单参函数 */
     if (t === T_FUNC) {
       if (_evalSp < 1) { _evalError = 4; return NaN; }
       a = evalStack[--_evalSp];
@@ -1438,7 +1383,7 @@ function evalRPN(rpnPool, rpnLen) {
       continue;
     }
 
-    /* ---- 二元运算符：右操作数先弹 ---- */
+    /* 二元运算符：右操作数先弹 */
     if (t === T_OP) {
       if (_evalSp < 2) { _evalError = 4; return NaN; }
       b = evalStack[--_evalSp];
@@ -1462,13 +1407,13 @@ function evalRPN(rpnPool, rpnLen) {
     }
   }
 
-  /* ---- 收尾：栈上必须恰好剩一个结果 ---- */
+  /* 收尾：栈上必须恰好剩一个结果 */
   if (_evalSp !== 1) { _evalError = 4; return NaN; }
   _evalResult = evalStack[0];
   return _evalResult;
 }
 
-/* ==================== 模块三：求值入口 ==================== */
+/* 模块三：求值入口 */
 
 /* 单表达式入口：tokenPool / tokenCount 已由 parseExpression 填充（无等号） */
 function evalExpressionAt(x) {
@@ -1500,13 +1445,11 @@ function evalEquationAt(x) {
   for (i = 0; i < _lhsCount; i++) { _lhsToken[i] = tokenPool[i]; }
   for (i = 0; i < _rhsCount; i++) { _rhsToken[i] = tokenPool[eqPos + 1 + i]; }
 
-  /* 左侧 f(x) */
   _rpnLen = toRPN(_lhsToken, _lhsCount, _rpnToken);
   if (_evalError !== 0) { _evalResult = NaN; return NaN; }
   _lhsResult = evalRPN(_rpnToken, _rpnLen);
   if (_evalError !== 0) { _evalResult = NaN; return NaN; }
 
-  /* 右侧 g(x) */
   _rpnLen = toRPN(_rhsToken, _rhsCount, _rpnToken);
   if (_evalError !== 0) { _evalResult = NaN; return NaN; }
   _rhsResult = evalRPN(_rpnToken, _rpnLen);
@@ -1516,12 +1459,11 @@ function evalEquationAt(x) {
   return _evalResult;
 }
 
-/* ==================== 模块四：多项式系数提取（数值采样 + 高斯消元） ====================
- * 把当前方程 f(x)=0（或 f(x)=g(x) 已转差）在 maxDegree+1 个采样点上求值，
+/* 模块四：多项式系数提取（数值采样 + 高斯消元）
+ * 在 maxDegree+1 个采样点上求值当前方程 f(x)=0（f(x)=g(x) 已转差），
  * 解范德蒙德方程组得幂基系数，写入 _coeffs[0..maxDegree]（常数项→最高次）
- * 内存策略：增广矩阵复用 matrixPool 前 30 个元素（5x6，行主序，步长 maxDegree+2）
- * 返回 0 = 成功；否则返回错误码且 _coeffs 已清零
- */
+ * 内存策略：增广矩阵复用 matrixPool 前 30 元素（5x6，行主序，步长 maxDegree+2）
+ * 返回 0 = 成功；否则返回错误码且 _coeffs 已清零 */
 function extractCoefficients(maxDegree) {
   var n = maxDegree + 1;               /* 采样点数 = 方程组元数 */
   var stride = n + 1;                  /* 增广矩阵行宽 */
@@ -1536,7 +1478,7 @@ function extractCoefficients(maxDegree) {
   for (i = 0; i < 5; i++) { _coeffs[i] = 0.0; }
   if (maxDegree < 1 || maxDegree > 4) { _evalError = 4; return _evalError; }
 
-  /* ---- 采样并构造增广矩阵：第 k 行 = [1, xk, xk², .., xkⁿ⁻¹ | y_k] ----
+  /* 采样并构造增广矩阵：第 k 行 = [1, xk, xk², .., xkⁿ⁻¹ | y_k]
    * 幂用循环累乘（内存策略：仅标量累加器，避免 Math.pow 调用开销） */
   for (k = 0; k < n; k++) {
     xk = k - maxDegree / 2;            /* 小整数/半整数采样点，如 4 次取 −2..2 */
@@ -1554,7 +1496,7 @@ function extractCoefficients(maxDegree) {
     matrixPool[base + maxDegree + 1] = y;
   }
 
-  /* ---- 高斯消元（列主元部分选主，显式循环，零递归） ---- */
+  /* 高斯消元（列主元部分选主，显式循环，零递归） */
   var col = 0;
   var row = 0;
   var piv = 0;
@@ -1576,7 +1518,7 @@ function extractCoefficients(maxDegree) {
       _evalError = 4;
       return _evalError;
     }
-    if (piv !== col) {                 /* 整行交换 */
+    if (piv !== col) {                 
       for (c = 0; c < stride; c++) {
         v = matrixPool[col * stride + c];
         matrixPool[col * stride + c] = matrixPool[piv * stride + c];
@@ -1593,7 +1535,7 @@ function extractCoefficients(maxDegree) {
     }
   }
 
-  /* ---- 回代（内存策略：结果直接落 _coeffs，不建临时数组） ---- */
+  /* 回代（内存策略：结果直接落 _coeffs，不建临时数组） */
   var s = 0.0;
   for (i = n - 1; i >= 0; i--) {
     s = matrixPool[i * stride + n];
@@ -1607,8 +1549,7 @@ function extractCoefficients(maxDegree) {
   return 0;
 }
 
-/* ==================== 模块五：复位 ====================
- * 方程求解器每轮求解前调用（内存策略：只清标量与预分配数组，零分配） */
+/* 模块五：复位 — 求解器每轮求解前调用（只清标量与预分配数组，零分配） */
 function evaluatorReset() {
   _rpnLen = 0;
   _evalSp = 0;
@@ -1627,8 +1568,9 @@ function evaluatorReset() {
   _coeffs[4] = 0.0;
 }
 
-/* ============================================================
- * ApolloCalc · core_solvers.js — 方程求解器（文件 6/6，内核最终层）
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
+/* ApolloCalc · core_solvers.js — 方程求解器（文件 6/6，内核最终层）
  * Lite Wearable / JerryScript / 堆上限 64KB / Zero-GC
  * 职责：二次/三次/四次多项式求根、线性方程组高斯消元、残差回验、
  *       OOM 安全防护（深度/函数数/变量数/次数/多元非线性/内存水位）
@@ -1637,40 +1579,37 @@ function evaluatorReset() {
  *       文件 4 exactFromDiscriminant / exactSetFraction / exactSimplifyFraction
  *       文件 5 evalEquationAt（残差回验）
  * 铁律：热路径零堆分配、零字符串操作、零递归、零对象/数组字面量
- *       全部中间量为函数内 var 标量，求解过程不产生任何临时 JS 堆对象
- * ============================================================ */
+ *       全部中间量为函数内 var 标量，求解过程不产生任何临时 JS 堆对象 */
 
-/* ==================== 文件 6 专属全局变量（唯一声明处） ==================== */
-var _rootCount = 0;                       /* 当前根数量（0..6） */
-var _rootRe = new Float64Array(6);        /* 各根实部（6 槽 = solveLinearSystem 的 n 上限） */
-var _rootIm = new Float64Array(6);        /* 各根虚部 */
-var _rootExactNum = new Float64Array(6);  /* 精确形式分子 */
-var _rootExactDen = new Float64Array(6);  /* 精确形式分母（恒为正） */
-var _rootExactRad = new Float64Array(6);  /* 精确形式根号内数（无平方因子） */
-var _rootExactValid = new Int32Array(6);  /* 各根精确形式有效标志（1=支持 0=不支持） */
+/* 文件 6 专属全局变量（唯一声明处） */
+var _rootCount = 0;
+var _rootRe = new Float64Array(6);        /* 6 槽 = solveLinearSystem 的 n 上限 */
+var _rootIm = new Float64Array(6);
+var _rootExactNum = new Float64Array(6);
+var _rootExactDen = new Float64Array(6);  /* 恒为正 */
+var _rootExactRad = new Float64Array(6);  /* 无平方因子 */
+var _rootExactValid = new Int32Array(6);  /* 1=支持 0=不支持 */
 var _solveError = 0;                      /* 0=OK 1=次数过高 2=多元非线性拒绝 3=求解失败 4=内存水位过高 */
 var _residualMax = 0.0;                   /* 残差回验最大相对误差（UI 层决定是否告警） */
 
 /* 精确系统分量上限（2^53-1，与文件 4 保持一致） */
 var SOLVER_INT_MAX = 9007199254740991;
 
-/* ==================== 内联助手：带符号立方根 ====================
- * Math.cbrt 在 JerryScript 上不保证可用，用 pow(1/3) 手工实现
- * 零分配：纯标量
- */
+/* 内联助手：带符号立方根
+ * Math.cbrt 在 JerryScript 上不保证可用，故用 pow(1/3) 手工实现
+ * 零分配：纯标量 */
 function cbrtSigned(x) {
   if (x === 0.0) { return 0.0; }
   if (x > 0.0) { return Math.pow(x, 1.0 / 3.0); }
   return -Math.pow(-x, 1.0 / 3.0);
 }
 
-/* ==================== 模块一：二次方程求解器 ====================
+/* 模块一：二次方程求解器
  * 输入 _coeffs[0..2] = [c, b, a]，即 ax² + bx + c = 0
  * D ≥ 0：两实根，精确形式经 exactFromDiscriminant(D) 组装
  * D < 0：共轭复根，精确形式置无效
  * 退化 a=0：降为线性（单根，整数系数时保留精确分数）
- * 返回 _solveError（0 = 成功）
- */
+ * 返回 _solveError（0 = 成功） */
 function solveQuadratic() {
   _rootCount = 0;
   _solveError = 0;
@@ -1680,7 +1619,7 @@ function solveQuadratic() {
   var a = _coeffs[2];
   if (!isFinite(a) || !isFinite(b) || !isFinite(c)) { _solveError = 3; return _solveError; }
 
-  /* ---- 退化：a = 0 → 线性方程 bx + c = 0 ---- */
+  /* 退化：a = 0 → 线性方程 bx + c = 0 */
   if (a === 0.0) {
     if (b === 0.0) {
       if (c === 0.0) { _solveError = 3; return _solveError; }  /* 恒等式：无穷多根无法枚举 */
@@ -1710,7 +1649,7 @@ function solveQuadratic() {
   var twoA = 2.0 * a;
 
   if (D >= 0.0) {
-    /* ---- 两实根：x = (-b ± √D) / 2a ---- */
+    /* 两实根：x = (-b ± √D) / 2a */
     var sq = Math.sqrt(D);
     _rootRe[0] = (-b + sq) / twoA;
     _rootRe[1] = (-b - sq) / twoA;
@@ -1718,7 +1657,7 @@ function solveQuadratic() {
     _rootIm[1] = 0.0;
     _rootCount = 2;
 
-    /* ---- 精确形式组装 ----
+    /* 精确形式组装
      * √D = (n/d)·√r（d>0，来自 exactFromDiscriminant）
      * 内存策略：r=1（D 为有理数平方）→ 纯分数 (−b·d ± n)/(2a·d)；
      *          b=0 → 纯根式 (±n)/(2a·d)·√r；
@@ -1798,7 +1737,7 @@ function solveQuadratic() {
       }
     }
   } else {
-    /* ---- 共轭复根：x = (-b ± i√|D|) / 2a ---- */
+    /* 共轭复根：x = (-b ± i√|D|) / 2a */
     var sqI = Math.sqrt(-D);
     var reC = -b / twoA;
     var imC = sqI / twoA;
@@ -1813,15 +1752,14 @@ function solveQuadratic() {
   return 0;
 }
 
-/* ==================== 模块二：三次方程求解器（卡尔达诺 + 三角切换） ====================
+/* 模块二：三次方程求解器（卡尔达诺 + 三角切换）
  * 输入 _coeffs[0..3] = [d, c, b, a]，即 ax³ + bx² + cx + d = 0
  * 消去二次项：x = y − b/(3a) → y³ + py + q = 0
  * Δ > 0：一实根 + 共轭复对（卡尔达诺，全实标量路径——Δ>0 时 u³/v³ 皆为实数，
  *        不产生复数中间量，cSqrt/cPowInt 在本路径无调用点）
  * Δ = 0：三实根（含重根）
  * Δ < 0：不可约情形，必须切换三角法（卡尔达诺会因复数中间量丢失精度）
- * 三次方程不支持精确形式，_rootExactValid 全 0
- */
+ * 三次方程不支持精确形式，_rootExactValid 全 0 */
 function solveCubic() {
   _rootCount = 0;
   _solveError = 0;
@@ -1852,7 +1790,7 @@ function solveCubic() {
   var tolD = 1e-14 * (Math.abs(qh * qh) + Math.abs(p3c));
 
   if (dlt > tolD) {
-    /* ---- Δ > 0：卡尔达诺 ----
+    /* Δ > 0：卡尔达诺
      * 内存策略：u/v 为带符号实立方根标量，无复数对象 */
     var sD = Math.sqrt(dlt);
     var u = cbrtSigned(-qh + sD);
@@ -1867,7 +1805,7 @@ function solveCubic() {
     _rootIm[2] = -imS;
     _rootCount = 3;
   } else if (dlt >= -tolD) {
-    /* ---- Δ = 0：三实根（y1 = 2∛(−q/2) 单根，y2 = y3 = −∛(−q/2) 二重根） ---- */
+    /* Δ = 0：三实根（y1 = 2∛(−q/2) 单根，y2 = y3 = −∛(−q/2) 二重根） */
     var t0 = cbrtSigned(-qh);
     _rootRe[0] = 2.0 * t0 + off;
     _rootRe[1] = -t0 + off;
@@ -1877,7 +1815,7 @@ function solveCubic() {
     _rootIm[2] = 0.0;
     _rootCount = 3;
   } else {
-    /* ---- Δ < 0 不可约：三角法 ----
+    /* Δ < 0 不可约：三角法
      * y_k = 2√(−p/3)·cos(θ − 2πk/3)，θ = acos((3q)/(2p)·√(−3/p))/3
      * 内存策略：纯标量，acos 入参钳位到 [−1,1] 防浮点越界 */
     var mm = 2.0 * Math.sqrt(-p3);
@@ -1902,7 +1840,7 @@ function solveCubic() {
   return 0;
 }
 
-/* ==================== 模块三：四次方程求解器（笛卡尔分解法） ====================
+/* 模块三：四次方程求解器（笛卡尔分解法）
  * 输入 _coeffs[0..4] = [e, d, c, b, a]，即 ax⁴ + bx³ + cx² + dx + e = 0
  * 消去三次项：x = y − b/(4a) → y⁴ + py² + qy + r = 0
  * q ≈ 0 退化：双二次 z² + pz + r = 0（z = y²），逐 z 用 cSqrt 开方
@@ -1913,8 +1851,7 @@ function solveCubic() {
  *   两个二次因式的 4 个 y 根合成后平移回 x
  * 注意：预解/因式二次复用 _coeffs 传参（原系数已缓存为局部标量），
  *       求解完成后 _coeffs 不再是原四次系数
- * 四次方程不支持精确形式，_rootExactValid 全 0
- */
+ * 四次方程不支持精确形式，_rootExactValid 全 0 */
 function solveQuartic() {
   _rootCount = 0;
   _solveError = 0;
@@ -1945,7 +1882,7 @@ function solveQuartic() {
   var i = 0;
 
   if (Math.abs(q) < qTol) {
-    /* ---- 双二次退化路径：z² + pz + r = 0，z = y² ----
+    /* 双二次退化路径：z² + pz + r = 0，z = y²
      * 内存策略：z 根先缓存为局部标量再展开写回，避免读写区重叠；
      * 每个 z 用 cSqrt 开方（负 z 自动落到正虚部分支），正负两根就地取反 */
     _coeffs[0] = r;
@@ -1973,7 +1910,7 @@ function solveQuartic() {
     _rootIm[3] = -_tmpIm;
     _rootCount = 4;
   } else {
-    /* ---- 一般路径：预解三次 → 待定系数分解 ----
+    /* 一般路径：预解三次 → 待定系数分解
      * 内存策略：m/α/β/γ 全为标量；两因式根用 _rootRe[0..3] 就地接力
      * （因式1 根暂存 [2..3]，因式2 根落 [0..1]），零临时数组 */
     _coeffs[0] = -q * q / 8.0;
@@ -2019,7 +1956,7 @@ function solveQuartic() {
     _rootCount = 4;
   }
 
-  /* ---- 平移回 x = y + off；四次方程不支持精确形式 ---- */
+  /* 平移回 x = y + off；四次方程不支持精确形式 */
   for (i = 0; i < 4; i++) {
     _rootRe[i] = _rootRe[i] + off;
     _rootExactValid[i] = 0;
@@ -2027,12 +1964,11 @@ function solveQuartic() {
   return 0;
 }
 
-/* ==================== 模块四：线性方程组求解器（列主元高斯消元） ====================
+/* 模块四：线性方程组求解器（列主元高斯消元）
  * 输入 matrixPool 前 n·(n+1) 个元素：增广矩阵（行主序，1 ≤ n ≤ 6）
  * 列主元选取 → 行交换 → 消元 → 回代，结果写 _rootRe[0..n-1]
  * 主元 |·| < 1e-12 → 奇异，_solveError = 3
- * 内存策略：原地作用于 matrixPool，零复制零分配
- */
+ * 内存策略：原地作用于 matrixPool，零复制零分配 */
 function solveLinearSystem(n) {
   _rootCount = 0;
   _solveError = 0;
@@ -2096,14 +2032,13 @@ function solveLinearSystem(n) {
   return 0;
 }
 
-/* ==================== 模块五：残差回验 ====================
+/* 模块五：残差回验
  * 对每个实根（_rootIm[i] === 0）代回原方程 f(x)（evalEquationAt，基于 tokenPool）
  * 相对残差 = |f(root)| / max(|f(root−δ)|, |f(root+δ)|, 1e-300)，
  * δ = |root| > 10 时取 0.1·|root| 否则 1 —— 邻域值自然反映系数整体量级，
  * 采样拟合失真（如 sin(x)=0 被拟合成二次）时邻域值 O(1) 而残差 O(1)，比值近 1；
  * 真 根时残差为浮点噪声，比值 ~1e-12
- * 只记录 _residualMax 不拦截，UI 层据 > 1e-6 决定是否提示"结果可能不准确"
- */
+ * 只记录 _residualMax 不拦截，UI 层据 > 1e-6 决定是否提示"结果可能不准确" */
 function verifyRoots() {
   _residualMax = 0.0;
   var i = 0;
@@ -2139,9 +2074,8 @@ function verifyRoots() {
   }
 }
 
-/* ==================== 模块六：OOM 安全防护与异常拦截 ====================
- * 求解前置门禁：全部只读扫描 tokenPool，零分配
- */
+/* 模块六：OOM 安全防护与异常拦截
+ * 求解前置门禁：全部只读扫描 tokenPool，零分配 */
 
 /* Token 流体检：括号嵌套 ≤ 3、函数调用 ≤ 2、变量出现 ≤ 5
  * 返回 0 = 通过；1 = 拒绝（_solveError = 2） */
@@ -2180,7 +2114,7 @@ function guardDegree(degree) {
   return 0;
 }
 
-/* 多元非线性门禁：检测到 ≥ 2 个不同变量且含非线性运算（^ 或函数调用）拒绝
+/* 多元非线性门禁：≥ 2 个不同变量且含非线性运算（^ 或函数调用）即拒绝
  * 变量区分按 T_VAR payload（当前解析器仅 x=0，接口为多变量扩展预留）
  * 线性多元组（如 x+y=3）不拦截，交 solveLinearSystem
  * 返回 0 = 通过；1 = 拒绝（_solveError = 2）
@@ -2252,7 +2186,7 @@ function checkMemoryWatermark() {
   return 0;
 }
 
-/* ==================== 模块七：复位 ====================
+/* 模块七：复位
  * 每轮求解前调用（内存策略：只清标量与预分配数组，零分配） */
 function solversReset() {
   _rootCount = 0;

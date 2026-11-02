@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_exact.js — 双模态精确数值系统（精确分数/根式 <-> 8 位小数近似）
  * 内部表示固定为：(exactNum / exactDen) * √(exactRad)
  *   - exactDen 恒为正整数

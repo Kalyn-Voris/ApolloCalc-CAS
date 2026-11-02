@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ============================================================
  * ApolloCalc · core_evaluator.js — RPN 求值器（文件 5/6）
  * Lite Wearable / JerryScript / 堆上限 64KB / Zero-GC

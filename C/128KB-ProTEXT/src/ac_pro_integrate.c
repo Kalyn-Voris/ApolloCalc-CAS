@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_integrate.c — 积分表匹配 + 固定两层分部积分
 
    本文件的文件级对象必须全是 static const:Pro 层的 .bss 账本是

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_scratch.h — Pro 独立 scratch union(模式 β)+ 会话态 g_var_val[10]
 
    定义 Pro 层独立的 scratch union(设计说明 §2.2 的「模式 β」),以及唯一一个跨调用存活的

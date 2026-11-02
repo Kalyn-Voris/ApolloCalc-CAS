@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_complex.js — 极简复数运算层（零分配），供文件 6 方程求解器使用。
  * 依赖文件 1 已声明的全局结果寄存器 _tmpRe / _tmpIm，此处不重复声明 */
 

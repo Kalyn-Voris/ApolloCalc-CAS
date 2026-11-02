@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_integrate_multi.c — 2 变量多项式逐项精确积分 + mv_format 同款渲染
 
    多变量多项式积分(逐项,精确整除):对 2 变量稀疏多项式

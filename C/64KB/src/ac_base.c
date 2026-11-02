@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_base.c — 进制转换 + 分数显示（第 8 轮，C 独有）
  * 功能：dec_to_base（整数 → 2/8/10/16 进制字符码缓冲，逆序存放，

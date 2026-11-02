@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_parser.js — Token 解析器（文件 1）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * Token 编码: word = (type << 8) | payload ；word === 0 即 T_END 哨兵

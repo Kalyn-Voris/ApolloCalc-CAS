@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ac_pro_solvers.c — ProTEXT wrapper: upstream TU compiled exactly once
  *
  * 【本文件是唯一的「拦截层」/ The only interception point】

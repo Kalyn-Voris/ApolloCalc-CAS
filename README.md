@@ -9,31 +9,90 @@
 | 组件 | 堆限制 | 语言 | 状态 | 全局版本节点 (Global Tag) | 组件版本 (Component Version) | 功能范围 |
 |:---|:---|:---|:---|:---|:---|:---|
 | [JS/64KB](JS/64KB/) | 64KB | JavaScript | ✅ 已完成 | v1.0.0 | —（未建轨道） | 解析求值、2-4 次方程、6 元线性方程组、精确形式 |
-| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ 活跃 | **v2.4.2** | **v2.4.2** | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + 多变量多项式与符号求导/矩阵（基础 ≤3×3 + **12×12 pro 层**）/特殊函数/数论/常系数线性齐次 ODE 通解（v2.3.0）/符号微分/符号积分/square-free 分解/结式与 Groebner 基（v2.4.0）+ 压缩内核构建（**103 KB**），见 [docs/js-128kb.md](docs/js-128kb.md) |
+| [JS/128KB](JS/128KB/) | 128KB | JavaScript | ✅ 活跃 | **v2.4.3** | **v2.4.3** | 对等 JS/64KB + 五分量精确形式/数值微积分/泰勒/有理根/12 元线性方程组 + 多变量多项式与符号求导/矩阵（基础 ≤3×3 + **12×12 pro 层**）/特殊函数/数论/常系数线性齐次 ODE 通解（v2.3.0）/符号微分/符号积分/square-free 分解/结式与 Groebner 基（v2.4.0）+ 压缩内核构建（**103 KB**），见 [docs/js-128kb.md](docs/js-128kb.md) |
 | [C/64KB](C/64KB/) | 64KB | C99 | ✅ 已完成 | v1.0.0 | v1.0.0 | 对等 JS/64KB + 数论/进制分数/工具层三个 C 独有优势，见 [docs/c99-64kb.md](docs/c99-64kb.md) |
 | [C/128KB](C/128KB/) | 128KB | C99 | ✅ 已完成（冻结） | v1.1.0 | v1.1.0 | 对等 JS/128KB + 大整数/矩阵/特殊函数/符号求导四个 C 独有优势，见 [docs/c99-128kb.md](docs/c99-128kb.md) |
-| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ 活跃 | **v2.4.2** | **v1.6.2** | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分（128 项表）、多变量符号求导/多变量积分、稀疏线性方程组 (n≤32)/任意精度定点小数 (180 位)、2 变量 Groebner 基、单变量有理函数工具、常系数线性齐次 ODE 通解、**一般实矩阵全部特征值与特征向量（支持非对称，v2.4.0）**、**square-free 分解与重根重数（v2.4.0）**；内核静态内存 42608 B，pro_runner 583 项测试 |
+| [C/128KB-ProTEXT](C/128KB-ProTEXT/) | 128KB | C99 | ✅ 活跃 | **v2.4.3** | **v1.6.3** | Pro 层：冻结上游之上叠加多变量 GCD/因式分解/结式、LU 分解、实特征向量、隐函数求导、高次数值求根、符号积分（128 项表）、多变量符号求导/多变量积分、稀疏线性方程组 (n≤32)/任意精度定点小数 (180 位)、2 变量 Groebner 基、单变量有理函数工具、常系数线性齐次 ODE 通解、**一般实矩阵全部特征值与特征向量（支持非对称，v2.4.0）**、**square-free 分解与重根重数（v2.4.0）**；内核静态内存 42608 B，pro_runner 583 项测试 |
 
 > **双轨制口径（v2.2.0 起）**：「全局版本节点 (Global Tag)」是仓库级发布标签，对应根
 > [CHANGELOG.md](CHANGELOG.md) 的条目，一次发布可只覆盖部分组件；「组件版本
 > (Component Version)」记录在各组件目录的 `VERSION` 文件，按该组件自身变更独立
 > 递进 semver（C 侧 Pro 层新特性按 minor 递进）。**两者是两个口径，不必相等**：
-> 本版 C/128KB-ProTEXT 即为全局 v2.4.2 / 组件 v1.6.2。未建轨道的组件标「—」
+> 本版 C/128KB-ProTEXT 即为全局 v2.4.3 / 组件 v1.6.3。未建轨道的组件标「—」
 > （仅 JS/64KB），沿革见根 CHANGELOG；C/64KB 与 C/128KB 的组件版本冻结于
 > v1.0.0 / v1.1.0，不再递进；组件级细分记录见各组件 `CHANGELOG.md`。
 
-**当前版本：v2.4.2（2026-11-03，全局 Tag）** — 补丁：ODE 判定差分收口。
+**当前版本：v2.4.3（2026-11-03，全局 Tag）** — 生态构建：接入文档、实测对比、许可证头。
 
-- **C 侧（ProTEXT v1.6.2）**：ODE 解析器差分收口（370 条确定性语料 C/JS 对拍归零）——
-  项首双符号（`+-3y''`，§3.2 合法）与每项至多一个 `*` 补齐。内核静态内存维持 42608 B，
-  通过 583 项测试。
-- **JS 侧（JS/128KB v2.4.2）**：右端第二个 `=` 改报 EPARSE（§3.3-5）；`x+y''=0` 分叉钉死。
-  压缩内核 103599 B，通过 1194 项测试。
-- **契约**：ode-solutions.json 76 → 82 用例（双侧实跑冻结），knownDeviations 持续为零。
+- 无功能性代码变更；三关门禁与 v2.4.2 完全相同（C 583 checks / JS 1194 pass /
+  diff-smoke 50/50）。
+- **十分钟接入**：docs/getting-started.md（实测 Demo、Keil/ESP-IDF/npm 移植、
+  构建命令），README 增设入口与对比章节。
+- **许可证合规**：81 个核心 .c/.h/.js 统一 MIT SPDX 头；冻结上游 C/128KB/ 按
+  verify §5 红线豁免（见下）。
+- **同机实测对比**：与 SymPy 1.14.0 / Eigenmath master 的体积、内存、启动对比
+  （见下方图表），所有数字本机实测非转抄。
 
 详见 [CHANGELOG.md](CHANGELOG.md)（全局口径）与
 [C/128KB-ProTEXT/CHANGELOG.md](C/128KB-ProTEXT/CHANGELOG.md) /
 [JS/128KB/CHANGELOG.md](JS/128KB/CHANGELOG.md)（组件口径）。
+
+## 十分钟接入
+
+**C99**（5 行逻辑，零依赖零 malloc）：
+
+```c
+double a[9] = {2, 1, 0, 1, 3, 0, 0, 0, 4};   /* 实对称 3x3,行主序 */
+ac_pro_eig_all(a, 3);                         /* 特征值按 |λ| 降序 */
+for (int k = 0; k < ac_pro_eig_count(); k++)
+    printf("lambda[%d] = %.6f\n", k, ac_pro_eig_value(k));
+char out[256];
+ac_pro_ode("y''+3y'+2y=0", out, sizeof out); /* → y = C₁*exp(-1*x) + C₂*exp(-2*x) */
+```
+
+**JS**（ESM 单文件，零依赖）：
+
+```js
+import ApolloCalc from "./core_kernel.js";
+for (let i = 0; i < 9; i++) ApolloCalc.matrix.proSetA(3, 3, i, [2,1,0,1,3,0,0,0,4][i]);
+ApolloCalc.matrix.proEig();
+console.log(ApolloCalc.ode.solveOde("y''+3y'+2y=0").out); // y = C₁*exp(-1*x) + C₂*exp(-2*x)
+```
+
+**复制粘贴即可跑的完整步骤**（编译命令 / 移植 Keil·ESP-IDF / npm 引入）见
+[docs/getting-started.md](docs/getting-started.md)。
+
+## 与 SymPy / Eigenmath 的实测对比
+
+同一台 Windows 11 x64、同一任务（解 x²+3x+2=0 + 3×3 实对称特征值），
+2026-11-03 实测（SymPy 1.14.0、Eigenmath master 本机构建，禁转抄）：
+
+```
+交付物体积
+SymPy        ████████████████████████████████████████  74.0 MB（pip 安装）
+Eigenmath    ████████████                              326 329 B（exe）
+ApolloCalc C ███████████                               300 266 B（pro_kernel.exe）
+ApolloCalc JS ████                                     103 599 B（core_kernel.js）
+
+常驻内存（静态预算 / 对象峰值）
+SymPy        ██████████████████████████████  ~34 MB（Python 对象峰值）
+Eigenmath    ——————————————                  无静态预算（malloc 自由增长）
+ApolloCalc JS ██████████                     170 304 B（20 模块加载期池）
+ApolloCalc C  ███                            42 608 B（.bss 精确账本）
+ApolloCalc C64 █                             10 576 B（.bss，完整功能基线）
+
+启动 → 首个结果（含各自运行时启动）
+SymPy        ████████████████████████████████████  ~970 ms（import 0.86 s）
+Eigenmath    ███                                   ~46 ms
+ApolloCalc JS ██                                   9.3 ms（加载 8.1 + 任务 1.2）
+ApolloCalc C  █                                    ~15 ms（进程；纯求解 µs 级）
+```
+
+**一句话**：ApolloCalc C/64KB 用 **10 576 B（≈10 KB）静态 RAM** 跑出完整 CAS 能力；
+128KB Pro 层在同级内存上继续叠加符号积分、Groebner 基、一般矩阵特征值与 ODE 通解——
+同类能力在 SymPy 中需要 74 MB 安装 + ~34 MB 运行内存。不是替代关系：
+SymPy 面向全功能桌面符号计算，ApolloCalc 解决「同样能力在 10 KB 级静态内存、
+µs 级启动下可用」。完整口径与实测方法见 [docs/getting-started.md](docs/getting-started.md)。
 
 ## 设计哲学
 

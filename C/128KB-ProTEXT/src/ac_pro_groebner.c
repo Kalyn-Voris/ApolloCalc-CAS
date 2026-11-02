@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_groebner.c — 2 变量 Groebner 基:lex 序,M4GB 逐对归约
 
    v2.2.0 方向⑥「2 变量 Groebner 基」的完整实现:lex 序(x > y),输入总次数

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_ratroot.js — 有理根检验与低次多项式因式分解（文件 9）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：有理根定理——整系数多项式 an·x^n+…+a0 的有理根 p/q 满足

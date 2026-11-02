@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc-CAS · JS/128KB · core_ode.js — 常系数线性齐次 ODE 通解
  * (v2.3.0 功能 3,JS 侧)契约:docs/contracts/ode-format-v23.md(冻结),
  * 与 C/128KB-ProTEXT/src/ac_pro_ode.c 互为镜像,任何偏差即实现 bug。

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro.h — ProTEXT 层唯一公开头文件,上游 C/128KB/src/ 一行不改
 
    Pro 的全部增量 API 都从这里对外。三层结构:上游包装层(src/ac_pro_<mod>.c)只做

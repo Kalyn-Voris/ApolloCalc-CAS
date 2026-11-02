@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_sparse.c — 稀疏线性方程组 CSR 直接求解器(n ≤ 32,nnz ≤ 320)
 
    v2.1.0 方向④「稀疏线性方程组(n > 12)」方案 a 的完整实现:阈值主元 CSR

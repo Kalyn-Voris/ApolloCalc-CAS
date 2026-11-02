@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_diff_multi.c — 2 变量符号求导 d/dx、d/dy + mv_format 同款渲染
 
    v2.0.0:多变量符号求导(d/dx、d/dy)。对 A1/A2/A3 的多项式字符串语法逐项

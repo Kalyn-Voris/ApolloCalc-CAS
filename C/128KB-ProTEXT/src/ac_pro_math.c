@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_math.c — 用 const 预计算表替换上游 sin/cos 可变 LUT
 
    ProTEXT 包装层:上游 C/128KB/src/ac_math.c 仍作为唯一 TU 经本文件编译(不

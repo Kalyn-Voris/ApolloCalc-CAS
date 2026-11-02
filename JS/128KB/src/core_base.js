@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_base.js — 进制转换 + SI 前缀（文件 8）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：整数 → 2/8/10/16 进制字符串（字符码缓冲输出）

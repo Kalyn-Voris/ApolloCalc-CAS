@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_math_functions.js — 数学执行层（文件 2）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 依赖文件 1 全局（只引用，不重复声明）：

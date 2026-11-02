@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_rational.c — 单变量有理函数:欧几里得 GCD,cancel 约分,apart 部分分式
 
    v2.3.0 功能 5:单变量有理函数工具,欧几里得 GCD,cancel 约分,apart

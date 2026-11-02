@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc · ac_pro_smoke.c — Pro 层自检:上游代码编进 Pro TU、API 可用、宏生效
 
    Pro 层自检:证明「上游代码确实被编进 Pro TU、且 API 可用、且 AC_PRO 宏在

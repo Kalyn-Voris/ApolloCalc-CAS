@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ApolloCalc-CAS · ac_parser.c — Token 解析器
  * C99 64KB / 静态内存 / Zero-GC：禁 malloc、禁 VLA、禁递归、
  * 禁热路径字符串函数（strlen 仅入口一次）

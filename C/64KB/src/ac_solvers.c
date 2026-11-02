@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_solvers.c — 方程求解器（第 4 轮）
  * 行为基准：JS/64KB/src/core_solvers.js（修复后 6 槽根池版本），

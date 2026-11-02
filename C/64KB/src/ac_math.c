@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_math.c — 数学函数层（第 5 轮）
  * C99 64KB / 静态内存 / Zero-GC：禁 malloc、禁 VLA、禁递归

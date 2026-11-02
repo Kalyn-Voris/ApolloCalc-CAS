@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 #ifndef AC_NUMTHEORY_H
 #define AC_NUMTHEORY_H
 

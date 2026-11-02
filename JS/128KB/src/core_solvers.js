@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_solvers.js — 方程求解器（文件 6）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：二次/三次/四次多项式求根、线性方程组高斯消元（12 元）、残差回验、

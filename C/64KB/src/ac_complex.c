@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root. */
 /* ============================================================
  * ApolloCalc-CAS · ac_complex.c — 复数基础运算层（第 6 轮）
  * 行为基准：JS/64KB/src/core_complex.js，逐字对齐；严格对等

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
 /* ApolloCalc · core_evaluator.js — RPN 求值器（文件 5）
  * Lite Wearable / JerryScript / 堆上限 128KB / Zero-GC
  * 职责：Shunting-yard 中缀→后缀（显式栈迭代）、RPN 栈式求值、
