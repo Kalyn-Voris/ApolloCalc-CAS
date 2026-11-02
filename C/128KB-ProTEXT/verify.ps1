@@ -149,6 +149,18 @@ Verdict ($ode -ge 5) 'ODE has >= 5 cases (v2.3.0 feature 3)' "$ode"
 Verdict ($schur -ge 12) 'SCHUR has >= 12 cases (v2.4.0 feature 8)' "$schur"
 Verdict ($sqfree -ge 10) 'SQFREE has >= 10 cases (v2.4.0 feature 9)' "$sqfree"
 
+# ==== v2.5 ANCHOR: CX (feat/math-ext) ====
+
+# ==== END ANCHOR CX ====
+
+# ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ====
+
+# ==== END ANCHOR SYSOLVE ====
+
+# ==== v2.5 ANCHOR: STURM (feat/solvers) ====
+
+# ==== END ANCHOR STURM ====
+
 # ---------- 5) 上游零改动 ----------
 Write-Host ''
 Write-Host '--- 5) upstream C/128KB untouched ---'

@@ -859,6 +859,18 @@ void test_sqfree_reject(sq_tally_t *t);
 void test_sqfree_order(sq_tally_t *t);
 void test_sqfree_bounds(sq_tally_t *t);
 
+/* ==== v2.5 ANCHOR: CX (feat/math-ext) ==== */
+
+/* ==== END ANCHOR CX ==== */
+
+/* ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ==== */
+
+/* ==== END ANCHOR SYSOLVE ==== */
+
+/* ==== v2.5 ANCHOR: STURM (feat/solvers) ==== */
+
+/* ==== END ANCHOR STURM ==== */
+
 int main(void) {
     tally_t t;
 

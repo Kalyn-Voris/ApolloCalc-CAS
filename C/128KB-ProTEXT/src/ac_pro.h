@@ -697,4 +697,16 @@ int      ac_pro_gb_terms(int k);
 ac_int_t ac_pro_gb_coef(int k, int t);
 int      ac_pro_gb_exps(int k, int t);
 
+/* ==== v2.5 ANCHOR: CX (feat/math-ext) ==== */
+
+/* ==== END ANCHOR CX ==== */
+
+/* ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ==== */
+
+/* ==== END ANCHOR SYSOLVE ==== */
+
+/* ==== v2.5 ANCHOR: STURM (feat/solvers) ==== */
+
+/* ==== END ANCHOR STURM ==== */
+
 #endif /* AC_PRO_H */

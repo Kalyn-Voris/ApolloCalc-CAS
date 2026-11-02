@@ -107,6 +107,17 @@ PRO_EXTRA    := src/ac_pro_extra_globals.c src/ac_pro_solvers_ext.c \
                 src/ac_pro_groebner.c src/ac_pro_rational.c \
                 src/ac_pro_ode.c \
                 src/ac_pro_schur.c src/ac_pro_sqfree.c
+# ==== v2.5 ANCHOR: CX (feat/math-ext) ====
+
+# ==== END ANCHOR CX ====
+
+# ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ====
+
+# ==== END ANCHOR SYSOLVE ====
+
+# ==== v2.5 ANCHOR: STURM (feat/solvers) ====
+
+# ==== END ANCHOR STURM ====
 SRC          := $(PRO_SRC) $(PRO_EXTRA) src/ac_pro_smoke.c
 TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
                 test/test_pro_eigen.c test/test_pro_integrate.c \

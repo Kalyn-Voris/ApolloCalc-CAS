@@ -55,6 +55,22 @@ var FILES = [
   "core_numtheory.js",
   "core_ode.js",
   "core_groebner.js"
+
+  /* ==== v2.5 ANCHOR: complex (feat/math-ext) ==== */
+
+  /* ==== END ANCHOR complex ==== */
+
+  /* ==== v2.5 ANCHOR: sysolve (feat/solvers) ==== */
+
+  /* ==== END ANCHOR sysolve ==== */
+
+  /* ==== v2.5 ANCHOR: sturm (feat/solvers) ==== */
+
+  /* ==== END ANCHOR sturm ==== */
+
+  /* ==== v2.5 ANCHOR: matrix-eig (feat/js-eigen) ==== */
+
+  /* ==== END ANCHOR matrix-eig ==== */
 ];
 
 /* export 块：内容与交付约定逐字一致，禁止在此改动（改了会与 index.js 契约漂移） */
@@ -180,6 +196,22 @@ export default {
   /* ---- v2.4.0 结式 + Groebner（Sylvester+12×12 det；M4GB 逐对归约，lex x>y，输入 deg≤4） ---- */
   gb: ApolloGroebner
 };`;
+
+/* ==== v2.5 ANCHOR: complex (feat/math-ext) ==== */
+
+/* ==== END ANCHOR complex ==== */
+
+/* ==== v2.5 ANCHOR: sysolve (feat/solvers) ==== */
+
+/* ==== END ANCHOR sysolve ==== */
+
+/* ==== v2.5 ANCHOR: sturm (feat/solvers) ==== */
+
+/* ==== END ANCHOR sturm ==== */
+
+/* ==== v2.5 ANCHOR: matrix-eig (feat/js-eigen) ==== */
+
+/* ==== END ANCHOR matrix-eig ==== */
 
 /* export 块引用的全部内核标识符（78 个；函数形参 i/v/mode/re/im/w/n/x/a/b/side/order/x0 除外） */
 var EXPORTED_NAMES = [
