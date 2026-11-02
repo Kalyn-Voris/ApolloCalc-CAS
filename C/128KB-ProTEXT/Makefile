@@ -108,7 +108,32 @@ PRO_EXTRA    := src/ac_pro_extra_globals.c src/ac_pro_solvers_ext.c \
                 src/ac_pro_ode.c \
                 src/ac_pro_schur.c src/ac_pro_sqfree.c
 # ==== v2.5 ANCHOR: CX (feat/math-ext) ====
-
+# v2.5.0 功能 F1 复变函数扩展（契约 docs/contracts/complex-ext-v25.md §11）。
+# 1) 新 TU 无条件进 PRO_EXTRA：内核/runner 双口径编译；AC_PRO_DEGRADED=1 时
+#    整体编译为空对象（零 .bss，38672 退化口径不受影响）。
+PRO_EXTRA += src/ac_pro_complex_ext.c
+# 2) OUTDIR ?= . 与下方既有行逐字相同（?= 首次赋值生效，此处先行定义供本
+#    锚点内变量在解析期展开；命令行/环境 OUTDIR 的优先级语义完全不变）。
+#    ac_pro_special.o 仅为 cx_runner 的实轴交叉回归锚 ac_special_gamma 链接
+#    （上游 TU 自包含：AC_PI 是宏，无 ac_math.o 依赖）。
+OUTDIR ?= .
+# 3) C 侧验收走独立 cx_runner 目标：锚点纪律下 test_pro_runner.c 的 main()
+#    聚合区没有预埋锚点，故不改主 runner；cx_runner 把测试 TU 与其依赖的
+#    两个对象（本 TU + 上游 ac_complex 包装 TU，提供 g_c_* 六寄存器）链成
+#    独立验收二进制，由 verify.ps1 的 CX 锚点门禁（exit 0 / RESULT: PASS /
+#    [case CX-n] >= 10 / 0 failed）。裸链接（KERNEL_LDFLAGS，同 pro_kernel）：
+#    测试 TU 零 malloc、零 static，Zero-GC 为结构性保证。对象路径显式写
+#    $(OUTDIR)/obj（避开第 154 行 OBJDIR 的解析顺序），与既有模式规则的
+#    $(OBJDIR)/src/%.o 逐字符一致（OUTDIR 已在本锚点先行定义）。
+CXRUNNER    := $(OUTDIR)/cx_runner.exe
+CX_OBJS     := $(OUTDIR)/obj/src/ac_pro_complex.o \
+               $(OUTDIR)/obj/src/ac_pro_complex_ext.o \
+               $(OUTDIR)/obj/src/ac_pro_special.o
+CX_TEST_OBJ := $(patsubst test/%.c,$(OUTDIR)/obj/test/%.o,test/test_pro_complex_ext.c)
+.PHONY: cxrunner
+cxrunner: $(CXRUNNER)
+$(CXRUNNER): $(CX_OBJS) $(CX_TEST_OBJ)
+	$(CC) $(CFLAGS) $(KERNEL_LDFLAGS) -o $@ $^ -lm
 # ==== END ANCHOR CX ====
 
 # ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ====

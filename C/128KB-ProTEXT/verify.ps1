@@ -150,7 +150,29 @@ Verdict ($schur -ge 12) 'SCHUR has >= 12 cases (v2.4.0 feature 8)' "$schur"
 Verdict ($sqfree -ge 10) 'SQFREE has >= 10 cases (v2.4.0 feature 9)' "$sqfree"
 
 # ==== v2.5 ANCHOR: CX (feat/math-ext) ====
-
+# v2.5.0 功能 F1 复变函数扩展（契约 docs/contracts/complex-ext-v25.md §11）：
+# 独立 cx_runner 目标（Makefile CX 锚点）构建并运行 F1 验收套件。
+Write-Host '  CX complex ext (v2.5.0 feature F1):'
+& mingw32-make SHELL=cmd.exe OUTDIR=$OutDir cxrunner 2>&1 |
+    Where-Object { $_ -match 'error|Error' } | Select-Object -First 3
+$cxExe  = Join-Path $OutDir 'cx_runner.exe'
+$cxOut  = ''
+$cxCode = -1
+$cxSum  = ''
+if (Test-Path $cxExe) {
+    $cxOut  = (& $cxExe 2>&1 | Out-String)
+    $cxCode = $LASTEXITCODE
+    $cxSum  = (($cxOut -split "`n") | Where-Object { $_ -match 'summary:' } | Select-Object -First 1)
+    if ($cxSum) { Write-Host "  $($cxSum.Trim())" }
+}
+Verdict (Test-Path $cxExe) 'cx_runner.exe built' 'missing'
+Verdict ($cxCode -eq 0) 'cx runner exits 0' "exit $cxCode"
+Verdict ($cxOut -match 'RESULT: PASS') 'CX RESULT: PASS' 'not PASS'
+$cxCount = ([regex]::Matches($cxOut, '\[case CX-\d+\]')).Count
+Verdict ($cxCount -ge 10) 'CX has >= 10 cases (v2.5.0 feature F1)' "$cxCount"
+$cxFailed = -1
+if ($cxSum -match '(\d+) failed') { $cxFailed = [int]$Matches[1] }
+Verdict ($cxFailed -eq 0) 'CX zero failed assertions' "$cxFailed failed"
 # ==== END ANCHOR CX ====
 
 # ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ====

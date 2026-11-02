@@ -84,10 +84,10 @@ v2.5.0 F1 在既有复数四则/开方/整数幂/指数/对数/实幂（csqrt/cE
 |---|---|---|---|
 | 1 | `csin` | R := sin(x)·cosh(y)；I := cos(x)·sinh(y) | 闭式恒等式 |
 | 2 | `ccos` | R := cos(x)·cosh(y)；I := −sin(x)·sinh(y) | 闭式恒等式 |
-| 3 | `ctan` | \|y\| ≤ 1：sr := sin(x)·cosh(y)；si := cos(x)·sinh(y)；cr := cos(x)·cosh(y)；ci := −sin(x)·sinh(y)；(R,I) := H4(sr,si)/(cr,ci)。<br>\|y\| > 1：den := cos(2.0·x) + cosh(2.0·y)；R := sin(2.0·x)/den；I := sinh(2.0·y)/den | **混合式，阈值 1.0 冻结**：比值形避开实极点灾难性消去（x=π̂/2 时和式形分母恰好舍入为 0），和式形保证大 \|y\| 无中间溢出（cosh(y) 在 y≈710 即溢出而 cosh(2y)/2 形仍稳）；den 在 \|y\|>1 支恒 > 0，无除零 |
+| 3 | `ctan` | \|y\| ≤ 1：sr := sin(x)·cosh(y)；si := cos(x)·sinh(y)；cr := cos(x)·cosh(y)；ci := −sin(x)·sinh(y)；(R,I) := H4(sr,si)/(cr,ci)。<br>\|y\| > 1：sech := 1.0/cosh(2.0·y)；c := cos(2.0·x)·sech；den := 1.0 + c；R := sin(2.0·x)·sech/den；I := tanh(2.0·y)/den | **混合式，阈值 1.0 冻结**：比值形避开实极点灾难性消去（x=π̂/2 时和式形分母恰好舍入为 0）；和式形按 cosh(2y) 因式分解（与 sinh(2y)/(cos(2x)+cosh(2y)) 代数恒等）：sech = 1/cosh(2y) ∈ [0,1] 恒不溢出（cosh ≥ 1），den ≥ 1 − 1/cosh(2) > 0 无除零，2y > 710.5 时 cosh=Inf → sech=0、tanh(2y)→±1，自然给出正确极限 (±0, ±1)。修订 r2：原直排式 sinh(2y)/(cos(2x)+cosh(2y)) 在 2\|y\|>710.5 虚假溢出（真值 (±0,±1) 可表示），落地实测（cx-cx18）后改为本因式分解形，两侧同步 |
 | 4 | `csinh` | R := sinh(x)·cos(y)；I := cosh(x)·sin(y) | 闭式恒等式 |
 | 5 | `ccosh` | R := cosh(x)·cos(y)；I := sinh(x)·sin(y) | 闭式恒等式 |
-| 6 | `ctanh` | \|x\| ≤ 1：sr := sinh(x)·cos(y)；si := cosh(x)·sin(y)；cr := cosh(x)·cos(y)；ci := sinh(x)·sin(y)；(R,I) := H4(sr,si)/(cr,ci)。<br>\|x\| > 1：den := cosh(2.0·x) + cos(2.0·y)；R := sinh(2.0·x)/den；I := sin(2.0·y)/den | 与 ctan 对称的混合式，阈值 1.0 冻结；den 在 \|x\|>1 支恒 > 0 |
+| 6 | `ctanh` | \|x\| ≤ 1：sr := sinh(x)·cos(y)；si := cosh(x)·sin(y)；cr := cosh(x)·cos(y)；ci := sinh(x)·sin(y)；(R,I) := H4(sr,si)/(cr,ci)。<br>\|x\| > 1：sech := 1.0/cosh(2.0·x)；c := cos(2.0·y)·sech；den := 1.0 + c；R := tanh(2.0·x)/den；I := sin(2.0·y)·sech/den | 与 ctan 对称的混合式 + cosh(2x) 因式分解（修订 r2，同 #3），阈值 1.0 冻结；den ≥ 1 − 1/cosh(2) > 0 无除零，大 \|x\| 给出极限 (±1, ±0) |
 | 7 | `casin` | tre := 1.0 − x·x + y·y；tim := −2.0·x·y；(wr,wi) := H2(tre,tim)；uz := −y + wr；vi := x + wi；(lr,li) := H1(uz,vi)；R := li；I := −lr | C99 G.7 复合式 −i·cln(iz+csqrt(1−z²))。tim 直算（不经复数乘平方）保证 ±0 侧正确流入 H2：z=x±0i（x>1）时 tim=∓0 → si=±(−√..) 共轭成对（§9 实测锚） |
 | 8 | `cacos` | 先按 #7 得 (ur,ui)；R := HALF_PI − ur；I := −ui | 恒等式 acos = π/2 − asin（主值支全域成立，含割线 ±0 侧；§9 实测锚） |
 | 9 | `catan` | 支点先行（§5 EDOM）；num := x·x + (y+1)·(y+1)；den := x·x + (y−1)·(y−1)；R := 0.5·atan2(2.0·x, 1.0 − x·x − y·y)；I := 0.25·(log(num) − log(den)) | Hull 稳定式；I 用对数差避免 num/den 除法溢出；x=±0 落虚割线时 atan2(±0, 负) = ±π 自动给出 ±π/2 侧（C99 G.6 一致） |
@@ -129,10 +129,14 @@ c6=-0.13857109526572012 c7=9.9843695780195716e-6  c8=1.5056327351493116e-7
 - 中间量溢出（如 H4 分母、cgamma 直算支 exp(lgr) 上溢）最终必使 TMP 非有限，
   与终检合并，无中间态错误码。
 - **已知域上限**（语料域 |z| ≤ 10 恒不触发，成文备查）：H1/H2/H4/cnthroot 的
-  平方和 p²+q² 在 |p| 或 |q| ≳ 1.34e154 时溢出；ctan/ctanh 和式形在 2|y| 或 2|x|
-  ≳ 710.5 时 cosh 上溢；cgamma 直算支 |Γ(z)| ≥ ~1.8e308（x ≳ 171.6）上溢；
-  反射支 Γ(1−z) 上溢而真值 |Γ(z)| < DBL_MIN 的深负实部输入会**下溢为 0**
-  （round-to-nearest 的正确 float64 答案，判 OK；契约 JSON 不收录此类行）。
+  平方和 p²+q² 在 |p| 或 |q| ≳ 1.34e154 时溢出；ctan/ctanh 和式形经 r2 因式
+  分解后全有限域无虚假溢出（§4 #3/#6）；cgamma 直算支 |Γ(z)| ≥ ~1.8e308
+  （x ≳ 171.6）上溢；反射支 Γ(1−z) 上溢而真值 |Γ(z)| < DBL_MIN 的深负实部
+  输入会**下溢为 0**（round-to-nearest 的正确 float64 答案，判 OK；契约 JSON
+  不收录此类行）。
+- **修订记录**：r2（2026-11-03，实现落地期）——ctan/ctanh 和式形改为 cosh(2·)
+  因式分解形（§4 #3/#6），消除 2|y|>710.5 的虚假 EOVER；语义（代数恒等）与
+  误差带不变，JSON 期望值（mpmath 真值）不变，C/JS 两侧同步改排。
 
 ## 7. 错误码全序
 
