@@ -268,6 +268,9 @@ var _taylorOrder = 0;
 var _taylorCenter = 0.0;
 var _taylorWork = new Float64Array(256);    /* 2K+1 ≤ 33，用完即弃 */
 
+/* F0 全池水位账本：模块池加载期自报（docs/contracts/f0-governance-v25.md §3） */
+if (typeof _modulePoolSum === "function") { _modulePoolSum(_taylorCoeffs, _taylorWork); }
+
 function calcTaylor(x0, order) {
   _calcError = 0;
   if (!isFinite(x0)) { _calcError = 1; return -1; }

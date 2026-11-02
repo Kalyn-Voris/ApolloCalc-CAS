@@ -607,9 +607,19 @@ function guardMultivariateNonlinear() {
   return 0;
 }
 
-/* 内存水位门禁：堆使用 > 96KB（128KB × 75%）拒绝求解
- * 优先平台 Heap API（performance.memory.usedJSHeapSize），
- * 不可用时降级为静态池 byteLength + 动态游标估算（含 2KB 运行时冗余）
+/* 内存水位门禁（F0 全池口径改造，feat/js-gate-f0）：两条独立的线，任一越线拒绝
+ * ①堆线（不变）：performance.memory.usedJSHeapSize > 98304（128KB × 75%）拒绝；
+ * ②全池静态线（F0 新增，无论有无 Heap API 都执行）：
+ *   基础池 live byteLength（本函数逐池实测，core_parser/evaluator/base/solvers
+ *   共 8 组 TypedArray 11 992 B）
+ *   + _modulePoolBytes（core_parser.js 声明，其余池模块加载期自报合计，
+ *     F0 实测 158 312 B；逐模块账本 tests/js-pool-ledger.json / docs/js-128kb.md）
+ *   + (tokenCount << 3) + (numberCount << 3)（动态游标，显式计入）
+ *   > 178496 拒绝。
+ *   门禁线推导：170304（F0 开工实测全项目加载期 TypedArray byteLength 之和，
+ *   143 组分配，test-watermark.js 可复现）+ 8192（v2.5 JS 新增池预算封顶 2^13，
+ *   ROADMAP-v2.5-v2.6 §三/§F0）= 178496；旧降级估算的 +2048 堆代理冗余退役，
+ *   游标已显式计入不再重复留冗余（docs/contracts/f0-governance-v25.md §2）。
  * 返回 0 = 通过；1 = 拒绝（_solveError = 4） */
 function checkMemoryWatermark() {
   _solveError = 0;
@@ -617,23 +627,22 @@ function checkMemoryWatermark() {
 
   if (typeof performance !== "undefined") {
     if (performance.memory && performance.memory.usedJSHeapSize) {
-      used = performance.memory.usedJSHeapSize;
+      if (performance.memory.usedJSHeapSize > 98304) { _solveError = 4; return 1; }
     }
   }
-  if (used === 0) {
-    /* 降级估算：全部预分配 TypedArray 之 byteLength + 已用游标 + 冗余 */
-    used = tokenPool.byteLength + numberPool.byteLength + evalStack.byteLength +
-           matrixPool.byteLength +
-           _rpnToken.byteLength + _opStack.byteLength +
-           _lhsToken.byteLength + _rhsToken.byteLength + _coeffs.byteLength +
-           _rootRe.byteLength + _rootIm.byteLength +
-           _rootExactRat.byteLength + _rootExactRadNum.byteLength +
-           _rootExactRad.byteLength + _rootExactDen.byteLength +
-           _rootExactExp.byteLength + _rootExactValid.byteLength +
-           _baseBuf.byteLength +
-           (tokenCount << 3) + (numberCount << 3) + 2048;
-  }
-  if (used > 98304) { _solveError = 4; return 1; }
+  /* 全池静态线：基础池逐池 byteLength + 模块池自报合计 + 动态游标 */
+  used = tokenPool.byteLength + numberPool.byteLength + evalStack.byteLength +
+         matrixPool.byteLength +
+         _rpnToken.byteLength + _opStack.byteLength +
+         _lhsToken.byteLength + _rhsToken.byteLength + _coeffs.byteLength +
+         _rootRe.byteLength + _rootIm.byteLength +
+         _rootExactRat.byteLength + _rootExactRadNum.byteLength +
+         _rootExactRad.byteLength + _rootExactDen.byteLength +
+         _rootExactExp.byteLength + _rootExactValid.byteLength +
+         _baseBuf.byteLength +
+         _modulePoolBytes +
+         (tokenCount << 3) + (numberCount << 3);
+  if (used > 178496) { _solveError = 4; return 1; }
   return 0;
 }
 

@@ -53,6 +53,9 @@ var ApolloNumtheory = (function () {
   var _fExps = new Int32Array(MAX_FACTORS);
   var _fCount = 0;
 
+  /* F0 全池水位账本：模块池加载期自报（docs/contracts/f0-governance-v25.md §3） */
+  if (typeof _modulePoolSum === "function") { _modulePoolSum(MR_BASES, _fPrimes, _fExps); }
+
   var _err = 0;                   /* 0 OK / 1 参数域 / 2 溢出 */
   var _opCount = 0;
   var _allocCount = 3;

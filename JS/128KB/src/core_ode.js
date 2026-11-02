@@ -52,7 +52,7 @@ var ApolloOde = (function () {
   var MAX_ROOTS = 4;               /* 阶数上限 */
   var OUT_CAP = 300;               /* 最长形态静态估算 < 230(§8),300 留余量 */
 
-  /* 加载期一次分配的池(allocCount = 11,合计 1464 B) */
+  /* 加载期一次分配的池(allocCount = 11,合计 1500 B——F0 实测修回,原 1464 系笔误) */
   var _a = new Float64Array(5);          /* 特征多项式系数 a[0..4] */
   var _seen = new Int32Array(5);         /* 同阶项出现标志(§3.3-2) */
   var _re = new Float64Array(MAX_ROOTS); /* 排序后根实部 */
@@ -64,6 +64,12 @@ var ApolloOde = (function () {
   var _cMult = new Int32Array(MAX_ROOTS);
   var _outBuf = new Int32Array(OUT_CAP); /* 渲染缓冲(字符码) */
   var _workI = new Int32Array(16);       /* fmt 数字位寄存(定点 12 位需 12 槽) */
+
+  /* F0 全池水位账本：模块池加载期自报（docs/contracts/f0-governance-v25.md §3） */
+  if (typeof _modulePoolSum === "function") {
+    _modulePoolSum(_a, _seen, _re, _im, _used, _cType, _cLam, _cBeta, _cMult,
+                   _outBuf, _workI);
+  }
 
   var _outLen = 0;
   var _err = 0;                          /* 最近一次 solveOde 的 code */

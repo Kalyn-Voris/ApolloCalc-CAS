@@ -18,7 +18,8 @@
  *   proEigValue/proEigVector 读取。UI 调用序 proSetA → proXxx → proGetR*，
  *   与既有 setA → det → getR 契约同构。
  *
- * pro 层池账本（全部加载期一次分配，allocCount=7，合计 5944 B）
+ * pro 层池账本（全部加载期一次分配，allocCount=7，合计 4944 B：
+ * 4×1152 + 48 + 96 + 192；全模块 10 池 5160 B，F0 实测修回——原 5944 系笔误）
  *   _pa    Float64Array(144)  输入寄存器 A（12×12）      1152 B
  *   _pr    Float64Array(144)  结果寄存器 R                1152 B
  *   _luBuf Float64Array(144)  LU 打包 L\U / det·rank·inv
@@ -88,6 +89,12 @@ var ApolloMatrix = (function () {
   var _piv = new Int32Array(PRO_MAX_DIM);    /* LU 置换 / eig 零空间列主元 */
   var _eigLam = new Float64Array(PRO_MAX_DIM);
   var _work = new Float64Array(2 * PRO_MAX_DIM);  /* eig x/y / QR 列草稿 */
+
+  /* F0 全池水位账本：模块池加载期自报（寄存器层 3 池 + pro 层 7 池共 10 池，
+   * docs/contracts/f0-governance-v25.md §3） */
+  if (typeof _modulePoolSum === "function") {
+    _modulePoolSum(_a, _b, _r, _pa, _pr, _luBuf, _vBuf, _piv, _eigLam, _work);
+  }
 
   var _pRowsA = 0, _pColsA = 0;
   var _pRowsR = 0, _pColsR = 0;
