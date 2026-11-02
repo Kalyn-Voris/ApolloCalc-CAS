@@ -1,6 +1,6 @@
 # JS/128KB — 零 GC 计算代数内核（增强版）
 
-- **状态**：v2.4.1（组件版本；20 文件内核拼接，terser 单遍 minify 交付）
+- **状态**：v2.4.3（组件版本；17 文件内核拼接，terser 单遍 minify 交付）
 - **堆限制**：128KB（全局状态水位目标 ≤ 96KB）
 - **目标平台**：不限——任何支持 ES5 + TypedArray 的 JS 环境（Lite Wearable / JerryScript / 浏览器 / Node）
 - **内存模型**：与 64KB 版一致——TypedArray + 全局标量，零临时对象，禁止递归与热路径字符串拼接
@@ -251,16 +251,18 @@ node test/test-multivar.js       # 多变量多项式 + 符号求导 + 高阶三
 node test/test-matrix.js         # 矩阵基础运算（39 项）
 node test/test-special.js        # 特殊函数 erf/gamma/lgamma（33 项）
 node test/test-browser.js        # 浏览器经典脚本环境模拟（vm 沙箱，10 项）
-node test/build-kernel.js        # 拼接 20 文件 core_kernel.js + 83 项回归 + ESM 严格模式冒烟（49 项）
+node test/test-watermark.js      # F0 全池水位门禁自检（账本比对 + 双侧边界，36 项）
+node test/build-kernel.js        # 拼接 17 文件 core_kernel.js + 83 项回归 + ESM 严格模式冒烟（49 项）
 ```
 
 零依赖，Node ≥ 14 即可（`test-browser.js` 的 vm 沙箱与 `--expose-gc` 探针
 在任意主流 Node 版本可用）。共享一致性用例在 [tests/](../tests/)。
-20 个测试文件合计 **1188 pass, 0 fail**（base 63 / browser 10 / calculus 28 /
+21 个测试文件合计 **1230 pass, 0 fail**（base 63 / browser 10 / calculus 28 /
 complex 23 / consistency 59 / evaluator 49 / groebner 60 / guard 16 /
 integrate 75 / matrix-pro 82 / matrix 39 / multivar 194 / numtheory 89 /
-ode 77 / ratroot 33 / solvers 46 / special 33 / sqfree 70 / symboltree 116 /
-taylor 26），另有 build-kernel 内嵌 83 项 eval 回归 + 49 项 ESM 导出链路冒烟全过。
+ode 83 / ratroot 33 / solvers 46 / special 33 / sqfree 70 / symboltree 116 /
+taylor 26 / watermark 36），另有 build-kernel 内嵌 83 项 eval 回归 +
+49 项 ESM 导出链路冒烟全过。
 
 ## 一致性测试判定规则
 
