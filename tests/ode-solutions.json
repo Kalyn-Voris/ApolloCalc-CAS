@@ -436,6 +436,42 @@
       "input": "y''x=0",
       "code": -1,
       "note": "v2.4.1 裁决：导数记号后尾随 x → EPARSE（§3.3-1 项尾硬校验，原 dev-trailing-x-after-y）"
+    },
+    {
+      "id": "render-double-sign-plus-minus",
+      "input": "+-3y''+3y'=0",
+      "expected": "y = C₁*exp(1*x) + C₂",
+      "note": "v2.4.2 差分收口：项首双符号 §3.2 合法（gb 先例），C 侧补齐，后一符号覆盖前一"
+    },
+    {
+      "id": "render-double-sign-minus-minus",
+      "input": "--y''+y=0",
+      "expected": "y = C₁*exp(1*x) + C₂*exp(-1*x)",
+      "note": "v2.4.2：双负号覆盖语义，双侧渲染一致"
+    },
+    {
+      "id": "reject-plus-mid-term",
+      "input": "x+y''=0",
+      "code": -1,
+      "note": "含 x 因子的项缺 y 时项中 '+' → EPARSE（v2.4.1 xSeen 链收口，v2.4.2 钉死）"
+    },
+    {
+      "id": "reject-double-star",
+      "input": "x*x*y''=0",
+      "code": -1,
+      "note": "每项至多一个 *（§3.2），C 侧 v2.4.2 补齐，双侧一致"
+    },
+    {
+      "id": "reject-second-eq-x",
+      "input": "y''=x=0",
+      "code": -1,
+      "note": "右端第二个 = → EPARSE（§3.3-5），JS 侧 v2.4.2 补齐"
+    },
+    {
+      "id": "reject-second-eq-zero",
+      "input": "y''=0=0",
+      "code": -1,
+      "note": "同 §3.3-5，双侧一致"
     }
   ],
   "knownDeviations": []

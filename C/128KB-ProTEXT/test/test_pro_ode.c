@@ -134,6 +134,12 @@ pro_tally_t test_ode_rational(void) {
     expect_ode(&t, "100y''+99y'-y=0", AC_PRO_ODE_OK,
                "y = C\xe2\x82\x81*exp(1/100*x) + C\xe2\x82\x82*exp(-1*x)",
                "100y''+99y'-y=0 (1/100,v2.4.1 回归)");
+    expect_ode(&t, "+-3y''+3y'=0", AC_PRO_ODE_OK,
+               "y = C\xe2\x82\x81*exp(1*x) + C\xe2\x82\x82",
+               "+-3y'' 项首双符号(v2.4.2 差分收口)");
+    expect_ode(&t, "--y''+y=0", AC_PRO_ODE_OK,
+               "y = C\xe2\x82\x81*exp(1*x) + C\xe2\x82\x82*exp(-1*x)",
+               "--y'' 双负号覆盖(v2.4.2)");
 
     return t;
 }
@@ -161,6 +167,8 @@ pro_tally_t test_ode_reject(void) {
     expect_ode(&t, "y''+y''=0", AC_PRO_ODE_EPARSE, "", "同阶重复 → -1");
     expect_ode(&t, "y''*3+y=0", AC_PRO_ODE_EPARSE, "", "y 后 '*' → -1");
     expect_ode(&t, "y''x=0", AC_PRO_ODE_EPARSE, "", "y 后尾随 x → -1(v2.4.1 裁决)");
+    expect_ode(&t, "x+y''=0", AC_PRO_ODE_EPARSE, "", "项中 '+' → -1(v2.4.2 钉死)");
+    expect_ode(&t, "x*x*y''=0", AC_PRO_ODE_EPARSE, "", "双 '*' → -1(§3.2,v2.4.2 补齐)");
     expect_ode(&t, "y''+y", AC_PRO_ODE_EPARSE, "", "缺 '=' → -1");
     expect_ode(&t, "2=0", AC_PRO_ODE_EPARSE, "", "缺 y → -1");
     expect_ode(&t, "y''+y=1/x", AC_PRO_ODE_EPARSE, "", "右端含文法外 '/' → -1");

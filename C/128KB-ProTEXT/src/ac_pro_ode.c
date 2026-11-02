@@ -243,6 +243,7 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
             int neg = 0;
             long long c = 0;
             int saw_coef = 0;
+            int saw_star = 0;
             int saw_y = 0;
             int deg = 0;
 
@@ -250,6 +251,17 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
 
             if (*p == '-') { neg = 1; p++; }
             else if (*p == '+') { p++; }
+            while (*p == ' ' || *p == '\t') { p++; }
+            if (*p == '-' || *p == '+') {
+                /* 项首可再带一个符号（§3.2，gb 先例 ac_pro_groebner.c:129）：
+                 * 后一个符号覆盖前一个（+-3y'' → −3y''，与 JS signRun 语义一致）；
+                 * 第三个符号 → EPARSE。v2.4.2 差分收口：此前 C 侧把 +-3y''
+                 * 误判 EPARSE，契约明文合法且 JS 侧已实现。 */
+                neg = (*p == '-');
+                p++;
+                while (*p == ' ' || *p == '\t') { p++; }
+                if (*p == '-' || *p == '+') { return AC_PRO_ODE_EPARSE; }
+            }
             while (*p == ' ' || *p == '\t') { p++; }
 
             /* 因子序列：系数 / x 因子（置标志，延迟裁决）/ y 导数记号。
@@ -283,6 +295,8 @@ int ac_pro_ode(const char *src, char *out, int out_len) {
                     }
                     break;   /* y 记号 = 项尾（其后只允许空白/+/-/=/串尾） */
                 } else if (*p == '*') {
+                    if (saw_star) { return AC_PRO_ODE_EPARSE; }   /* 每项至多一个 *（§3.2，v2.4.2 差分收口） */
+                    saw_star = 1;
                     p++;
                     while (*p == ' ' || *p == '\t') { p++; }
                     if (*p == '*' || *p == '=' || *p == '\0' ||

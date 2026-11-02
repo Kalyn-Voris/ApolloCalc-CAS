@@ -238,12 +238,15 @@ var ApolloOde = (function () {
     if (termEver === 0) { return _fail(-1); }        /* 左端无任何项 → EPARSE */
 
     /* 右端(§3.3-4):去首尾空白后必须恰为单个 '0';
-     * 含 x 属自由项非零(不是变系数,变系数只看左端) */
+     * 含 x 属自由项非零(不是变系数,变系数只看左端);
+     * 右端出现 '=' 即第二个 '=' → EPARSE(§3.3-5,v2.4.2 差分收口:
+     * y''=x=0 / y''=0=0 此前误报 ENONHOMO,C 侧按 §3.3-5 报 EPARSE) */
     var nz = 0;
     var first = 0;
     for (j = i + 1; j < len; j++) {
       cc = src.charCodeAt(j);
       if (cc === 32 || cc === 9) { continue; }
+      if (cc === 61) { return _fail(-1); }   /* 第二个 '=' → EPARSE(§3.3-5) */
       if (nz === 0) { first = cc; }
       nz++;
     }

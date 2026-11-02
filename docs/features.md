@@ -81,8 +81,8 @@ v2.3.0）**、**常系数线性齐次 ODE 通解（字符串进字符串出，�
 重根重数（整系数 SFF，契约 [sqfree-format-v24](contracts/sqfree-format-v24.md)，
 v2.4.0）**。
 `.bss` 内核口径 **42 608 B** / runner 口径 42640 B / 上游对照 39408 B / 退化 38672 B
-（v2.2.0 起 Groebner 落地后零增长，2026-11-01 `bss-check` 复测），pro_runner
-**579 checks, 0 failed**（2026-11-01 实测，v2.4.1 含 ODE 修复回归 5 项）。
+（v2.2.0 起 Groebner 落地后零增长，2026-11-03 `bss-check` 复测），pro_runner
+**583 checks, 0 failed**（2026-11-03 实测，v2.4.2 含 ODE 差分收口 4 项）。
 详见 [c99-128kb.md](c99-128kb.md) 与 [RELEASE-v2.0.0.md](RELEASE-v2.0.0.md)。
 
 ## v2.3.0 双侧新功能（2026-10-31）
