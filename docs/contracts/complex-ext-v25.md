@@ -165,6 +165,18 @@ O(1) 值退化为绝对 1e-9，大值如 ctan(π̂/2+0i)=1.63e16 按相对计）
 公式表表达式两侧逐字同构是 1e-9 的前提；libm 实现差异（MinGW gcc 8.1.0 vs
 V8/JerryScript）典型 ≤2 ulp，对 1e-9 带 余量 ≥ 6 个量级；落地后以差分实测复核。
 
+**r3 修订（落地实测）：极点邻域行降为不变量判定（band: "invariant"）。**
+ctan(π̂/2±0i)、ctanh(iπ̂/2) 位于 tan/tanh 的极点邻域，条件数 = sec² ≈ 2.7e32；
+实测本机 msvcrt 运行时 cos(1.5707963267948966) = 6.1230317691118863e-17（相对
+真值 6.123233995736766e-17 差 3.3e-5，π/2 归约常数精度 ~72 bit 所限；V8 正确舍
+入），该有效辐角差被条件数放大为 ~3.3e-5 相对值差——跨 libm 1e-9 在此类行物理
+不可达（GCC 编译期 MPFR 常量折叠会掩盖此差，volatile 实测为准）。此类行（契约
+JSON cx-ctan-05/cx-ctanh-05 标 `band: "invariant"`；语料 pole-ctan-halfpi-p/-m、
+pole-ctanh-halfpi 同类）改判**不变量**：双方 rc=0、大分量 \|v\| > 1e15 且同号、
+对侧分量相等（按 §8 混合带）。C 侧测试（cx-04）与 JS 侧对相应行同口径。数学值
+本身仍以 mpmath 值冻结于 JSON want 供参考。反函数支点（casinh(±i) 等）经
+sqrt 软化（误差 ~sqrt(有效差) ≈ 1e-11），实测在 1e-9 带内，不适用本修订。
+
 ## 9. 契约 JSON 与差分语料
 
 - **`tests/complex-functions.json`**（117 条）= 本契约的机器可读子集：`meta` 记

@@ -109,7 +109,7 @@ def is_edom(fn, x, y, u=0.0, v=0.0, k=0):
     return False
 
 
-def case(cid, fn, z, w=None, k=None, note=""):
+def case(cid, fn, z, w=None, k=None, note="", band=None):
     x, y = z
     u, v = (w or (0.0, 0.0))
     if k is not None and k <= 0:
@@ -128,6 +128,8 @@ def case(cid, fn, z, w=None, k=None, note=""):
     if k is not None:
         row["k"] = k
     row["want"] = want
+    if band:
+        row["band"] = band
     if note:
         row["note"] = note
     return row
@@ -161,7 +163,7 @@ CASES = [
     case("cx-ctan-02", "ctan", (1.0, 0.0), note="实轴 tan(1)"),
     case("cx-ctan-03", "ctan", (0.0, 1.0), note="ctan(i)=i*tanh(1)"),
     case("cx-ctan-04", "ctan", (1.0, 1.0)),
-    case("cx-ctan-05", "ctan", (HALF_PI, 0.0), note="实极点：比值形大有限值，非 EDOM"),
+    case("cx-ctan-05", "ctan", (HALF_PI, 0.0), note="实极点：比值形大有限值，非 EDOM；band=invariant（契约 §8 r3：跨 libm 极点邻域不可达 1e-9）", band="invariant"),
     case("cx-ctan-06", "ctan", (0.0, 2.0), note="和式形路径 |y|>1"),
     case("cx-ctan-07", "ctan", (-3.0, 0.5)),
     # ---- csinh（5）----
@@ -181,7 +183,7 @@ CASES = [
     case("cx-ctanh-02", "ctanh", (0.0, 1.0), note="ctanh(i)=i*tan(1)"),
     case("cx-ctanh-03", "ctanh", (1.0, 1.0)),
     case("cx-ctanh-04", "ctanh", (2.0, 0.0), note="实轴 tanh(2)，和式形路径"),
-    case("cx-ctanh-05", "ctanh", (0.0, HALF_PI), note="虚极点：比值形大有限值"),
+    case("cx-ctanh-05", "ctanh", (0.0, HALF_PI), note="虚极点：比值形大有限值；band=invariant（契约 §8 r3）", band="invariant"),
     case("cx-ctanh-06", "ctanh", (-3.0, -2.0)),
     # ---- casin（8）----
     case("cx-casin-01", "casin", (0.0, 0.0), note="casin(0)=0"),

@@ -252,7 +252,8 @@
         "re": 1.633123935319537e+16,
         "im": 0.0
       },
-      "note": "实极点：比值形大有限值，非 EDOM"
+      "band": "invariant",
+      "note": "实极点：比值形大有限值，非 EDOM；band=invariant（契约 §8 r3：跨 libm 极点邻域不可达 1e-9）"
     },
     {
       "id": "cx-ctan-06",
@@ -465,7 +466,8 @@
         "re": 0.0,
         "im": 1.633123935319537e+16
       },
-      "note": "虚极点：比值形大有限值"
+      "band": "invariant",
+      "note": "虚极点：比值形大有限值；band=invariant（契约 §8 r3）"
     },
     {
       "id": "cx-ctanh-06",
