@@ -802,9 +802,53 @@ int ac_pro_sturm_isolate(const char *src, char *out, int out_len);
 /* ==== END ANCHOR STURM ==== */
 
 /* ==== v2.6 ANCHOR: SVD (feat/matrix-advanced) ==== */
-/* v2.6 预埋占位（仅注释，零行为变化）：SVD 的 Pro API 声明区落位锚点。
- * feat/matrix-advanced 分支合入时在上下标记之间填写声明；本版不携带
- * 任何声明/定义。 */
+/* v2.6.0 G2:one-sided Jacobi 奇异值分解(实现于 src/ac_pro_svd.c;本版
+ * C-only,JS 面 core_matrix.js proSvd* 顺延 v2.7,以本节为同构镜像)。
+ * 行为边界由 docs/contracts/svd-format-v26.md 逐字冻结(算法、表达式
+ * 书写顺序、排序全序、符号规范化、错误码、退化谱语义一次定死)。
+ *   m×n 实稠密矩阵(m,n ∈ 1..12;m < n 内部走转置路径)→ 幂 2 缩放
+ *   (frexp/ldexp,ac_pro_schur.c 同纪律)→ 固定循环序列 one-sided Jacobi
+ *   (30 sweep 预算,三道跳过判据见契约 §3.4)→ 列 2-范数降序稳定插入
+ *   排序(ac_pro_schur.c:440-486 同款,U/V 列同步换序)→ 数值零 σ 判定
+ *   (≤ 1e-12·σ₁ 精确置 0)与零列 Gram-Schmidt 补全 → 符号规范化(U 每列
+ *   最大 |·| 分量置正、并列取最小索引,V 同因子成对翻转)→ 出口双闸门
+ *   ‖A−UΣVᵗ‖∞ 与 ‖UᵗU−I‖ 回乘验证,不过闸绝不硬凑。
+ *   视图:svd 槽(3752 B ≤ 3848 吸收线,margin 96 B,.bss 零增长;
+ *   feat/matrix-advanced 独占)。零 static 对象、零 malloc、零 VLA、
+ *   零递归;错误码一律走返回值。
+ *
+ *   int ac_pro_svd_all(const double *a, int m, int n);
+ *     a 行主序 m×n,调用期间只读。1 = 成功(count = k = min(m,n),
+ *     视图/accessor 可读);≤ 0 = 失败,错误码即返回值:
+ *       -1 参数(NULL / 维度越界 / 非有限元素 / 缩放指数 ≥ 1024)
+ *       -2 30 sweep 预算耗尽不收敛(契约域内实测不可触发,诚实出口)
+ *       -3 双闸门回乘验证失败 / 零列补全无候选可收(同上)
+ *     失败时视图内容未定义,调用方不得读取。
+ *   double ac_pro_svd_value(int k);
+ *     σ_k,降序,k = 0..count−1,越界返 0.0(已乘回原标度)。
+ *   const double *ac_pro_svd_u(int k);
+ *     U 第 k 列(m 维)起始指针,越界返 NULL;列已符号规范化。
+ *   const double *ac_pro_svd_v(int k);
+ *     V 第 k 列(n 维)起始指针,越界返 NULL;与 U 第 k 列成对同翻转。
+ *   int ac_pro_svd_count(void);
+ *     成功 = k = min(m,n);任何失败路径 = 0。
+ *   accessor 返回视图内部指针,跨 API 调用后失效(ac_pro_scratch.h
+ *   视图持有纪律③)。JS v2.7 对应 proSvd/proSvdCount/proSvdValue/
+ *   proSvdU/proSvdV(同值同语义)。 */
+int            ac_pro_svd_all(const double *a, int m, int n);
+double         ac_pro_svd_value(int k);
+const double  *ac_pro_svd_u(int k);
+const double  *ac_pro_svd_v(int k);
+int            ac_pro_svd_count(void);
+
+#define AC_PRO_SVD_OK       1    /* 成功(count = k,视图/accessor 可读)   */
+#define AC_PRO_SVD_EPARAM  (-1)  /* 参数:a NULL / 维度越界 / 非有限元素
+                                  * / 缩放指数 e >= 1024(scale 非有限)  */
+#define AC_PRO_SVD_ENOCONV (-2)  /* 30 sweep 预算耗尽仍 rotated > 0(契约
+                                  * 域内实测不可触发,反向覆盖)          */
+#define AC_PRO_SVD_EVERIFY (-3)  /* 双闸门 R1/R2 不过,或零列补全无候选
+                                  * 可收(诚实失败,绝不硬凑)            */
+
 /* ==== END ANCHOR SVD ==== */
 
 #endif /* AC_PRO_H */

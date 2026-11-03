@@ -36,11 +36,14 @@ binary64 下只有**表达式书写顺序逐字一致**才能把两侧数值差�
 - **数学范围**：一般 m×n **实**稠密矩阵，m, n ∈ [1, 12]（`AC_PRO_MATRIX_MAX_DIM`
   同款）；对称性不限，m < n 合法（内部走转置路径，§3.2）。复矩阵不在域内。
   **不做 lstsq / 最小二乘管线**（ROADMAP.md:92 成文边界，G2 只落 SVD 本体）。
-- **零存储（C）**：错误码走返回值、数据在 Pro union 的 svd 槽（3752 B ≤ 3848 吸收线，
+- **零存储（C）**：错误码走返回值、数据在 Pro union 的 svd 槽（3760 B ≤ 3848 吸收线，
   构成：a 工作副本 144×8=1152 + U 1152 + V 1152 + w 12×8=96 + work 24×8=192 +
-  n_st/pad 8，margin 96 B）；零新 static 可变对象（ac_pro.h eig 节论证：一个 static
-  = TU 净 +32 B .bss）。sparse（3848）仍是 union 峰值，.bss 账本 42608/42640/39408
-  不动（v2.6 开工实测基线精确命中）。
+  m_st/n_st/k_st/pad 16，margin 88 B。开工复核注记：ROADMAP §G2 预估 3752 B
+  按「计数 8」计——矩形 SVD 的列指针 accessor 需要 m/n 两个变步长停泊
+  （schur 方阵口径 stride == count 才得以只停泊一个数），+8 B 后仍被 sparse
+  3848 完全吸收，union 峰值不动）；零新 static 可变对象（ac_pro.h eig 节论证：
+  一个 static = TU 净 +32 B .bss）。sparse（3848）仍是 union 峰值，.bss 账本
+  42608/42640/39408 不动（v2.6 开工实测基线精确命中）。
 - **零 malloc / 零 VLA / 零递归**（C 侧；`--wrap=malloc` 链接拦截 + pro_runner live
   旗标同源证明）。
 - **确定性优先**：一切次序由 §3 的机械规则决定，精确并列保持提取序；凡规则与
@@ -187,8 +190,9 @@ int            ac_pro_svd_count(void);    /* 成功 = k；任何失败路径 = 0
 ```
 
 #define AC_PRO_SVD_OK 1 / AC_PRO_SVD_EPARAM (−1) / AC_PRO_SVD_ENOCONV (−2) /
-AC_PRO_SVD_EVERIFY (−3)。accessor 返回视图内部指针，跨 API 调用后失效
-（ac_pro_scratch.h 视图持有纪律③同款）。
+AC_PRO_SVD_EVERIFY (−3)。accessor 返回视图内部指针（U 列步长 = m、V 列步长 = n，
+停泊于视图 m_st/n_st/k_st 槽），跨 API 调用后失效（ac_pro_scratch.h 视图持有
+纪律③同款）。
 
 ## 4. 奇异向量符号规范化（本契约 §一次定死，v2.7 同式同序）
 
