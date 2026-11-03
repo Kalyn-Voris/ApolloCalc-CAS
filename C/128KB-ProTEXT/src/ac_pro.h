@@ -699,6 +699,34 @@ int      ac_pro_gb_exps(int k, int t);
 
 /* ==== v2.5 ANCHOR: CX (feat/math-ext) ==== */
 
+/* v2.5.0 功能 F1：复变函数扩展（15 API，契约 docs/contracts/complex-ext-v25.md）。
+ * 寄存器协议复用上游 ac_complex.h 六寄存器：输入 g_c_a_*(单操作数)或
+ * g_c_a_*+g_c_b_*(双操作数)，结果写 g_c_tmp_*。全部返回 int 错误码（0 成功；
+ * 负值失败），零 static 可变对象（.bss 零增长），零递归、零 malloc、零 VLA。
+ * 仅 ac_pro_cpow 按契约 §3 覆写 A 寄存器（内部暂存 w·ln z，沿袭 ac_c_pow_real
+ * 同款约定；调用后如需再用 A 必须重载），其余 14 API 不改写 A/B。
+ * 公式表/奇点表/误差带以契约 §4/§5/§6/§8 为唯一出处，两侧逐字同构。 */
+#define AC_PRO_CX_OK      0    /* 成功：TMP 已写入且全有限 */
+#define AC_PRO_CX_EDOM  (-1)   /* 输入落在契约 §5 奇点表 / 输入非有限 */
+#define AC_PRO_CX_EOVER (-2)   /* 计算非有限（溢出/NaN，契约 §6） */
+#define AC_PRO_CX_EPARAM (-3)  /* cnthroot 的 k ≤ 0 */
+
+int ac_pro_csin(void);      /* TMP = sin(A) */
+int ac_pro_ccos(void);      /* TMP = cos(A) */
+int ac_pro_ctan(void);      /* TMP = tan(A)（|Im|<=1 比值形 / >1 和式形，阈值冻结） */
+int ac_pro_csinh(void);     /* TMP = sinh(A) */
+int ac_pro_ccosh(void);     /* TMP = cosh(A) */
+int ac_pro_ctanh(void);     /* TMP = tanh(A)（|Re|<=1 比值形 / >1 和式形） */
+int ac_pro_casin(void);     /* TMP = asin(A)，C99 G 主值支 */
+int ac_pro_cacos(void);     /* TMP = acos(A) = pi/2 - asin(A) */
+int ac_pro_catan(void);     /* TMP = atan(A)；A=±i → EDOM */
+int ac_pro_casinh(void);    /* TMP = asinh(A) = -i·asin(iA) */
+int ac_pro_cacosh(void);    /* TMP = acosh(A) = cln(A+csqrt(A-1)csqrt(A+1)) */
+int ac_pro_catanh(void);    /* TMP = atanh(A) = -i·atan(iA)；A=±1 → EDOM */
+int ac_pro_cpow(void);      /* TMP = A^B = cexp(B·cln A)；覆写 A；A=0 见契约 §5 */
+int ac_pro_cnthroot(int k); /* TMP = A 的主值 k 次根（de Moivre）；k <= 0 → EPARAM */
+int ac_pro_cgamma(void);    /* TMP = Γ(A)，Lanczos g=7/n=9 + 反射式；非正整数极点 → EDOM */
+
 /* ==== END ANCHOR CX ==== */
 
 /* ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ==== */

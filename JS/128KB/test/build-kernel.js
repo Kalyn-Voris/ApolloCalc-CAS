@@ -198,7 +198,15 @@ export default {
 };`;
 
 /* ==== v2.5 ANCHOR: complex (feat/math-ext) ==== */
-
+/* v2.5.0 F1 复变函数扩展（契约 docs/contracts/complex-ext-v25.md §3）：
+ * core_complex.js 就地扩展并定义 ApolloComplexExt 命名空间（15 方法 csin..cgamma），
+ * 此处把 complex 键拼进 EXPORT_BLOCK 串尾（替换末尾 "};", 插在 gb 行后）。
+ * EXPORTED_NAMES 名册不动（v2.3.0 功能 2 先例：命名空间整体导出不进名册，
+ * terser mangle.toplevel 对 body 与 export 块同映射）。锚点位于模板串外，
+ * 无参/--minify 两条拼接路径均在 proceed() 之前执行本 splice，产物一致。 */
+EXPORT_BLOCK = EXPORT_BLOCK.slice(0, -2) +
+  ",\n\n  /* ---- v2.5.0 F1 复变函数扩展（complex 命名空间，契约 complex-ext-v25）---- */\n" +
+  "  complex: ApolloComplexExt\n};";
 /* ==== END ANCHOR complex ==== */
 
 /* ==== v2.5 ANCHOR: sysolve (feat/solvers) ==== */

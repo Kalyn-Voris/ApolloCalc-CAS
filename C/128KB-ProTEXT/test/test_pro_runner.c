@@ -860,7 +860,10 @@ void test_sqfree_order(sq_tally_t *t);
 void test_sqfree_bounds(sq_tally_t *t);
 
 /* ==== v2.5 ANCHOR: CX (feat/math-ext) ==== */
-
+/* v2.5.0 功能 F1（复变函数扩展）的验收套件不聚合进本 main()：锚点纪律下
+ * main() 聚合区没有预埋锚点，本 CX 锚点只作占位。F1 走 Makefile CX 锚点的
+ * 独立 cx_runner 目标 + verify.ps1 CX 锚点门禁（exit 0 / RESULT: PASS /
+ * [case CX-n] >= 10 / 0 failed），接线说明见 docs/contracts/complex-ext-v25.md §11。 */
 /* ==== END ANCHOR CX ==== */
 
 /* ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ==== */
