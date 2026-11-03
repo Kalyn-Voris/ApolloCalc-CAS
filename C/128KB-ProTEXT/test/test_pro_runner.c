@@ -864,11 +864,50 @@ void test_sqfree_bounds(sq_tally_t *t);
 /* ==== END ANCHOR CX ==== */
 
 /* ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ==== */
-
+/* v2.5.0 F2:二元方程组 GB 消元数值全解(test/test_pro_sysolve.c,20 用例)。
+ * 本 TU 自带 sy_tally_t(同 test_pro_sqfree.c 的 sq_tally_t 约定,指针传入)。 */
+typedef struct { int checks; int failed; } sysolve_tally_t;
+void test_sysolve_quartic_system(sysolve_tally_t *t);
+void test_sysolve_complex_solutions(sysolve_tally_t *t);
+void test_sysolve_empty_set(sysolve_tally_t *t);
+void test_sysolve_ezdim(sysolve_tally_t *t);
+void test_sysolve_decoupled(sysolve_tally_t *t);
+void test_sysolve_tangent(sysolve_tally_t *t);
+void test_sysolve_edeg_reachable(sysolve_tally_t *t);
+void test_sysolve_route4(sysolve_tally_t *t);
+void test_sysolve_route5(sysolve_tally_t *t);
+void test_sysolve_linear_cross(sysolve_tally_t *t);
+void test_sysolve_deg6(sysolve_tally_t *t);
+void test_sysolve_deg78(sysolve_tally_t *t);
+void test_sysolve_bezout_cap(sysolve_tally_t *t);
+void test_sysolve_dedup(sysolve_tally_t *t);
+void test_sysolve_errors(sysolve_tally_t *t);
+void test_sysolve_buffer_boundary(sysolve_tally_t *t);
+void test_sysolve_syntax(sysolve_tally_t *t);
+void test_sysolve_determinism(sysolve_tally_t *t);
+void test_sysolve_residual_sanity(sysolve_tally_t *t);
+void test_sysolve_nonprimitive(sysolve_tally_t *t);
 /* ==== END ANCHOR SYSOLVE ==== */
 
 /* ==== v2.5 ANCHOR: STURM (feat/solvers) ==== */
-
+/* v2.5.0 F3:Sturm 序列与实根隔离(test/test_pro_sturm.c,16 用例)。 */
+typedef struct { int checks; int failed; } sturm_tally_t;
+void test_sturm_linear(sturm_tally_t *t);
+void test_sturm_cubic(sturm_tally_t *t);
+void test_sturm_no_real(sturm_tally_t *t);
+void test_sturm_quartic4(sturm_tally_t *t);
+void test_sturm_sff(sturm_tally_t *t);
+void test_sturm_endpoints(sturm_tally_t *t);
+void test_sturm_normalize(sturm_tally_t *t);
+void test_sturm_const(sturm_tally_t *t);
+void test_sturm_close(sturm_tally_t *t);
+void test_sturm_mignotte(sturm_tally_t *t);
+void test_sturm_reject(sturm_tally_t *t);
+void test_sturm_deg58(sturm_tally_t *t);
+void test_sturm_ovf(sturm_tally_t *t);
+void test_sturm_misc(sturm_tally_t *t);
+void test_sturm_buffer(sturm_tally_t *t);
+void test_sturm_cross_dk(sturm_tally_t *t);
 /* ==== END ANCHOR STURM ==== */
 
 int main(void) {
@@ -1100,6 +1139,65 @@ int main(void) {
         t.checks += q.checks;
         t.failed += q.failed;
         printf("--- v2.4.0 sqfree: %d/%d (checks/failed) ---\n", q.checks, q.failed);
+    }
+
+    /* v2.5.0 F2:二元方程组 GB 消元数值全解(test/test_pro_sysolve.c,20 用例)
+     * [feat/solvers] 注册块:锚点区仅承载声明,main 调用块按既有功能块同款
+     * 追加于此(合并序 solvers 第 2 位,与 math-ext 的调用块不重叠)。 */
+    {
+        sysolve_tally_t s1;
+        s1.checks = 0;
+        s1.failed = 0;
+        test_sysolve_quartic_system(&s1);
+        test_sysolve_complex_solutions(&s1);
+        test_sysolve_empty_set(&s1);
+        test_sysolve_ezdim(&s1);
+        test_sysolve_decoupled(&s1);
+        test_sysolve_tangent(&s1);
+        test_sysolve_edeg_reachable(&s1);
+        test_sysolve_route4(&s1);
+        test_sysolve_route5(&s1);
+        test_sysolve_linear_cross(&s1);
+        test_sysolve_deg6(&s1);
+        test_sysolve_deg78(&s1);
+        test_sysolve_bezout_cap(&s1);
+        test_sysolve_dedup(&s1);
+        test_sysolve_errors(&s1);
+        test_sysolve_buffer_boundary(&s1);
+        test_sysolve_syntax(&s1);
+        test_sysolve_determinism(&s1);
+        test_sysolve_residual_sanity(&s1);
+        test_sysolve_nonprimitive(&s1);
+        t.checks += s1.checks;
+        t.failed += s1.failed;
+        printf("--- v2.5.0 sysolve: %d/%d (checks/failed) ---\n", s1.checks, s1.failed);
+    }
+
+    /* v2.5.0 F3:Sturm 序列与实根隔离(test/test_pro_sturm.c,16 用例)
+     * [feat/solvers] 注册块:锚点区仅承载声明,main 调用块按既有功能块同款追加。 */
+    {
+        sturm_tally_t st1;
+        st1.checks = 0;
+        st1.failed = 0;
+        test_sturm_linear(&st1);
+        test_sturm_cubic(&st1);
+        test_sturm_no_real(&st1);
+        test_sturm_quartic4(&st1);
+        test_sturm_sff(&st1);
+        test_sturm_endpoints(&st1);
+        test_sturm_normalize(&st1);
+        test_sturm_const(&st1);
+        test_sturm_close(&st1);
+        test_sturm_mignotte(&st1);
+        test_sturm_reject(&st1);
+        test_sturm_deg58(&st1);
+        test_sturm_ovf(&st1);
+        test_sturm_misc(&st1);
+        test_sturm_buffer(&st1);
+        test_sturm_cross_dk(&st1);
+        t.checks += st1.checks;
+        t.failed += st1.failed;
+        printf("--- v2.5.0 sturm: %d/%d (checks/failed) ---\n", st1.checks, st1.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
