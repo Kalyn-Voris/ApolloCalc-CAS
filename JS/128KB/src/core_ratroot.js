@@ -959,10 +959,601 @@ var ApolloSqfree = (function () {
     return SQ_OK;
   }
 
+
+  /* ============================================================
+   * ApolloCalc · core_ratroot.js 扩段 — Sturm 序列与实根隔离
+   * (v2.5.0 F3,JS 镜像 deg ≤ 4;契约 docs/contracts/sturm-format-v25.md
+   *  冻结;C 侧 ac_pro_sturm.c 互为镜像,5..8 次 → EDEG 成文分叉 cOnly-DEG)
+   *
+   * 数学语义(契约 §2,C 侧文件头同款):
+   *   p₀ = p_sf(SFF 预归一),p₁ = p_sf′,p_{k+1} = −rem(p_{k−1},p_k) 的
+   *   正倍数(精确有理余 → 正 lcm 清母线 → 正 content 约减 → 不变号);
+   *   count(a,b) = V(a)−V(b)+[p₀(a)=0](闭区间,端点根计入;±∞ = lc/奇偶
+   *   逐成员);隔离 = (−B,B] 半开格显式栈二分(深度 ≤ 48,格内 ≥2 根 →
+   *   未解析 "!";端点既约分数)。
+   *
+   * JS 精确域(契约 §5.2,ECOEF 双语义的 JS 侧):
+   *   链构造:精确有理数(_stN/_stD Float64 整数,每算术步 |v| > 2^53−1
+   *   即 ECOEF,绝不输出失真值);
+   *   计数端点(整数):精确整数 Horner,每步同审计 —— 大端点用例由此
+   *   触发 cOnly-OVF(x⁴+1 在 9742 处 Horner 中间量 ~9.0e15 破 2^53);
+   *   隔离二分点:端点分子 num ≤ 2^53 审计(num/2^dep 除幂精确)→ 浮点
+   *   Horner + 前向误差界(|v| > 2·γ·Σ|c_i||t|^i 才定号,γ = deg·2⁻⁵²),
+   *   界内不可判定 → ECOEF —— dualCases 域内(相异根间隔 ≫ 机器精度)
+   *   全程可判定,与 C 精确定号同结果(dual 零分叉先决条件)。
+   *
+   * 零 GC:池加载期一次分配(sturm 段 allocCount = 14);词法复用本模块
+   * 既有 lex(sqfree 词法域同款:小写 x、|c| ≤ 999、ASCII、≤128 B);
+   * JS 整题 ≥5 → EDEG(guardDegree 口径,cOnly-DEG 分叉)。 */
+
+  var ST_SAFE = 9007199254740991;  /* 2^53−1 */
+  var ST_BDEPTH = 48;              /* 契约冻结二分深度(双侧统一) */
+  var ST_BSTACK = 49;              /* DFS 待处理格 ≤ 深度+1 ≤ 49 */
+  var ST_CELLS = 16;               /* 隔离输出格 ≤ 8 根格 + 4 未解析 + 1 端点格 */
+
+  /* 池(加载期一次分配;sturm 段 allocCount = 14) */
+  var _stC = new Float64Array(15);           /* 1 链系数(三角:5+4+3+2+1,带符号) */
+  var _stOff = new Int32Array(5);            /* 2 成员系数起始下标 */
+  var _stDeg = new Int32Array(5);            /* 3 成员次数 */
+  var _stN = new Float64Array(5);            /* 4 有理数分子工作区 */
+  var _stD = new Float64Array(5);            /* 5 有理数分母工作区(d > 0) */
+  var _stA = new Float64Array(5);            /* 6 欧几里得 a 槽(整数) */
+  var _stB = new Float64Array(5);            /* 7 欧几里得 b / 除数槽(整数) */
+  var _stW = new Float64Array(5);            /* 8 清母线余式工作区 */
+  var _stQn = new Float64Array(5);           /* 8b 精确除商分子(有理) */
+  var _stLo = new Float64Array(ST_BSTACK);   /* 9 二分栈左端分子 */
+  var _stHi = new Float64Array(ST_BSTACK);   /* 10 二分栈右端分子 */
+  var _stDep = new Uint8Array(ST_BSTACK);    /* 11 二分栈深度(≤ 48) */
+  var _stOut = new Uint8Array(256);          /* 12 渲染缓冲(charCode) */
+  var _stCellLo = new Float64Array(ST_CELLS);        /* 13 输出格 lo */
+  var _stCellHi = new Float64Array(ST_CELLS);        /* 14 输出格 hi */
+  var _stCellD = new Uint8Array(ST_CELLS * 2);       /* (dep ≤ 48, unres 0/1) 交错 */
+
+  var _stMem = 0;
+  var _stOutLen = 0;
+  var _stResult = { code: 0, out: "" };      /* 加载期一次分配,复用 */
+
+  function sturmAllocCount() { return 15; }
+  function getSturmString() { return _stResult.out; }
+
+  function stMul(a, b) {
+    var r = a * b;
+    if (r > ST_SAFE || r < -ST_SAFE) { return NaN; }
+    return r;
+  }
+  function stAdd(a, b) {
+    var r = a + b;
+    if (r > ST_SAFE || r < -ST_SAFE) { return NaN; }
+    return r;
+  }
+  function stGcd(a, b) {
+    var x = a, y = b, t = 0;
+    while (y !== 0) { t = x % y; x = y; y = t; }
+    return x;
+  }
+
+  /* 精确有理余:被除式 = (_stN,_stD)(有理,d>0);除式 = _stB(整数,deg db)。
+   * 就地消去得 Q 上余式;返回余式次数(−1 = 零);溢出 → SQ_ECOEF。
+   * negOut ≠ 0 时输出 −rem 的清母线整数式到 _stW(链步用),否则保持有理式。 */
+  function stRatRem(db, negOut) {
+    var k;
+    var j;
+    var qn;
+    var qd;
+    var tn;
+    var td;
+    var g;
+    var ki;
+    var nn;
+    var dd;
+    var rd;
+    var L;
+    var mx;
+    var mul;
+    var tn2;
+    var g2;
+    for (k = 4; k >= db; k--) {
+      if (_stN[k] === 0) { continue; }
+      qn = _stN[k];
+      qd = stMul(_stD[k], _stB[db]);
+      if (isNaN(qd)) { return SQ_ECOEF; }
+      g = stGcd(qn < 0 ? -qn : qn, qd);
+      if (g > 1) { qn = qn / g; qd = qd / g; }
+      for (j = 0; j <= db; j++) {
+        if (_stB[j] === 0) { continue; }
+        tn = stMul(qn, _stB[j]);
+        if (isNaN(tn)) { return SQ_ECOEF; }
+        td = qd;
+        g = stGcd(tn < 0 ? -tn : tn, td);
+        if (g > 1) { tn = tn / g; td = td / g; }
+        ki = k - db + j;
+        nn = stAdd(stMul(_stN[ki], td), -stMul(_stD[ki], tn));
+        if (isNaN(nn)) { return SQ_ECOEF; }
+        dd = stMul(_stD[ki], td);
+        if (isNaN(dd)) { return SQ_ECOEF; }
+        g = stGcd(nn < 0 ? -nn : nn, dd);
+        if (g > 1) { nn = nn / g; dd = dd / g; }
+        _stN[ki] = nn;
+        _stD[ki] = dd;
+      }
+      _stN[k] = 0;
+      _stD[k] = 1;
+    }
+    rd = db - 1;
+    while (rd >= 0 && _stN[rd] === 0) { rd--; }
+    if (rd < 0) { return -1; }
+    if (negOut === 0) { return rd; }
+    /* 清母线:L = lcm(d_0..d_rd)(正);w_i = ±n_i·(L/d_i) */
+    L = 1;
+    for (k = 0; k <= rd; k++) {
+      g = stGcd(L, _stD[k]);
+      mx = stMul(L / g, _stD[k]);
+      if (isNaN(mx)) { return SQ_ECOEF; }
+      L = mx;
+    }
+    for (k = 0; k <= rd; k++) {
+      mul = L / _stD[k];
+      tn2 = stMul(_stN[k], mul);
+      if (isNaN(tn2)) { return SQ_ECOEF; }
+      _stW[k] = negOut > 0 ? -tn2 : tn2;
+    }
+    /* 正 content 约减(不变号) */
+    g2 = 0;
+    for (k = 0; k <= rd; k++) {
+      var aw = _stW[k] < 0 ? -_stW[k] : _stW[k];
+      g2 = stGcd(g2, aw);
+    }
+    if (g2 > 1) {
+      for (k = 0; k <= rd; k++) { _stW[k] = _stW[k] / g2; }
+    }
+    return rd;
+  }
+
+  /* 链构建(_coef 由 lex 填充,deg ≤ 4);返回 0 或负错误码 */
+  function sturmBuild() {
+    var dg = _deg;
+    var i;
+    var j;
+    var rc;
+    var da;
+    var db;
+    var dgc;
+    var k;
+    /* 成员 0 = p(本原化 + 首项化正;计数对标量缩放不变) */
+    {
+      var g = 0;
+      for (i = 0; i <= dg; i++) {
+        var aw = _coef[i] < 0 ? -_coef[i] : _coef[i];
+        if (aw !== 0) { g = (g === 0) ? aw : stGcd(g, aw); }
+      }
+      if (g > 1) {
+        for (i = 0; i <= dg; i++) { _coef[i] = _coef[i] / g; }
+      }
+      if (_coef[dg] < 0) {
+        for (i = 0; i <= dg; i++) { _coef[i] = -_coef[i]; }
+      }
+    }
+    _stOff[0] = 0;
+    _stDeg[0] = dg;
+    for (i = 0; i <= dg; i++) { _stC[i] = _coef[i]; }
+    _stMem = 1;
+    if (dg === 0) { return 0; }
+
+    /* SFF:g = gcd(p, p′)(有理余欧几里得,逐步本原;JS 域 2^53 审计) */
+    da = dg;
+    for (i = 0; i <= da; i++) { _stA[i] = _stC[i]; }
+    db = dg - 1;
+    for (i = 0; i <= db; i++) { _stB[i] = stMul(_stC[i + 1], i + 1); if (isNaN(_stB[i])) { return SQ_ECOEF; } }
+    for (;;) {
+      /* a ← 有理化 b;rem → w(−rem 正倍数;gcd 只看幅值,翻号无妨) */
+      for (i = 0; i <= da; i++) { _stN[i] = _stA[i]; _stD[i] = 1; }
+      rc = stRatRem(db, 1);
+      if (rc === SQ_ECOEF) { return SQ_ECOEF; }
+      /* (a, b) ← (b, rem) —— 先 a←b 再判零:余式为零时 gcd = a(旧 b),
+       * 与 C 侧「无条件 a←b 再退出」同序(实测踩坑:先 break 误取 2x 为 gcd) */
+      da = db;
+      for (i = 0; i <= da; i++) { _stA[i] = _stB[i]; }
+      if (rc === -1) { break; }
+      db = rc;
+      for (i = 0; i <= db; i++) { _stB[i] = _stW[i]; }
+      if (_stB[db] < 0) {
+        for (i = 0; i <= db; i++) { _stB[i] = -_stB[i]; }
+      }
+    }
+    dgc = da;
+    /* gcd = _stA(次数 dgc;首项化正) */
+    if (_stA[dgc] < 0) {
+      for (i = 0; i <= dgc; i++) { _stA[i] = -_stA[i]; }
+    }
+    if (dgc >= 1) {
+      /* 精确除:p_sf = p / gcd(有理长除,商清母线成整数;余式非零 → EINTERNAL) */
+      for (i = 0; i <= dg; i++) { _stN[i] = _stC[i]; _stD[i] = 1; }
+      for (i = 0; i <= dgc; i++) { _stB[i] = _stA[i]; }
+      for (i = 0; i < 5; i++) { _stQn[i] = 0; }
+      var qdG = 1;   /* 商的统一分母(逐步 lcm) */
+      var kk;
+      for (kk = dg; kk >= dgc; kk--) {
+        if (_stN[kk] === 0) { continue; }
+        var cn = _stN[kk];
+        var cd = stMul(_stD[kk], _stB[dgc]);
+        if (isNaN(cd)) { return SQ_ECOEF; }
+        var gg = stGcd(cn < 0 ? -cn : cn, cd);
+        if (gg > 1) { cn = cn / gg; cd = cd / gg; }
+        _stQn[kk - dgc] = cn;
+        /* 分母并入 qdG:lcm */
+        gg = stGcd(qdG, cd);
+        var mx2 = stMul(qdG / gg, cd);
+        if (isNaN(mx2)) { return SQ_ECOEF; }
+        qdG = mx2;
+        for (j = 0; j <= dgc; j++) {
+          if (_stB[j] === 0) { continue; }
+          var tn = stMul(cn, _stB[j]);
+          if (isNaN(tn)) { return SQ_ECOEF; }
+          var td = cd;
+          gg = stGcd(tn < 0 ? -tn : tn, td);
+          if (gg > 1) { tn = tn / gg; td = td / gg; }
+          var ki = kk - dgc + j;
+          var nn = stAdd(stMul(_stN[ki], td), -stMul(_stD[ki], tn));
+          if (isNaN(nn)) { return SQ_ECOEF; }
+          var dd = stMul(_stD[ki], td);
+          if (isNaN(dd)) { return SQ_ECOEF; }
+          gg = stGcd(nn < 0 ? -nn : nn, dd);
+          if (gg > 1) { nn = nn / gg; dd = dd / gg; }
+          _stN[ki] = nn;
+          _stD[ki] = dd;
+        }
+        _stN[kk] = 0;
+        _stD[kk] = 1;
+      }
+      for (i = 0; i < dgc; i++) {
+        if (_stN[i] !== 0) { return SQ_EINTERNAL; }   /* 余式非零 */
+      }
+      /* 商 = _stQn/qdG → 清母线成整数(商必为整系数,Gauss) */
+      var dq = dg - dgc;
+      for (i = 0; i <= dq; i++) {
+        if (_stQn[i] % qdG !== 0) { return SQ_EINTERNAL; }
+        _stC[i] = _stQn[i] / qdG;
+      }
+      for (i = dq + 1; i <= 4; i++) { _stC[i] = 0; }
+      dg = dq;
+      _stDeg[0] = dg;
+    }
+
+    /* 链成员 1 = p_sf′ */
+    _stOff[1] = dg + 1;
+    _stDeg[1] = dg - 1;
+    for (i = 1; i <= dg; i++) {
+      _stC[_stOff[1] + i - 1] = stMul(_stC[i], i);
+      if (isNaN(_stC[_stOff[1] + i - 1])) { return SQ_ECOEF; }
+    }
+    _stMem = 2;
+    /* 迭代:p_{k+1} = −rem(p_{k−1}, p_k) 的正倍数 */
+    k = 1;
+    while (_stDeg[k] >= 1) {
+      var da2 = _stDeg[k - 1];
+      var db2 = _stDeg[k];
+      if (k + 1 >= 5) { return SQ_EINTERNAL; }
+      for (i = 0; i <= da2; i++) { _stN[i] = _stC[_stOff[k - 1] + i]; _stD[i] = 1; }
+      for (i = 0; i <= db2; i++) { _stB[i] = _stC[_stOff[k] + i]; }
+      rc = stRatRem(db2, 1);
+      if (rc === SQ_ECOEF) { return SQ_ECOEF; }
+      if (rc === -1) { return SQ_EINTERNAL; }   /* sf 后整除 = 不变式破坏 */
+      k++;
+      _stOff[k] = _stOff[k - 1] + db2 + 1;
+      _stDeg[k] = rc;
+      for (i = 0; i <= rc; i++) { _stC[_stOff[k] + i] = _stW[i]; }
+      _stMem = k + 1;
+    }
+    return 0;
+  }
+
+  /* 符号:成员 k 在 num/2^e 处。e = 0 → 精确整数 Horner(2^53 审计);
+   * e > 0 → 浮点 Horner + 前向误差界(不可判定 → ECOEF) */
+  function stSignAt(k, num, e) {
+    var dgg = _stDeg[k];
+    var off = _stOff[k];
+    var i;
+    var v;
+    if (e === 0) {
+      v = _stC[off + dgg];
+      for (i = dgg - 1; i >= 0; i--) {
+        v = stAdd(stMul(v, num), _stC[off + i]);
+        if (isNaN(v)) { return SQ_ECOEF; }
+      }
+      return v > 0 ? 1 : (v < 0 ? -1 : 0);
+    }
+    var t = num / Math.pow(2, e);   /* num ≤ 2^53 ⟹ 除幂精确 */
+    v = _stC[off + dgg];
+    var s = v < 0 ? -v : v;
+    for (i = dgg - 1; i >= 0; i--) {
+      var ci = _stC[off + i];
+      v = v * t + ci;
+      s = s * (t < 0 ? -t : t) + (ci < 0 ? -ci : ci);
+    }
+    if (!isFinite(v)) { return SQ_ECOEF; }
+    var bound = 2 * (dgg + 1) * Math.pow(2, -52) * s;
+    if (Math.abs(v) > bound) { return v > 0 ? 1 : -1; }
+    /* 浮点不可判定(t 恰为根/极近根)→ 精确整数 Horner 重试:
+     * N = p(num/2^e)·2^{e·dg} = Σ c_i·num^i·2^{e(dg−i)},逐项 ≤ 2^53 审计
+     * (幂表 2^{e·dg} > 2^53 的深端点 → ECOEF:cOnly-OVF 域,成文)。
+     * 根点处 N ≡ 0(每步中间量同为零)⟹ 精确判零,dualCases 零分叉关键 */
+    if (e * dgg > 53) { return SQ_ECOEF; }
+    var pw = 1;
+    var j2;
+    var pws = [1, 1, 1, 1, 1];
+    for (j2 = 1; j2 <= dgg; j2++) {
+      pw = pw * e2pow(e);
+      if (pw > ST_SAFE) { return SQ_ECOEF; }
+      pws[j2] = pw;
+    }
+    var nn = _stC[off + dgg];
+    for (i = dgg - 1; i >= 0; i--) {
+      nn = nn * num;
+      if (!isFinite(nn) || Math.abs(nn) > ST_SAFE) { return SQ_ECOEF; }
+      nn = nn + _stC[off + i] * pws[dgg - i];
+      if (!isFinite(nn) || Math.abs(nn) > ST_SAFE) { return SQ_ECOEF; }
+    }
+    return nn > 0 ? 1 : (nn < 0 ? -1 : 0);
+  }
+
+  function e2pow(e) { return Math.pow(2, e); }
+
+  function stVariations(num, e) {
+    var last = 0;
+    var v = 0;
+    var k;
+    for (k = 0; k < _stMem; k++) {
+      var sg = stSignAt(k, num, e);
+      if (sg === SQ_ECOEF) { return SQ_ECOEF; }
+      if (sg === 0) { continue; }
+      if (last !== 0 && sg !== last) { v++; }
+      last = sg;
+    }
+    return v;
+  }
+
+  /* ±∞:sign(p_k(±∞)) = (±1)^deg·sign(lc) 逐成员 */
+  function stVarInf(neg) {
+    var last = 0;
+    var v = 0;
+    var k;
+    for (k = 0; k < _stMem; k++) {
+      var lc = _stC[_stOff[k] + _stDeg[k]];
+      var sg = lc > 0 ? 1 : -1;
+      if (neg && (_stDeg[k] % 2) !== 0) { sg = -sg; }
+      if (last !== 0 && sg !== last) { v++; }
+      last = sg;
+    }
+    return v;
+  }
+
+  function stParseEndpoint(s) {
+    if (s === "inf") { return { kind: 1, v: 0 }; }
+    if (s === "-inf") { return { kind: -1, v: 0 }; }
+    if (typeof s !== "string" || s.length === 0 || s.length > 8) { return null; }
+    var i = 0;
+    var neg = 0;
+    var v = 0;
+    var nd = 0;
+    if (s.charAt(0) === "-") { neg = 1; i = 1; }
+    else if (s.charAt(0) === "+") { i = 1; }
+    for (; i < s.length; i++) {
+      var cc = s.charCodeAt(i);
+      if (cc < 48 || cc > 57) { return null; }
+      v = v * 10 + (cc - 48);
+      nd++;
+      if (nd > 6 || v > 999999) { return null; }
+    }
+    if (nd === 0) { return null; }
+    return { kind: 0, v: neg ? -v : v };
+  }
+
+  function sturmPrepare(src) {
+    var rc = lex(src);
+    if (rc !== SQ_OK) { return rc; }
+    if (_deg >= 5) { return SQ_EDEG; }   /* JS 镜像:cOnly-DEG 分叉(≥9 已在 lex 拒) */
+    if (_deg < 0) { return SQ_ECOEF; }   /* 全零多项式 */
+    _stMem = 0;
+    _stOutLen = 0;
+    return sturmBuild();
+  }
+
+  /* 对外:计数(闭区间 [a,b],端点根计入;成功值 = 非负根数) */
+  function sturmCount(src, a, b) {
+    var rc = sturmPrepare(src);
+    if (rc !== 0) { return rc; }
+    var ea = stParseEndpoint(a);
+    var eb = stParseEndpoint(b);
+    if (ea === null || eb === null) { return -4; }   /* EPARAM */
+    var ka = ea.kind;
+    var kb = eb.kind;
+    var cmp;
+    if (ka === -1) { cmp = (kb === -1) ? 0 : -1; }
+    else if (ka === 1) { cmp = (kb === 1) ? 0 : 1; }
+    else if (kb === -1) { cmp = 1; }
+    else if (kb === 1) { cmp = -1; }
+    else { cmp = (ea.v < eb.v) ? -1 : ((ea.v === eb.v) ? 0 : 1); }
+    if (cmp > 0) { return -4; }   /* a > b → EPARAM */
+    var va = (ka === 0) ? stVariations(ea.v, 0) : stVarInf(ka < 0);
+    if (va === SQ_ECOEF) { return SQ_ECOEF; }
+    var vb = (kb === 0) ? stVariations(eb.v, 0) : stVarInf(kb < 0);
+    if (vb === SQ_ECOEF) { return SQ_ECOEF; }
+    var n = va - vb;
+    if (ka === 0) {
+      var z = stSignAt(0, ea.v, 0);
+      if (z === SQ_ECOEF) { return SQ_ECOEF; }
+      if (z === 0) { n += 1; }
+    }
+    return n;
+  }
+
+  function stPutSCC(cc) {
+    if (_stOutLen >= _stOut.length - 1) { return SQ_EINTERNAL; }
+    _stOut[_stOutLen++] = cc;
+    return 0;
+  }
+  function stPutI(v) {
+    var buf = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var i = 0;
+    var m = v < 0 ? -v : v;
+    if (v < 0) { if (stPutSCC(45) !== 0) { return SQ_EINTERNAL; } }
+    if (m === 0) { buf[i++] = 0; }
+    while (m > 0) { buf[i++] = m % 10; m = (m - (m % 10)) / 10; }
+    while (i > 0) { if (stPutSCC(48 + buf[--i]) !== 0) { return SQ_EINTERNAL; } }
+    return 0;
+  }
+  function stPutRat(num, dep) {
+    if (num < 0) { if (stPutSCC(45) !== 0) { return SQ_EINTERNAL; } num = -num; }
+    if (stPutI(num) !== 0) { return SQ_EINTERNAL; }
+    if (dep > 0) {
+      if (stPutSCC(47) !== 0) { return SQ_EINTERNAL; }
+      if (stPutI(Math.pow(2, dep)) !== 0) { return SQ_EINTERNAL; }
+    }
+    return 0;
+  }
+  function stFlushResult() {
+    var s = "";
+    var i;
+    for (i = 0; i < _stOutLen; i++) { s = s + String.fromCharCode(_stOut[i]); }
+    _stResult.code = 0;
+    _stResult.out = s;
+    return 0;
+  }
+
+  /* 对外:隔离(显式栈二分,深度 ≤ 48;结果串入 _stResult.out) */
+  function sturmIsolate(src) {
+    var rc = sturmPrepare(src);
+    _stResult.code = rc;
+    _stResult.out = "";
+    if (rc !== 0) { return rc; }
+    _stOutLen = 0;
+    var dg = _stDeg[0];
+    var i;
+    var j;
+    var q;
+    if (dg === 0) {
+      if (stPutSCC(91) !== 0 || stPutSCC(93) !== 0) { return SQ_EINTERNAL; }
+      return stFlushResult();
+    }
+    /* Cauchy 界上取整到 2 的幂:全整数精确比较 snap·|c_n| ≥ |c_n| + max|c_i| */
+    var cn = _stC[_stOff[0] + dg];
+    if (cn < 0) { cn = -cn; }
+    var mxc = 0;
+    for (i = 0; i < dg; i++) {
+      var ai = _stC[_stOff[0] + i];
+      if (ai < 0) { ai = -ai; }
+      if (ai > mxc) { mxc = ai; }
+    }
+    var snap = 1;
+    while (snap * cn < cn + mxc) {
+      snap = snap * 2;
+      if (snap > 1048576) { return SQ_EINTERNAL; }
+    }
+    var ncells = 0;
+    var z = stSignAt(0, -snap, 0);
+    if (z === SQ_ECOEF) { return SQ_ECOEF; }
+    if (z === 0) {
+      _stCellLo[0] = -snap;
+      _stCellHi[0] = -snap;
+      _stCellD[0] = 0;
+      _stCellD[1] = 0;
+      ncells = 1;
+    }
+    var sp = 0;
+    _stLo[sp] = -snap;
+    _stHi[sp] = snap;
+    _stDep[sp] = 0;
+    sp++;
+    while (sp > 0) {
+      sp--;
+      var lo = _stLo[sp];
+      var hi = _stHi[sp];
+      var dep = _stDep[sp];
+      var nlo = stVariations(lo, dep);
+      if (nlo === SQ_ECOEF) { return SQ_ECOEF; }
+      var nhi = stVariations(hi, dep);
+      if (nhi === SQ_ECOEF) { return SQ_ECOEF; }
+      var n = nlo - nhi;
+      if (n === 0) { continue; }
+      if (n === 1) {
+        if (ncells >= ST_CELLS) { return SQ_EINTERNAL; }
+        _stCellLo[ncells] = lo;
+        _stCellHi[ncells] = hi;
+        _stCellD[ncells * 2] = dep;
+        _stCellD[ncells * 2 + 1] = 0;
+        ncells++;
+        continue;
+      }
+      if (dep >= ST_BDEPTH) {
+        if (ncells >= ST_CELLS) { return SQ_EINTERNAL; }
+        _stCellLo[ncells] = lo;
+        _stCellHi[ncells] = hi;
+        _stCellD[ncells * 2] = dep;
+        _stCellD[ncells * 2 + 1] = 1;
+        ncells++;
+        continue;
+      }
+      if (sp + 2 > ST_BSTACK) { return SQ_EINTERNAL; }
+      _stLo[sp] = lo * 2; _stHi[sp] = lo + hi; _stDep[sp] = dep + 1; sp++;
+      _stLo[sp] = lo + hi; _stHi[sp] = hi * 2; _stDep[sp] = dep + 1; sp++;
+    }
+    /* 按 lo 升序(格不交,值比较可分辨;插入排序稳定) */
+    for (i = 1; i < ncells; i++) {
+      var klo = _stCellLo[i];
+      var kdep = _stCellD[i * 2];
+      var kv = klo / Math.pow(2, kdep);
+      var khi = _stCellHi[i];
+      var kund = _stCellD[i * 2 + 1];
+      j = i - 1;
+      while (j >= 0) {
+        var jv = _stCellLo[j] / Math.pow(2, _stCellD[j * 2]);
+        if (jv <= kv) { break; }
+        _stCellLo[j + 1] = _stCellLo[j];
+        _stCellHi[j + 1] = _stCellHi[j];
+        _stCellD[(j + 1) * 2] = _stCellD[j * 2];
+        _stCellD[(j + 1) * 2 + 1] = _stCellD[j * 2 + 1];
+        j--;
+      }
+      _stCellLo[j + 1] = klo;
+      _stCellHi[j + 1] = khi;
+      _stCellD[(j + 1) * 2] = kdep;
+      _stCellD[(j + 1) * 2 + 1] = kund;
+    }
+    /* 渲染:既约分数;未解析 "!" */
+    if (stPutSCC(91) !== 0) { return SQ_EINTERNAL; }
+    for (i = 0; i < ncells; i++) {
+      var lo2 = _stCellLo[i];
+      var hi2 = _stCellHi[i];
+      var dlo = _stCellD[i * 2];
+      var dhi = _stCellD[i * 2];
+      if (i > 0) {
+        if (stPutSCC(44) !== 0 || stPutSCC(32) !== 0) { return SQ_EINTERNAL; }
+      }
+      if (stPutSCC(91) !== 0) { return SQ_EINTERNAL; }
+      while (dlo > 0 && (lo2 % 2) === 0) { lo2 = lo2 / 2; dlo--; }
+      while (dhi > 0 && (hi2 % 2) === 0) { hi2 = hi2 / 2; dhi--; }
+      if (stPutRat(lo2, dlo) !== 0) { return SQ_EINTERNAL; }
+      if (stPutSCC(44) !== 0 || stPutSCC(32) !== 0) { return SQ_EINTERNAL; }
+      if (stPutRat(hi2, dhi) !== 0) { return SQ_EINTERNAL; }
+      if (stPutSCC(93) !== 0) { return SQ_EINTERNAL; }
+      if (_stCellD[i * 2 + 1] === 1) {
+        if (stPutSCC(33) !== 0) { return SQ_EINTERNAL; }
+      }
+    }
+    if (stPutSCC(93) !== 0) { return SQ_EINTERNAL; }
+    return stFlushResult();
+  }
+
   return {
     sqfree: sqfree,
     reset: reset,
-    allocCount: allocCount
+    allocCount: allocCount,
+
+    /* ---- v2.5.0 F3:Sturm 序列与实根隔离(契约 sturm-format-v25,deg ≤ 4 镜像) ---- */
+    sturmCount: sturmCount,
+    sturmIsolate: sturmIsolate,
+    getSturmString: getSturmString,
+    sturmAllocCount: sturmAllocCount
   };
 })();
 
