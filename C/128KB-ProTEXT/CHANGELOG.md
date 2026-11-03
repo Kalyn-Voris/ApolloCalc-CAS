@@ -6,6 +6,31 @@
 一次发布可只覆盖部分组件），本文件记录**组件版本**（见本目录 [VERSION](VERSION)）。
 双轨两个口径不必同号：全局版本每次发布都会注明对应的组件版本。
 
+## v1.7.0 (2026-11-04) · 对应全局 v2.5.0
+
+- **复域超越函数库**（新增 `ac_pro_complex_ext.c`，15 API）：复三角 / 复双曲 /
+  反三角 / 反双曲 / 全复幂（`ac_pro_cpow`，覆写 A 约定沿袭 cPowReal）/ 主值
+  k 次根（`ac_pro_cnthroot`）/ 复 Gamma（`ac_pro_cgamma`）。主值分支、割线
+  ±0 侧与奇点（EDOM）约定冻结于
+  [docs/contracts/complex-ext-v25.md](../../docs/contracts/complex-ext-v25.md)，
+  与 JS 侧同语料 789 行差分零分歧（行间最大 err 2.766e-16）。
+  专项验收 `cx_runner` **134 checks, 0 failed**。
+- **二元多项式方程组 GB 消元数值全解**（新增 `ac_pro_sysolve.c`）：字符串进、
+  解列表字符串出，全部解含复数解；GB={1} → 成功语义 0 解，正维数 / 超次数 /
+  残差回验不过按错误码诚实拒绝。契约
+  [sysolve-format-v25.md](../../docs/contracts/sysolve-format-v25.md)。
+  pro_runner 内 20 例，与 JS 侧 20/20 对拍零分歧。
+- **Sturm 序列实根计数与隔离**（新增 `ac_pro_sturm.c`）：`ac_pro_sturm_count` /
+  `ac_pro_sturm_isolate`，1..8 次整系数多项式（5..8 由 `ac_bigint` 承载链系数
+  膨胀）在 [a,b]（含 ±∞ 端点）上的精确实根计数与隔离区间；端点开闭语义与
+  二分深度上限 48 层双侧统一，契约
+  [sturm-format-v25.md](../../docs/contracts/sturm-format-v25.md)。
+  pro_runner 内 16 例，另含 Sturm 计数与 DK 数值求根交叉校验。
+- 零新 static 对象：消元产物与根候选走栈缓冲，DK 复用既有 nr 视图，
+  内核静态内存维持 **42608 B** 零增长（2026-11-04 `bss-check` 复测）。
+- verify.ps1 头注与门禁行同步 v2.5.0 实测（新增 CX / SYSOLVE / STURM 三组），
+  **42 项 verdict 全绿**；pro_runner **583 → 692 checks, 0 failed**。
+
 ## v1.6.3 (2026-11-03) · 对应全局 v2.4.3
 
 - 生态构建版本：src/ 全部 37 个 .c/.h 统一 MIT 许可证头（SPDX + 版权声明），

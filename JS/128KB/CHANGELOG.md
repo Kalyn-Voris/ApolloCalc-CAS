@@ -5,6 +5,38 @@
 [CHANGELOG.md](../../CHANGELOG.md) 的口径区分：根记录**全局版本节点**（仓库级 Tag，
 一次发布可只覆盖部分组件），本文件记录**组件版本**（见本目录 [VERSION](VERSION)）。
 
+## v2.5.0 (2026-11-04) · 对应全局 v2.5.0
+
+- **复域超越函数库**（`core_complex.js` 扩展，15 API，`complex` 命名空间导出）：
+  复三角/复双曲/反三角/反双曲/全复幂/主值 k 次根/复 Gamma；主值分支与奇点
+  契约 [complex-ext-v25](../../docs/contracts/complex-ext-v25.md) 双侧同构
+  零分叉，与 C 侧同语料 789 行差分零分歧。132 项测试（test-complex-ext.js）。
+- **二元方程组 GB 消元数值全解**（`core_groebner.js` sysolve 扩段，捆绑
+  Durand-Kerner 高次求根移植）：全部解含复数解，GB={1} → 0 解、正维数
+  诚实拒绝；h 次数 5..8 两侧同走 DK，本功能全域零分叉，与 C 侧 20/20 对拍
+  一致。契约 [sysolve-format-v25](../../docs/contracts/sysolve-format-v25.md)。
+  40 项测试（test-sysolve.js）。
+- **Sturm 序列镜像**（`core_ratroot.js` 扩段，≤4 次）：与 C 侧域内零分叉
+  （计数 + 隔离区间逐字一致）；链中间量超出 2^53−1 精确域即报 ECOEF，
+  绝不输出失真值；5..8 次按契约返回次数超限（依赖 JS 大整数，v2.6 收口）。
+  契约 [sturm-format-v25](../../docs/contracts/sturm-format-v25.md) 三层
+  （dual / cOnly-DEG / cOnly-OVF）。68 项测试（test-sturm.js）。
+- **一般实矩阵全部特征值**（`core_matrix.js` pro 层 `proSchur*` API）：
+  Householder→Hessenberg→Francis 隐式双移 QR 逐条对照 C 侧同算法移植；
+  实/复共轭对 + 可选反迭代实特征向量，错误码 −1/−2/−3 与 C 逐值同语义。
+  补齐 JS 侧最后一个矩阵能力不对等项，与 C 侧 47/47 零分叉
+  （契约 [eigen-format-v25](../../docs/contracts/eigen-format-v25.md)）。
+  93 项测试（test-matrix-eig.js）。C 侧零改动。
+- **全池水位门禁**：内存检查从只计基础内核池升级为全项目静态池口径
+  （实测 175 104 B，门禁线 178 496 B），逐模块池自报可审计；关闭 v2.4.0
+  成文待办「门禁只计基础池、保护力失效」。自检 test-watermark.js 36 项，
+  账本 tests/js-pool-ledger.json。
+- 压缩内核重建：103599 → **128846 B**（预算 131072 B，余量 2226 B）。
+  通过 **1563 项测试**（25 个测试文件；v2.4.2 基线 1194 + 本版五块新增）。
+- 新增差分驱动与语料：diff-complex / diff-sysolve / diff-sturm / diff-eigen
+  （tests/bench/，既有 diff-smoke128 50 例管线一行未动）；370 条 ODE 差分
+  fuzz 语料与双侧探针固化进 tests/ 与 tools/（此前为会话工作区残留）。
+
 ## v2.4.3 (2026-11-03) · 对应全局 v2.4.3
 
 - 生态构建版本：src/ 全部 18 个 .js 统一 MIT 许可证头（SPDX + 版权声明），

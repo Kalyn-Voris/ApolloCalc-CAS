@@ -1,11 +1,12 @@
 ﻿# ApolloCalc · verify.ps1 — ProTEXT 可重复验收脚本
 #
 # 一条命令跑完全部硬指标：
-#   1) 三份产物构建（pro_runner / pro_kernel / degraded）
-#   2) .bss 三层账本精确比对（42608 / 42640 / 39408 / 38672）
+#   1) 四份产物构建（pro_runner / pro_kernel / cx_runner / degraded）
+#   2) .bss 三层账本 + 退化构建精确比对（42608 / 42640 / 39408 / 38672）
 #   3) 测试套件执行（内嵌测试全量，0 失败）
-#   4) B1 / A4 / A6 / A1 / A2 / A3 / A5 / B2 / SP / BD / RAT / ODE /
-#      SCHUR / SQFREE 覆盖度
+#   4) B1 / A4 / A6 / A5 / B2 / SP / BD / GB / RAT / ODE / SCHUR / SQFREE /
+#      CX / SYSOLVE / STURM 覆盖度（v2.5.0 实测：pro_runner 692 checks +
+#      cx_runner 134 checks；SYSOLVE 20 例 / STURM 16 例 / CX >= 10 例）
 #   5) 上游 C/128KB 零改动（git status + git diff 双证）
 #   6) 负向编译检查（AC_PRO=2 / AC_PRO=0 无 DEGRADED 必须编译失败）
 #   7) 关键符号唯一性（拦截层没有制造重复定义）
@@ -67,7 +68,7 @@ function Get-Bss([string]$exe) {
 
 Write-Host ''
 Write-Host '============================================================'
-Write-Host ' ApolloCalc-CAS · ProTEXT v2.4.1 verification'
+Write-Host ' ApolloCalc-CAS · ProTEXT v2.5.0 verification'
 Write-Host '============================================================'
 
 # ---------- 1) 构建 ----------

@@ -125,5 +125,14 @@ Gröbner 基（gbasis，支持 lex/tdeg 等单项序）与按 Gröbner 基的范
   数值求解器选项族）是本仓功能边界决策的直接参照。
 - `desolve` 的广覆盖（可分离/Bernoulli/Clairaut）反衬本仓 ODE 只做常系数线性
   齐次的取舍：那些类型需要任意函数的符号积分做积分因子，超出两侧积分引擎能力。
-- `proot`/`sturm` 对应本仓 Durand-Kerner + 牛顿迭代的高次数值求根路径；
-  Sturm 隔离未纳入（禁递归约束下的工程取舍）。
+- `proot`/`sturm` 对应本仓 Durand-Kerner + 牛顿迭代的高次数值求根路径。
+  **v2.5.0 修订（F3 附带交付，ROADMAP-v2.5-v2.6.md §F3）**：本行原记
+  「Sturm 隔离未纳入（禁递归约束下的工程取舍）」——该弃用理由已被 F3
+  落地前调研证伪：Sturm 链的多项式余序列是显式循环、根隔离二分用显式栈，
+  均不依赖递归（仓库禁递归红线不构成障碍）；真实约束是**系数膨胀域**
+  （有理 PRS 中间系数膨胀，C 侧由 ac_bigint 承载，JS 侧以 2^53 精确域
+  闸门拦截）。v2.5.0 已落地：C 侧 `ac_pro_sturm.c` deg 1..8 全功能
+  （`ac_pro_sturm_count` / `ac_pro_sturm_isolate`，计数与 DK 数值求根
+  交叉校验），JS 侧 deg ≤4 镜像（5..8 次契约成文分叉返 EDEG，收口随
+  v2.6 G4' 纯 JS 大整数），契约
+  [docs/contracts/sturm-format-v25.md](../contracts/sturm-format-v25.md)。

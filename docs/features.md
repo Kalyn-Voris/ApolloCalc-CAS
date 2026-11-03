@@ -1,25 +1,27 @@
 # ApolloCalc-CAS 功能对照表
 
 四版本家族（JS 与 C99 × 64KB 与 128KB）+ Pro 层的内核功能矩阵。
-JS/128KB（v2.4.1）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组件 v1.6.1）
+JS/128KB（v2.5.0）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组件 v1.7.0）
 为代数能力最强的参考实现（`.bss` 内核口径 42608 B，上游 `C/128KB/` 冻结）。
 版本文档：[js-128kb.md](js-128kb.md) / [c99-128kb.md](c99-128kb.md) /
 [ROADMAP.md](../ROADMAP.md)。
 
-**基线数字（2026-10-31 实测，非转抄）**：
+**基线数字（2026-11-04 v2.5.0 实测，非转抄）**：
 
-- C 侧 `verify.ps1` → **RESULT: 35 passed, 0 failed**（含 runner `.bss` 账本
-  42608 / 42640 / 上游对照 39408、degraded 38672）；`pro_runner` **574 checks,
-  0 failed**（v2.3.0 基线 488 + 功能 8 schur 46 + 功能 9 sqfree 40；每功能
+- C 侧 `verify.ps1` → **RESULT: 42 passed, 0 failed**（含 runner `.bss` 账本
+  42608 / 42640 / 上游对照 39408、degraded 38672）；`pro_runner` **692 checks,
+  0 failed**（v2.4.2 基线 583 + v2.5.0 F2 方程组 20 例 / F3 Sturm 16 例；每功能
   用例数 B1=7 / A4=6 / A6=9 / A5=6 / B2=10 / SP=12 / BD=12 / GB=12 /
-  RAT=7 / ODE=7 / SCHUR=13 / SQFREE=10）。
-- JS 侧 `node test/run-all.js` → **TOTAL: 1183 pass, 0 fail**（20/20 文件；
-  v2.3.0 基线 862（16 文件）+ 符号微分引擎 116 + 符号积分 75 + sqfree 70 +
-  结式/Groebner 60）。
-- 压缩内核 `JS/128KB/src/core_kernel.js` 实测 **103 325 B**（预算 131 072 B，
-  余量 27 747 B；v2.4.0 四块新功能后由 49 747 B 重建，累计 +53 578 B——
-  JS 组风险注记：后续任何 JS 功能落位前应重估水位）。
-- 跨语言对拍 `node tests/bench/diff-smoke128.js` → **50/50 用例一致**，exit 0。
+  RAT=7 / ODE=7 / SCHUR=13 / SQFREE=10 / SYSOLVE=20 / STURM=16）；复变函数
+  专项 `cx_runner` 另计 **134 checks, 0 failed**（v2.5.0 F1）。
+- JS 侧 `node test/run-all.js` → **TOTAL: 1563 pass, 0 fail**（25/25 文件；
+  v2.4.2 基线 1194 + 复变扩展 132 + 方程组 40 + Sturm 68 + 一般实矩阵特征值 93
+  + F0 全池水位门禁自检 36）。
+- 压缩内核 `JS/128KB/src/core_kernel.js` 实测 **128 846 B**（预算 131 072 B，
+  余量 2 226 B；v2.5.0 五块新功能后由 103 599 B 重建，累计 +25 247 B）。
+- 跨语言对拍 `node tests/bench/diff-smoke128.js` → **50/50 用例一致**，exit 0；
+  v2.5.0 新增四个差分驱动同日复跑全部 exit 0（方程组 20/20、Sturm 62/62、
+  特征值 47/47、复变语料 789 行零分歧）。
 
 ## 内核功能
 
@@ -37,7 +39,10 @@ JS/128KB（v2.4.1）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组�
 | 复数域函数（cExp / cLn / cPowReal） | ❌（仅求解器内部 cSqrt） | ✅ | ❌ | ✅（ac_complex，12 API） |
 | **多变量多项式项表**（解析/求值/四则，2 变量 deg ≤6，v2.0.0） | ❌ | ✅（core_multivar，与 C Pro 层同 exps 编码） | ❌ | ❌（Pro 层具备，见下节） |
 | **多变量符号求导 d/dx、d/dy**（逐项幂法则，v2.0.0） | ❌ | ✅（`diff`） | ❌ | ❌（Pro 层具备） |
-| **矩阵基础运算**（乘/转置/行列式/逆，v2.0.0；**pro 层 12×12，v2.3.0**） | ❌ | ✅ ≤3×3 闭式（core_matrix）+ **12×12 pro 层**（det/inv/rank、LU(P·A=L·U+piv)、QR、幂法+Hotelling 全特征对） | ❌ | ✅ 12×12 完整（ac_matrix） |
+| **矩阵基础运算**（乘/转置/行列式/逆，v2.0.0；**pro 层 12×12，v2.3.0**） | ❌ | ✅ ≤3×3 闭式（core_matrix）+ **12×12 pro 层**（det/inv/rank、LU(P·A=L·U+piv)、QR、幂法+Hotelling 实对称全特征对、**一般实矩阵全部特征值 proSchur（Francis QR，v2.5.0）**） | ❌ | ✅ 12×12 完整（ac_matrix） |
+| **复域超越函数库**（复三角/双曲/反函数/全复幂/主值 k 次根/复 Gamma，15 API，v2.5.0 双侧） | ❌ | ✅（core_complex.js 扩展，complex 命名空间） | ❌ | ❌（Pro 层具备，见下节） |
+| **二元多项式方程组 GB 消元数值全解**（全部解含复数解，v2.5.0 双侧） | ❌ | ✅（core_groebner sysolve 扩段，捆绑 Durand-Kerner 高次求根） | ❌ | ❌（Pro 层具备，见下节） |
+| **Sturm 序列实根计数与隔离**（v2.5.0，**能力域不对称**：C 1..8 次 / JS ≤4 次） | ❌ | ✅（core_ratroot 扩段，≤4 次；链系数 >2^53 → ECOEF） | ❌ | ❌（Pro 层具备，1..8 次，见下节） |
 | **特殊函数 erf / gamma / lgamma**（v2.0.0） | ❌ | ✅（core_special，A&S 26.2.17 + Lanczos g=7） | ❌ | ✅（ac_special，超集） |
 | **数论 gcd/lcm、素性检测、质因数分解、nCr/nPr**（v2.3.0，JS 侧补齐） | ❌ | ✅（core_numtheory，Miller-Rabin 底数集与 C 侧逐字一致） | ✅ 进制 + 分数显示（**无 Miller-Rabin**） | ✅（ac_numtheory，含 Miller-Rabin） |
 | **常系数线性齐次 ODE 通解**（v2.3.0，双侧新功能） | ❌ | ✅（core_ode，特征根复用 solveQuadratic/Cubic/Quartic） | ❌ | ❌（Pro 层具备，见下节） |
@@ -50,10 +55,13 @@ JS/128KB（v2.4.1）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组�
 | 内存水位门禁 | 48KB（64KB × 75%） | 96KB（128KB × 75%） | ✅ 48KB | ✅ **96KB** |
 | 家族共享一致性用例（tests/ 共享 JSON） | ❌（直连用例内嵌） | ✅（test-consistency.js） | ✅（smoke_runner） | ✅（smoke_runner + diff-smoke128.js） |
 
-> 共享契约 JSON 自 v2.3.0 起为四套：`polynomials.json`（数值求根；**v2.4.0 起
+> 共享契约 JSON 自 v2.5.0 起为八套：`polynomials.json`（数值求根；**v2.4.0 起
 > 增补 sqfree (根, 重数) 契约区，见下节**）、`exact-forms.json`（精确形式）、
 > `edge-cases.json`（边界与错误码）、`ode-solutions.json`（ODE 通解逐字契约，
-> v2.3.0 新建）。
+> v2.3.0 新建）、`complex-functions.json`（复变函数，v2.5.0 新建）、
+> `systems.json`（方程组解列表契约，v2.5.0 新建）、`sturm.json`（Sturm 三层
+> 契约：dual / cOnly-DEG / cOnly-OVF，v2.5.0 新建）、`eigen-cases.json`
+> （一般实矩阵特征值，47 例 dual 全量，v2.5.0 新建）。
 
 ## C99 独有模块（v2.0.0 后 JS 128KB 已补齐基础版的以「基础版」标注）
 
@@ -79,10 +87,16 @@ v2.3.0）**、**常系数线性齐次 ODE 通解（字符串进字符串出，�
 **一般实矩阵全部特征值（Householder→Hessenberg→Francis 隐式双移 QR，非对称输入
 不再返 −2，可选反迭代实特征向量，v2.4.0）**、**单变量多项式 square-free 分解与
 重根重数（整系数 SFF，契约 [sqfree-format-v24](contracts/sqfree-format-v24.md)，
-v2.4.0）**。
+v2.4.0）**、**复域超越函数库（15 API：复三角/复双曲/反三角/反双曲/全复幂/
+主值 k 次根/复 Gamma，契约 [complex-ext-v25](contracts/complex-ext-v25.md)，
+v2.5.0，专项 cx_runner 验收）**、**二元多项式方程组 GB 消元数值全解
+（契约 [sysolve-format-v25](contracts/sysolve-format-v25.md)，v2.5.0）**、
+**Sturm 序列实根计数与根隔离（1..8 次，5..8 由 ac_bigint 承载，契约
+[sturm-format-v25](contracts/sturm-format-v25.md)，v2.5.0）**。
 `.bss` 内核口径 **42 608 B** / runner 口径 42640 B / 上游对照 39408 B / 退化 38672 B
-（v2.2.0 起 Groebner 落地后零增长，2026-11-03 `bss-check` 复测），pro_runner
-**583 checks, 0 failed**（2026-11-03 实测，v2.4.2 含 ODE 差分收口 4 项）。
+（v2.2.0 起 Groebner 落地后零增长，2026-11-04 `bss-check` 复测），pro_runner
+**692 checks, 0 failed**（2026-11-04 实测，v2.5.0 含 F2 方程组 20 例 / F3 Sturm
+16 例；复变专项 cx_runner 另计 134 checks, 0 failed）。
 详见 [c99-128kb.md](c99-128kb.md) 与 [RELEASE-v2.0.0.md](RELEASE-v2.0.0.md)。
 
 ## v2.3.0 双侧新功能（2026-10-31）
@@ -162,17 +176,59 @@ sqfree 区（v2.4.0 收口）——契约 §10-1 两层结构：**双侧区 64 �
 SQFREE-1..10 / JS test-sqfree.js）为准提炼，收尾组未发明新用例；契约 §10-4
 的 q=1000/1001 有理重建 q 边界两侧内嵌套件均未覆盖，如实注明未纳入。
 
+## v2.5.0 双侧新功能（2026-11-04）
+
+主题「代数纵深 + 不对等清账」。开发方式：治理包 F0 走独立早合分支
+`feat/js-gate-f0`（合并序第 0 位），F1/F2/F3/F4 三 worktree 并行
+（`feat/math-ext` / `feat/solvers` / `feat/js-eigen`，固定合并序），契约
+先行机制同前两版（每功能开工第 1 个 commit 冻结契约文档合 master）；
+收尾组串行收口（ROADMAP-v2.5-v2.6.md §5.1）。
+
+| 功能 | 侧 | 落点 | 说明 |
+|---|---|---|---|
+| 复域超越函数库 | C+JS | `ac_pro_complex_ext.c`（新）/ `core_complex.js` 扩展 | 15 API：csin..ctanh（复三角/双曲）、casin..catanh（六个反函数，C99 Annex G 主值）、cpow 全复幂（覆写 A 约定沿袭 cPowReal）、cnthroot 主值 k 次根（de Moivre）、cgamma（Lanczos g=7/n=9 + 反射式）。主值分支/割线 ±0 侧/奇点（EDOM）逐项冻结于契约 [complex-ext-v25](contracts/complex-ext-v25.md)，双侧同构零分叉；期望值由 mpmath 40dps 独立生成（tools/ref-complex.py）。差分语料 789 行（tools/gen-complex-corpus.js 固定网格 + 割线两侧 + 极点/溢出/−0 边角）双侧零分歧、行间最大 err 2.766e-16。C 134 checks（cx_runner）/ JS 132 项 |
+| 方程组 GB 消元数值全解 | C+JS | `ac_pro_sysolve.c`（新）/ `core_groebner.js` sysolve 扩段 | 二元多项式方程组（gb 文法，总次数 ≤4）→ Groebner 消元 → h 经 square-free 去重根 → 1..4 次精确根式 / 5..8 次 Durand-Kerner（JS 侧捆绑移植）→ 逐 (x,y) 候选残差 ≤1e-9 回验才输出。GB={1} → 成功语义 0 解（对齐 SymPy EmptySet）；正维数 → EZDIM 诚实拒绝。**JS 捆绑 DK 后 h 次数 5..8 两侧同走 DK，本功能全域零分叉**。契约 [sysolve-format-v25](contracts/sysolve-format-v25.md)。差分 20/20 一致。C 20 例 / JS 40 项 |
+| Sturm 序列与实根隔离 | C 全功能 + JS ≤4 镜像 | `ac_pro_sturm.c`（新）/ `core_ratroot.js` 扩段 | 单变量整系数多项式（deg≤8，\|c\|≤999）→ 本原化 + square-free 预归一 → 精确有理 PRS（C 侧 ac_bigint 承载系数膨胀）→ V(a)−V(b) 精确计数 + dyadic 网格显式栈二分隔离。[a,b] 闭区间、端点为根计入、±∞ 支持、二分深度双侧统一 48 层，超深如实输出「未解析」。**契约三层**（[sturm-format-v25](contracts/sturm-format-v25.md)）：dual（deg≤4 且链系数 ≤2^53）零分叉；cOnly-DEG（5..8 次）C 断言计数/隔离、JS 断言 EDEG（成文分叉，随 v2.6 G4' 纯 JS 大整数收口）；cOnly-OVF（Mignotte 型敌意输入链系数破 2^53）JS 断言 ECOEF（溢出审计，绝不输出失真值）、C 断言真实结果。差分 62/62 一致（含 cOnly 两层分叉断言）。C 16 例 / JS 68 项 |
+| JS 一般实矩阵特征值 | JS | `core_matrix.js` pro 层 `proSchur*` API | Householder→Hessenberg→Francis 隐式双移 QR（bulge chasing，全显式循环）逐条对照 C 侧 ac_pro_schur.c 移植：幂 2 精确缩放、50 轮预算 + 异常位移、不收敛返 −2、可选反迭代实特征向量（残差 ≤1e-9·(1+‖A‖)，6 组尝试全失败返 −3；复特征值不产出向量）。错误码 −1/−2/−3 与 C 逐值同语义。**补齐 JS 侧最后一个矩阵能力不对等项**（v2.4.0 成文「一般矩阵随 v2.5 评估」就此关闭）。契约 [eigen-format-v25](contracts/eigen-format-v25.md) + tests/eigen-cases.json 47 例 dual 全量（排序/复对配对全序逐字转录 C 侧既有契约），差分 47/47 零分叉；JS 93 项。C 侧零改动 |
+| 全池水位门禁与资产固化（F0） | 生态 | `core_solvers.js` 门禁扩展 / `tests/js-pool-ledger.json`（新） | 水位检查升级为全项目静态池口径：实测 175 104 B（143 组加载期 TypedArray 逐分配 stack 归属），门禁线 **178 496 B**（170 304 基线 + 8 192 封顶）；逐模块池自报可审计（test-watermark.js 36 项自检）。关闭 v2.4.0 成文待办「门禁只计基础池、保护力失效」。370 条 ODE 差分 fuzz 语料与双侧探针自 .auto/ 工作区固化进 `tests/ode-fuzz-corpus.txt` + `tools/gen-ode-corpus.js` / `odefuzz.c` / `odefuzz.js`；另清偿历史未兑现项①（积分表常量共享生成器 tools/gen-int-table.js） |
+| WASM 前景调研（F5） | 文档 | `docs/wasm-future.md`（新） | v3 产品裁决**拒绝引入 LLVM/clang 工具链**（零外部重型依赖），F5 降级纯文档调研：工具链现状、freestanding 垫层清单、体积估算存档、零 import 架构与验收线方案存档、顺延 v2.7+ 裁决与翻案条件。不做任何工具链安装与源码改动 |
+
+**跨语言契约（v2.5.0 新建四套）**：
+[tests/complex-functions.json](../tests/complex-functions.json)（117 条 mpmath
+参考锚 + 双侧用例）、[tests/systems.json](../tests/systems.json)（解列表按序
+数值 ≤1e-9 + 错误码精确）、[tests/sturm.json](../tests/sturm.json)（dual /
+cOnly-DEG / cOnly-OVF 三层）、[tests/eigen-cases.json](../tests/eigen-cases.json)
+（47 例 dual 全量零分叉）。四个差分驱动 `tests/bench/diff-complex.js` /
+`diff-sysolve.js` / `diff-sturm.js` / `diff-eigen.js` 机制同既有
+diff-smoke128.js（既有 50 例管线一行未动），2026-11-04 收尾复跑全部 exit 0。
+
+**如实口径（能力边界，收尾组按各组合入说明转写）**：
+
+- **Sturm 能力域不对称（契约成文例外，非缺陷）**：JS 侧只镜像 deg ≤4 且
+  Sturm 链系数全域 ≤2^53−1 的输入——deg ≤4 两侧本就有精确根式解，JS 镜像
+  价值在一致性与教学面，如实披露不夸大；5..8 次与系数溢出两个方向按契约
+  返回 EDEG / ECOEF（见上表 cOnly 两层）。JS 不做多精度层（零 GC 铁律 +
+  v2.6 G4' 裁决，保留理由成文于路线图 §F3）。
+- **方程组输入域**：输入多项式总次数 ≤4（GB 视图既有边界）；消元产物
+  deg(h) 可达 8，5..8 走 DK 数值路径（双侧同构，无分叉）；正维数与 GB={1}
+  之外的中间规模超限按错误码全序拒绝。
+- **复变函数表达式层边界**：i 字面量进解析器、复值 RPN 求值栈明确不在
+  本期功能（另立候选，不捆绑）；`cpow` 覆写输入寄存器 A（头注成文）。
+- **池水位现状**：全项目静态池 175 104 B，F0 门禁线 178 496 B（余量
+  3 392 B，记录器口径）；压缩内核 128 846 B，距 131 072 文件线余量
+  2 226 B——两条线均已偏紧，v2.6 开工须先过预算 spike（路线图 §6.2 R2）。
+
 ## 未落地项
 
 - 结果历史环形缓存：四版本均未规划落地时间（UI 层职责边界未定）。
 - 五次及以上多项式求根：阿贝尔-鲁菲尼定理，无根式解，`guardDegree` 永久拒绝。
 - ODE 非齐次 / 变系数 / 阶 ≥5 / Euler 方程：双侧均按契约 §6 错误码诚实拒绝，
   不硬解（ROADMAP v2.3.0 落选声明）。
-- JS 一般实矩阵特征值（Francis QR）：v2.4.0 仅 C 侧交付（ROADMAP 功能 8
-  JS 侧目标为「无」）；JS 侧矩阵特征对仍限实对称（幂法 + Hotelling），
-  一般矩阵随 v2.5 评估。
-- JS 大整数 / 高精度：ROADMAP 落选声明（v2.5 候选池，20 limb TypedArray
-  移植成本评估不变）。
+- ~~JS 一般实矩阵特征值（Francis QR）~~：**v2.5.0 已落地**（上节，JS 侧最后
+  一个矩阵不对等项清账）。
+- JS 大整数 / 高精度：v2.6.0 G4' 主路线（v3 裁决：纯 JS 移植转正，20 limb
+  TypedArray 镜像 ac_bigint，开工前先出内核字节预算 spike 过熔断线
+  go/no-go）；**连带收口** JS Sturm 5..8 与 sqfree 5..8 两处成文分叉。
 - 多变量 Groebner 扩维（3+ 变量 / 更高次）与通用化简 simplify / trigsimp：
   维持 ROADMAP 落选声明，不做。
 
@@ -200,6 +256,13 @@ SQFREE-1..10 / JS test-sqfree.js）为准提炼，收尾组未发明新用例；
   输入 JS 侧 `EDEG`（−2）、C 侧按因子次数路由走 @e/@d 求根——
   [tests/polynomials.json](../tests/polynomials.json) sqfree 区按契约 §10-1
   分层收录（C 侧区 5 例 JS 断言 −2）。70 例双侧实跑核对零分歧，无实现 bug。
+- **Sturm 双侧分叉（v2.5.0，契约成文例外，非缺陷）**：JS 镜像只承诺
+  deg ≤4 且链系数 ≤2^53 精确域的输入——5..8 次输入 JS 侧 `EDEG`（−2）、
+  C 侧断言真实计数与隔离（cOnly-DEG 层）；链系数突破 2^53 的敌意输入
+  JS 侧 `ECOEF`（−3）、C 侧真实结果（cOnly-OVF 层）——
+  [tests/sturm.json](../tests/sturm.json) 三层收录，
+  [SMOKE-DIFF-STURM.md](../tests/bench/SMOKE-DIFF-STURM.md) 62/62 一致
+  （含分叉断言）。收口随 v2.6 G4' 纯 JS 大整数。
 - **v2.4.0 能力边界与副作用（两侧成文，非缺陷）**：Groebner 系数域收窄
   （JS 无 int64，不称「对等」）、结式数值路径 0 = 公共根判据、结式词法边界
   （无总次数上限、每变量指数 ≤15）、sqfree 求解层 clobber 副作用、符号积分
