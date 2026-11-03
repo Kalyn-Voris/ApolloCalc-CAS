@@ -1,5 +1,5 @@
 {
-  "description": "ApolloCalc-CAS 共享一致性测试：m×n 实矩阵奇异值分解（one-sided Jacobi，v2.6.0 G2）。本版 C-only：C 探针链路 = tools/gen-svd-corpus.js 以原 id 收录全部用例进 tests/svd-corpus.csv → C/128KB-ProTEXT svd_runner 逐条断言；v2.7 JS 面（core_matrix.js proSvd*）以本文件为对拍语料、tests/bench/svd128-c.csv 为金标准。输出契约（降序稳定排序、符号规范化、错误码 1/-1/-2/-3、双闸门、退化谱语义、表达式书写顺序）见 docs/contracts/svd-format-v26.md，两侧逐字一致。",
+  "description": "ApolloCalc-CAS 共享一致性测试：m×n 实矩阵奇异值分解（one-sided Jacobi，v2.6.0 G2）。本版 C-only：C 探针链路 = tools/gen-svd-corpus.js 以原 id 收录全部用例进 tests/bench/svd-corpus.csv → C/128KB-ProTEXT svd_runner 逐条断言；v2.7 JS 面（core_matrix.js proSvd*）以本文件为对拍语料、tests/bench/svd128-c.csv 为金标准。输出契约（降序稳定排序、符号规范化、错误码 1/-1/-2/-3、双闸门、退化谱语义、表达式书写顺序）见 docs/contracts/svd-format-v26.md，两侧逐字一致。",
   "fields": {
     "id": "用例标识",
     "m": "行数（1..12；0/13 为参数拒绝用例）",

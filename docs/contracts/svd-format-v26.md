@@ -207,7 +207,9 @@ eigen-format-v25.md §4 完全一致：不定死则差分对拍被符号翻转�
 
 - 文件：`tests/svd-cases.json`，v2.6.0 G2 冻结 52 例。**本版消费方 = C 探针**
   （tools/gen-svd-corpus.js 把全部 52 例以原 id 收录进语料 CSV，svd_runner 逐条
-  断言）；v2.7 JS 面以同文件为对拍语料（dual 对齐）。
+  断言）；v2.7 JS 面以同文件为对拍语料（dual 对齐）。（开工注记：语料落位
+  `tests/bench/svd-corpus.csv`——.gitignore 的 `*.csv` + `!tests/bench/*.csv`
+  双规则只把该目录作 tracked 基线数据集，complex-corpus.csv 同款。）
 - 字段：`id` / `m` / `n` / `matrix`（行主序扁平；拒绝维度的用例可省略；非有限
   条目以字符串 `"NaN"` / `"Infinity"` / `"-Infinity"` 编码——JSON 无这些字面量，
   JS `Number(str)` 与 C `strtod` 同值）/ `tol`（缺省 1e-9，混合相对-绝对口径
@@ -231,7 +233,7 @@ eigen-format-v25.md §4 完全一致：不定死则差分对拍被符号翻转�
 ## 6. 语料、探针与对拍（v2.7 JS 面的金标准通道）
 
 - **语料生成器** `tools/gen-svd-corpus.js`（固定种子 mulberry32，种子 20261104，
-  确定性可重生成）：输出 `tests/svd-corpus.csv`，200–400 行；结构谱 = 对角 /
+  确定性可重生成）：输出 `tests/bench/svd-corpus.csv`，200–400 行；结构谱 = 对角 /
   符号置换正交×对角×正交ᵗ / 已知谱对称阵 / 秩亏 / 近重 σ / Hilbert 病态 /
   随机稠密（全形状组合）/ 1e±150 幂 2 极端尺度 / 拒绝类（>12 阶、0 阶、NaN、
   ±Inf）。**契约锚**：tests/svd-cases.json 全部用例以原 id、原期望收录
