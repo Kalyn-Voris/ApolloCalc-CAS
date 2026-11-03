@@ -176,7 +176,8 @@ TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
                 test/test_pro_ode.c test/test_pro_schur.c \
                 test/test_pro_sqfree.c \
                 test/test_pro_sysolve.c \
-                test/test_pro_sturm.c
+                test/test_pro_sturm.c \
+                test/test_pro_svd.c
 # 内核口径构建用的 trivial main（零静态存储，只为了让 .bss 口径可比）
 KERNEL_MAIN  := test/pro_kernel_main.c
 

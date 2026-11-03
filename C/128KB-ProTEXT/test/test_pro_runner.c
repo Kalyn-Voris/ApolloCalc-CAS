@@ -914,10 +914,24 @@ void test_sturm_cross_dk(sturm_tally_t *t);
 /* ==== END ANCHOR STURM ==== */
 
 /* ==== v2.6 ANCHOR: SVD (feat/matrix-advanced) ==== */
-/* v2.6 预埋占位（仅注释，零行为变化）：SVD 验收套件的 tally 类型与用例
- * 声明落位锚点（锚点纪律：main() 聚合区不设锚点，注册调用块由功能分支
- * 按既有功能块同款追加）。feat/matrix-advanced 分支合入时在上下标记
- * 之间填写；本版不携带任何声明。 */
+/* v2.6.0 G2:one-sided Jacobi SVD(test/test_pro_svd.c,16 用例五组)。 */
+typedef struct { int checks; int failed; } svd_tally_t;
+void test_svd_n1(svd_tally_t *t);
+void test_svd_diag3(svd_tally_t *t);
+void test_svd_diag_signs(svd_tally_t *t);
+void test_svd_sym2(svd_tally_t *t);
+void test_svd_tri(svd_tally_t *t);
+void test_svd_eye_perm(svd_tally_t *t);
+void test_svd_permcombo(svd_tally_t *t);
+void test_svd_rect_pair(svd_tally_t *t);
+void test_svd_row_col(svd_tally_t *t);
+void test_svd_rank_deficient(svd_tally_t *t);
+void test_svd_repeated(svd_tally_t *t);
+void test_svd_pow2(svd_tally_t *t);
+void test_svd_roundtrip(svd_tally_t *t);
+void test_svd_hilbert12(svd_tally_t *t);
+void test_svd_reject_params(svd_tally_t *t);
+void test_svd_boundary(svd_tally_t *t);
 /* ==== END ANCHOR SVD ==== */
 
 int main(void) {
@@ -1208,6 +1222,34 @@ int main(void) {
         t.checks += st1.checks;
         t.failed += st1.failed;
         printf("--- v2.5.0 sturm: %d/%d (checks/failed) ---\n", st1.checks, st1.failed);
+    }
+
+    /* v2.6.0 G2:one-sided Jacobi SVD(test/test_pro_svd.c,16 用例五组)
+     * [feat/matrix-advanced] 注册块:锚点区仅承载声明,main 调用块按既有
+     * 功能块同款追加于此(合并序 matrix-advanced 第 1 位)。 */
+    {
+        svd_tally_t sv;
+        sv.checks = 0;
+        sv.failed = 0;
+        test_svd_n1(&sv);
+        test_svd_diag3(&sv);
+        test_svd_diag_signs(&sv);
+        test_svd_sym2(&sv);
+        test_svd_tri(&sv);
+        test_svd_eye_perm(&sv);
+        test_svd_permcombo(&sv);
+        test_svd_rect_pair(&sv);
+        test_svd_row_col(&sv);
+        test_svd_rank_deficient(&sv);
+        test_svd_repeated(&sv);
+        test_svd_pow2(&sv);
+        test_svd_roundtrip(&sv);
+        test_svd_hilbert12(&sv);
+        test_svd_reject_params(&sv);
+        test_svd_boundary(&sv);
+        t.checks += sv.checks;
+        t.failed += sv.failed;
+        printf("--- v2.6.0 svd: %d/%d (checks/failed) ---\n", sv.checks, sv.failed);
     }
 
     s_kernel_live = 0;          /* 允许 CRT 收尾释放 */
