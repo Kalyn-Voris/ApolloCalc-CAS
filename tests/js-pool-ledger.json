@@ -1,0 +1,38 @@
+{
+  "contract": "docs/contracts/f0-governance-v25.md",
+  "component": "JS/128KB",
+  "feature": "F0 治理前置（feat/js-gate-f0）",
+  "measuredAt": "2026-11-03",
+  "node": "v24.19.0",
+  "baseline": {
+    "totalBytes": 170304,
+    "allocations": 143,
+    "method": "加载期 TypedArray 逐分配 stack 行号归属实测（JS/128KB/test/test-watermark.js 可复现）；懒分配 0（代表性工作负载前后分配计数不变）"
+  },
+  "gate": {
+    "staticLineBytes": 178496,
+    "derivation": "170304 + 8192（v2.5 JS 新增池预算封顶 2^13 B，ROADMAP-v2.5-v2.6.md §三/§F0；对分项和 +4864–6502 B 留 26–41% 余量）",
+    "heapLineBytes": 98304,
+    "basicLiveBytes": 11992,
+    "moduleRegisteredBytes": 158312
+  },
+  "perFile": [
+    { "file": "core_parser.js", "pools": 4, "bytes": 6368, "registration": "live" },
+    { "file": "core_math_functions.js", "pools": 0, "bytes": 0, "registration": "none" },
+    { "file": "core_complex.js", "pools": 0, "bytes": 0, "registration": "none" },
+    { "file": "core_exact.js", "pools": 0, "bytes": 0, "registration": "none" },
+    { "file": "core_evaluator.js", "pools": 5, "bytes": 4648, "registration": "live" },
+    { "file": "core_calculus.js", "pools": 2, "bytes": 2176, "registration": "selfReport" },
+    { "file": "core_base.js", "pools": 1, "bytes": 256, "registration": "live" },
+    { "file": "core_solvers.js", "pools": 8, "bytes": 720, "registration": "live" },
+    { "file": "core_ratroot.js", "pools": 26, "bytes": 3424, "registration": "selfReport" },
+    { "file": "core_symboltree.js", "pools": 20, "bytes": 35232, "registration": "selfReport" },
+    { "file": "core_integrate.js", "pools": 29, "bytes": 93676, "registration": "selfReport" },
+    { "file": "core_multivar.js", "pools": 6, "bytes": 10208, "registration": "selfReport" },
+    { "file": "core_matrix.js", "pools": 10, "bytes": 5160, "registration": "selfReport" },
+    { "file": "core_special.js", "pools": 0, "bytes": 0, "registration": "none" },
+    { "file": "core_numtheory.js", "pools": 3, "bytes": 288, "registration": "selfReport" },
+    { "file": "core_ode.js", "pools": 11, "bytes": 1500, "registration": "selfReport" },
+    { "file": "core_groebner.js", "pools": 18, "bytes": 6648, "registration": "selfReport" }
+  ]
+}

@@ -13,7 +13,7 @@
    不变）。两条引擎均保留顶层名与 export default 契约，因此 eval 回归对压缩体同样全量执行；压缩产物
    只经本入口（全量校验）产出。
 
-   回归策略随之调整：83 项 eval 回归跑在可读体上（顶层名可读，覆盖内部名直引），43 项 ESM 冒烟跑在
+   回归策略随之调整：83 项 eval 回归跑在可读体上（顶层名可读，覆盖内部名直引），49 项 ESM 冒烟跑在
    最终压缩产物上（覆盖导出链路）；603 门禁中 test-complex 亦经导出接口 import 产物，压缩产物行为被
    三重夹住。node --check 语法校验：默认路径先直检 .js、旧 Node 回退 .mjs 副本，--minify 路径一律写
    .mjs 临时副本按 ES Module 解析校验压缩产物。eval() 只吃拼接体，不含 export 块——export 仅 ESM
@@ -443,7 +443,7 @@ function stripMinify(src) {
 /* 共享构建主流程：写出 → 语法校验 → 静态扫描 → eval+运行时复核+83 项回归
       → （可选）微基准 → ESM 严格模式冒烟 → 字节数报告（--minify）→ BUILD OK
  kernelBody 形参恒为可读体（eval 回归依赖可读顶层名）；isMin=true 时 kernelFull
- 为 MIN_HEADER + terser 压缩全模块（行为等价性由 terser 语义 + 43 项 ESM 冒烟 +
+ 为 MIN_HEADER + terser 压缩全模块（行为等价性由 terser 语义 + 49 项 ESM 冒烟 +
  603 门禁的产物 import 三重夹住）。 */
 function proceed(kernelBody, kernelFull, isMin, engine) {
   /* 写出（普通构建若将覆盖压缩产物则先警示；压缩产物只经本全量校验路径产出） */

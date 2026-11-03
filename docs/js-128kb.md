@@ -1,6 +1,6 @@
 # JS/128KB — 零 GC 计算代数内核（增强版）
 
-- **状态**：v2.4.1（组件版本；20 文件内核拼接，terser 单遍 minify 交付）
+- **状态**：v2.4.3（组件版本；17 文件内核拼接，terser 单遍 minify 交付）
 - **堆限制**：128KB（全局状态水位目标 ≤ 96KB）
 - **目标平台**：不限——任何支持 ES5 + TypedArray 的 JS 环境（Lite Wearable / JerryScript / 浏览器 / Node）
 - **内存模型**：与 64KB 版一致——TypedArray + 全局标量，零临时对象，禁止递归与热路径字符串拼接
@@ -127,8 +127,8 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 | `core_matrix.js` 池（独立模块） | — | 5 160 B（v2.4.0 升 12×12，实测） |
 | `core_special.js` 池（独立模块） | — | **0 B**（纯标量，无池） |
 
-> **v2.4.1 全项目静态池实测**：20 文件全部模块加载期 TypedArray byteLength 求和为
-> **170 304 B（166.3 KiB，2026-11-01 实测，逐模块脚本可复现）**。大头：
+> **v2.4.1 全项目静态池实测**：17 文件全部模块加载期 TypedArray byteLength 求和为
+> **170 304 B（166.3 KiB，2026-11-01 实测、2026-11-03 F0 复测一致，逐模块脚本可复现）**。大头：
 > `core_integrate.js` 93 676 B（128 项积分表落 TypedArray）、`core_symboltree.js`
 > 35 232 B（表达式树 512 节点池 + diff 工作区）、`core_multivar.js` 10 208 B、
 > `core_groebner.js` 6 648 B、`core_matrix.js` 5 160 B（v2.4.0 升 12×12）、
@@ -137,15 +137,70 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 > 五轮功能扩张取代。
 >
 > **口径澄清**：静态池是 TypedArray **外部内存**，不计入 V8 `heapUsed`；
-> 96KB 水位门禁（core_solvers.js:608）管的是**堆**水位，与静态池预算是两条
-> 独立的线——全量 1 188 项测试通过即堆水位健康。上表「既有静态池合计
-> 11 992 B」仍是核心求值链路的逐池明细，外挂模块池另计。
+> 水位门禁 `checkMemoryWatermark`（core_solvers.js）自 F0 起为**两条独立的线**：
+> 堆线 96KB（不变）+ 全池静态线 178 496 B（见下节）——全量 1 194 项测试通过即
+> 两线均健康。上表「既有静态池合计 11 992 B」仍是核心求值链路的逐池明细，
+> 外挂模块池另计。
 >
-> **内核文件体积口径（v2.4.1 终态）**：20 文件拼接，经 v2.2.0 落地的 terser
-> 单遍 minify 管线压缩后 `core_kernel.js` 为 **103 575 B ≤ 131 072 B**（128KB
-> 文件线），余量 27 497 B；`--minify` 是压缩产物唯一重建入口
+> **内核文件体积口径（v2.4.3 终态）**：17 文件拼接，经 v2.2.0 落地的 terser
+> 单遍 minify 管线压缩后 `core_kernel.js` 为 **103 599 B ≤ 131 072 B**（128KB
+> 文件线），余量 27 473 B；`--minify` 是压缩产物唯一重建入口
 > （test/build-kernel.js，复跑后核对 `git status` 防工具链漂移）。
-> C 侧对照：`C/128KB-ProTEXT` v2.4.1 以 `.bss` 42 608 B 零增长承载同等能力。
+> C 侧对照：`C/128KB-ProTEXT` v2.4.3 以 `.bss` 42 608 B 零增长承载同等能力。
+
+## 全池水位门禁与逐模块池账本（F0，feat/js-gate-f0）
+
+**两线口径**（`checkMemoryWatermark`，任一越线拒绝并置 `_solveError = 4`，
+契约 [f0-governance-v25](contracts/f0-governance-v25.md) §2）：
+
+1. **堆线（不变）**：`performance.memory.usedJSHeapSize > 98 304 B`（128KB × 75%）拒绝；
+2. **全池静态线（F0 新增）**：基础池 live `byteLength`（11 992 B）+
+   `_modulePoolBytes`（各池模块加载期自报合计，实测 158 312 B）+
+   动态游标（`(tokenCount<<3) + (numberCount<<3)`）> **178 496 B** 拒绝。
+   推导：**170 304 B**（F0 开工实测全项目加载期 TypedArray byteLength 之和，143 组
+   分配，`test/test-watermark.js` 加载期逐分配 stack 归属可复现）+ **8 192 B**
+   （v2.5 JS 新增池预算封顶 2^13，ROADMAP-v2.5-v2.6 §三）= 178 496 B。旧降级估算的
+   +2 048 B 堆代理冗余退役（游标已显式计入）。
+
+**逐模块账本**（机器可读镜像 [tests/js-pool-ledger.json](../tests/js-pool-ledger.json)，
+2026-11-03 实测，加载期一次性分配、懒分配 0）：
+
+| 模块 | 池数 | byteLength | 登记方式 |
+|---|---:|---:|---|
+| core_parser.js | 4 | 6 368 B | 基础池，门禁 live 读 `byteLength` |
+| core_math_functions.js | 0 | 0 B | — |
+| core_complex.js | 0 | 0 B | — |
+| core_exact.js | 0 | 0 B | — |
+| core_evaluator.js | 5 | 4 648 B | 基础池，门禁 live 读 `byteLength` |
+| core_calculus.js | 2 | 2 176 B | 加载期自报 |
+| core_base.js | 1 | 256 B | 基础池，门禁 live 读 `byteLength` |
+| core_solvers.js | 8 | 720 B | 基础池，门禁 live 读 `byteLength` |
+| core_ratroot.js | 26 | 3 424 B（顶层 8 池 1 184 + sqfree IIFE 18 池 2 240） | 加载期自报（两处） |
+| core_symboltree.js | 20 | 35 232 B | 加载期自报（allocCount=20 一致） |
+| core_integrate.js | 29 | 93 676 B | 加载期自报（模块 `allocCount=28` 不含 `_T_OFFS` 偏移表） |
+| core_multivar.js | 6 | 10 208 B | 加载期自报（allocCount=6 一致） |
+| core_matrix.js | 10 | 5 160 B（寄存器层 3 池 216 + pro 层 7 池 4 944） | 加载期自报 |
+| core_special.js | 0 | 0 B | —（allocCount=0 一致） |
+| core_numtheory.js | 3 | 288 B | 加载期自报（allocCount=3 一致） |
+| core_ode.js | 11 | 1 500 B | 加载期自报（allocCount=11 一致） |
+| core_groebner.js | 18 | 6 648 B | 加载期自报（allocCount=18 一致） |
+| **合计** | **143** | **170 304 B** | 门禁线 **178 496 B** |
+
+**登记机制**：`core_parser.js`（拼接序第 1）声明 `var _modulePoolBytes = 0` 与求和
+助手 `_modulePoolSum()`（加载期一次性调用，`arguments` 不落热路径）；其余池模块在
+**自身文件内**池声明之后以 `if (typeof _modulePoolSum === "function")
+{ _modulePoolSum(自身全部池…); }` 自报——`typeof` 守卫使独立 `require()`、浏览器
+经典 `<script>`、部分拼接 eval 三通道行为与 v2.4.x 逐字节一致（test-multivar /
+test-matrix-pro / test-browser 等独立加载环境已回归验证）。
+
+**未来功能的登记义务**（F1–F4 及此后一切 JS 加池改动，契约 §3）：在某模块新增池时，
+同一次改动内①扩展该模块自己的自报调用（core_solvers.js 不是汇合点，避免并行合并
+冲突）；②更新 `tests/js-pool-ledger.json` 对应行与合计；③更新本表；④
+`test/test-watermark.js` 实测复核对不上即红。全池合计超 178 496 B 时门禁直接拒绝。
+
+**自检**：`node test/test-watermark.js`（run-all 自动发现）——逐文件账本比对 +
+「刚好通过/刚好拒绝」双侧边界（178 496/178 497 与 98 304/98 305）+ 懒分配 0 +
+工作负载后游标计入不误拒，36 项。
 
 ## 与 64KB 的架构差异
 
@@ -196,16 +251,18 @@ node test/test-multivar.js       # 多变量多项式 + 符号求导 + 高阶三
 node test/test-matrix.js         # 矩阵基础运算（39 项）
 node test/test-special.js        # 特殊函数 erf/gamma/lgamma（33 项）
 node test/test-browser.js        # 浏览器经典脚本环境模拟（vm 沙箱，10 项）
-node test/build-kernel.js        # 拼接 20 文件 core_kernel.js + 83 项回归 + ESM 严格模式冒烟（49 项）
+node test/test-watermark.js      # F0 全池水位门禁自检（账本比对 + 双侧边界，36 项）
+node test/build-kernel.js        # 拼接 17 文件 core_kernel.js + 83 项回归 + ESM 严格模式冒烟（49 项）
 ```
 
 零依赖，Node ≥ 14 即可（`test-browser.js` 的 vm 沙箱与 `--expose-gc` 探针
 在任意主流 Node 版本可用）。共享一致性用例在 [tests/](../tests/)。
-20 个测试文件合计 **1188 pass, 0 fail**（base 63 / browser 10 / calculus 28 /
+21 个测试文件合计 **1230 pass, 0 fail**（base 63 / browser 10 / calculus 28 /
 complex 23 / consistency 59 / evaluator 49 / groebner 60 / guard 16 /
 integrate 75 / matrix-pro 82 / matrix 39 / multivar 194 / numtheory 89 /
-ode 77 / ratroot 33 / solvers 46 / special 33 / sqfree 70 / symboltree 116 /
-taylor 26），另有 build-kernel 内嵌 83 项 eval 回归 + 49 项 ESM 导出链路冒烟全过。
+ode 83 / ratroot 33 / solvers 46 / special 33 / sqfree 70 / symboltree 116 /
+taylor 26 / watermark 36），另有 build-kernel 内嵌 83 项 eval 回归 +
+49 项 ESM 导出链路冒烟全过。
 
 ## 一致性测试判定规则
 

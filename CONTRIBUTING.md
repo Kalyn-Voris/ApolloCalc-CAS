@@ -126,6 +126,28 @@ nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wrap
 - 各版本独立版本号，存于 `C/<ver>/VERSION`（JS 版见设计文档）
 - 四版本完成度与验收证据汇总见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
+### 发版 checklist（逐项打勾后才可发版）
+
+1. **验收三关**：`verify.ps1` 全量（C/128KB-ProTEXT）+ `node test/run-all.js`
+   （JS/128KB，exit 0 且 TOTAL 不低于上一发版）+ `node tests/bench/diff-smoke128.js`
+   50/50（ProTEXT README §3B；bss-check / `build-kernel --minify` 只是快速门禁，
+   不能替代三关）。
+2. **账本门禁**：C 侧 `mingw32-make SHELL=cmd.exe bss-check` 三口径精确命中
+   （kernel 42608 / runner 42640 / upstream 39408，除非本版本成文改账本）；
+   JS 侧 `build-kernel --minify` 后 `git status` 核对、字节数登记，且低于
+   熔断线 126 976 B（ROADMAP-v2.5-v2.6 §6.2 R2）。
+3. **文档数字与 HEAD 一致**（F0 增设）：`docs/ACCEPTANCE.md`、`docs/js-128kb.md`
+   等文档引用的字节数（压缩内核、静态池、.bss）与测试数（run-all TOTAL、
+   verify/checks、ESM 冒烟数）与 HEAD 实测复跑一致；账本类数字经
+   `node JS/128KB/test/test-watermark.js`（池）复核。冻结文件（现有 20 个
+   `test-*.js`）内的滞后数字豁免，但须登记在
+   [docs/contracts/f0-governance-v25.md](docs/contracts/f0-governance-v25.md) §5
+   （现存已知项：test-browser.js:12 的「43 项冒烟」，待组件解冻时一并修）。
+4. **回归资产再验收（可选，资产在库后建议每次发版跑）**：
+   `node tools/gen-ode-corpus.js | diff - tests/ode-fuzz-corpus.txt`（输出为空 =
+   语料再生一致）与 `node tools/gen-int-table.js`（exit 0 = 积分表 C/JS 两侧
+   逐项一致）。生成器改表流程见该脚本头注。
+
 ## 许可
 
 提交即表示同意以 [MIT](LICENSE) 许可发布。

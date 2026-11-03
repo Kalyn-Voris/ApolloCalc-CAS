@@ -93,6 +93,13 @@ var ApolloGroebner = (function () {
   var _tEp = new Int32Array(GB_TERMS);                 /* 解析项指数暂存 */
   var _resParseC = new Float64Array(GB_RES_TERMS);     /* 结式解析项系数 */
 
+  /* F0 全池水位账本：模块池加载期自报（docs/contracts/f0-governance-v25.md §3） */
+  if (typeof _modulePoolSum === "function") {
+    _modulePoolSum(_coef, _ep, _cnt, _dead, _dense, _cpA, _cpB, _snapC, _snapE,
+                   _order, _outBuf, _digits, _resF, _resG, _sylv, _tCoef, _tEp,
+                   _resParseC);
+  }
+
   var _allocCount = 18;
   var _gbN = 0;              /* 已开基槽数 */
   var _cpN = 0;              /* pair 队列长度 */

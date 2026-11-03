@@ -8,12 +8,12 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 | 版本 | 状态 | 测试数 | 文档 |
 |:---|:---|:---|:---|
 | JS 64KB | ✅ 已完成 | 80（build-kernel 回归）+ 19 ESM 接线 | [js-64kb.md](js-64kb.md) |
-| JS 128KB | ✅ 已完成（v2.0.0） | 603（各套件合计，见下）+ 83 回归 + 43 ESM 接线 | [js-128kb.md](js-128kb.md) |
+| JS 128KB | ✅ 已完成（v2.4.3） | 1230（run-all 21 套件合计，见下）+ 83 回归 + 49 ESM 接线 | [js-128kb.md](js-128kb.md) |
 | C 64KB | ✅ 已完成（v1.0.0） | 565（默认）/ 578（`LUT=1`） | [c99-64kb.md](c99-64kb.md) |
 | C 128KB | ✅ 已完成（v1.1.0，冻结） | 1171（默认）/ 1184（`LUT=1`） | [c99-128kb.md](c99-128kb.md) |
-| C 128KB-ProTEXT | ✅ 已完成（v2.4.1） | 579（`pro_runner.exe`，含上游回归） | [C/128KB-ProTEXT/README.md](../C/128KB-ProTEXT/README.md) |
+| C 128KB-ProTEXT | ✅ 已完成（v2.4.3） | 583（`pro_runner.exe`，含上游回归） | [C/128KB-ProTEXT/README.md](../C/128KB-ProTEXT/README.md) |
 
-**JS 128KB 测试明细**（实测，`node test/<suite>.js`）：
+**JS 128KB 测试明细**（实测，`node test/<suite>.js`；run-all 21/21 文件，2026-11-03 F0 实跑）：
 
 | 套件 | 校验 |
 |:---|---:|
@@ -27,18 +27,28 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 | test-consistency.js | 59 pass + 4 improve |
 | test-multivar.js（多变量 + 符号求导） | 194 |
 | test-matrix.js（矩阵基础运算） | 39 |
+| test-matrix-pro.js（矩阵 pro 层 12×12） | 82 |
 | test-special.js（特殊函数） | 33 |
 | test-browser.js（浏览器环境模拟） | 10 |
-| **合计** | **603 pass + 4 improve** |
+| test-guard.js（多元非线性门禁） | 16 |
+| test-integrate.js（符号积分） | 75 |
+| test-symboltree.js（符号微分引擎） | 116 |
+| test-numtheory.js（数论） | 89 |
+| test-ode.js（常微分方程） | 83 |
+| test-sqfree.js（square-free 分解） | 70 |
+| test-groebner.js（Groebner 基/结式） | 60 |
+| test-watermark.js（F0 全池水位门禁自检） | 36 |
+| **合计** | **1230 pass + 4 improve** |
 
-另：`build-kernel.js` 拼接 12 文件后跑 83 项回归（evaluator 41 + solvers 42）+
-静态声明扫描 78/78 + ESM 导出链路 43/43。
+另：`build-kernel.js` 拼接 17 文件后跑 83 项回归（evaluator 41 + solvers 42）+
+静态声明扫描 78/78 + ESM 导出链路 49/49。
 
 **C 128KB-ProTEXT 校验口径**（v2.1.0）：基线 281（v2.0.0：上游回归 + B1/A4/A6/A1-A3/A5/B2
 259 + 多变量符号求导 12 + 多变量积分 10）+ 稀疏线性求解 35（[case SP-1..12]）
 + 任意精度定点小数 12（[case BD-1..12]）= **328 checks, 0 failed**；
 `bss-check` 三门禁精确命中（kernel 42608 / runner 42640 / upstream 39408），
-退化对拍 38672 B。
+退化对拍 38672 B。v2.4.3 现状：**583 checks**（v1.6.1 579 + v1.6.2 ODE 差分回归 +4，
+见 C/128KB-ProTEXT/CHANGELOG.md），`.bss` 维持 42608 B。
 
 **JS 64KB 测试明细**：`test-evaluator.js` 41 + `test-solvers.js` 40（单跑）/ 39（build-kernel 口径）
 + 静态扫描 34/34 + ESM 导出链路 19/19。
@@ -110,7 +120,7 @@ cd C/128KB && nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wr
 | 版本 | 静态池总量 | 水位门禁 | 采集口径 |
 |:---|---:|---:|:---|
 | JS 64KB | ~5.2 KB | 48 KB | 源码 TypedArray 声明加总 |
-| JS 128KB（v2.0.0） | 22 416 B ≈ **21.9 KiB**（11 992 + multivar 10 208 + matrix 216 + special 0） | 96 KB | `byteLength` 加总（见 js-128kb.md） |
+| JS 128KB（v2.4.3，F0 后） | 170 304 B ≈ **166.3 KiB**（143 组加载期 TypedArray；基础池 11 992 + 模块池 158 312，逐模块见 js-128kb.md 池账本节） | 堆 96 KB + 全池静态 **178 496 B**（F0） | 加载期 `byteLength` 逐分配 stack 归属加总（test-watermark.js 可复现；见 js-128kb.md） |
 | C 64KB | 10576 B ≈ 10.3 KB | 48 KB | `size` 的 `.bss` |
 | C 128KB（v1.1.0） | 39408 B ≈ **38.48 KiB / 39.4 KB** | 96 KB | `size` 的 `.bss` |
 | C 128KB-ProTEXT（v2.1.0） | 42608 B ≈ **41.61 KiB** | 112 KiB | `size pro_kernel.exe` 的 `.bss`（38 672 上游内核 + 80 + 3 848 sparse 峰值 + 8；sin/cos LUT 已迁 `.rdata`，dec 视图 480 B 完全吸收） |

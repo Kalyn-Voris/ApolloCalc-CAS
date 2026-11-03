@@ -27,6 +27,13 @@ var _ratRootWork = new Float64Array(16);       /* 当前整系数多项式（升
 var _ratRootTrial = new Float64Array(16);      /* 综合除法试除区（失败即弃，不污染 work） */
 var _ratRootDivs = new Int32Array(128);        /* 常数项 |a0| 的因数表（试除到 √） */
 
+/* F0 全池水位账本：顶层 8 池加载期自报（sqfree IIFE 池另行自报，见 ApolloSqfree）
+ * （docs/contracts/f0-governance-v25.md §3） */
+if (typeof _modulePoolSum === "function") {
+  _modulePoolSum(_ratRootCandidates, _ratRootValues, _ratRootIsExact, _ratRootNum,
+                 _ratRootDen, _ratRootWork, _ratRootTrial, _ratRootDivs);
+}
+
 /* 整数判定与枚举上限：采样误差容差 1e-6（相对）；|an|/|a0| 超过 1e7 跳过枚举 */
 var RATROOT_INT_TOL = 1e-6;
 var RATROOT_ENUM_MAX = 10000000;
@@ -368,6 +375,12 @@ var ApolloSqfree = (function () {
   var _outBuf = new Int32Array(256);                    /* 15 渲染缓冲(charCode) */
   var _digits = new Int32Array(20);                     /* 16 fmt 位数字垫 */
   var _seen = new Int32Array(SQ_MAX_DEG + 1);           /* 17 同次项重复掩码 */
+
+  /* F0 全池水位账本：sqfree 段 18 池加载期自报（docs/contracts/f0-governance-v25.md §3） */
+  if (typeof _modulePoolSum === "function") {
+    _modulePoolSum(_coef, _f, _g, _h, _t, _t2, _ga, _gb, _gr, _q,
+                   _layerC, _layerD, _itRe, _itIm, _itMult, _outBuf, _digits, _seen);
+  }
 
   var _allocCount = 18;
   var _outLen = 0;

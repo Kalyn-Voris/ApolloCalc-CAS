@@ -132,6 +132,13 @@ var ApolloSymboltree = (function () {
   var _renderStack = new Int32Array(1024);           /* 渲染栈:idx|mp<<16 或 -(char+1) */
   var _polyC = new Float64Array(8);                  /* 多项式系数(升幂,factor) */
 
+  /* F0 全池水位账本：模块池加载期自报（docs/contracts/f0-governance-v25.md §3） */
+  if (typeof _modulePoolSum === "function") {
+    _modulePoolSum(_pool, _buildStack, _walk, _dmap, _valStack, _outBuf, _workI,
+                   _facRat, _facRadNum, _facRad, _facDen, _facExp, _remCoeffs,
+                   _fetchN, _fetchM, _hasVar, _impTok, _impNum, _renderStack, _polyC);
+  }
+
   var _allocCount = 20;
 
   /* 会话态 */

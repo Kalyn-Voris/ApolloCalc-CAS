@@ -37,6 +37,11 @@ var ApolloMultivar = (function () {
   var _tmpC = new Float64Array(TMP_CAP);
   var _tmpE = new Int32Array(TMP_CAP);
 
+  /* F0 全池水位账本：模块池加载期自报（docs/contracts/f0-governance-v25.md §3） */
+  if (typeof _modulePoolSum === "function") {
+    _modulePoolSum(_coef, _exps, _cnt, _strBuf, _tmpC, _tmpE);
+  }
+
   /* 6 次 new 之后不再增长；用普通 number 而非对象，测试可直接校验。 */
   var _allocCount = 6;
 

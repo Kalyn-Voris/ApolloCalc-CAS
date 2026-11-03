@@ -271,6 +271,16 @@ var ApolloIntegrate = (function () {
     "\x012*x^3*sqrt(x)/7\x012*x^4*sqrt(x)/9";
 
   var _T_OFFS = new Int32Array(129);   /* anti 偏移表(129 = 128 项 + 1 尾哨兵槽) */
+
+  /* F0 全池水位账本：模块池加载期自报，覆盖上方 28 池 + 本偏移表共 29 池
+   * （docs/contracts/f0-governance-v25.md §3；allocCount 口径 28 不含偏移表） */
+  if (typeof _modulePoolSum === "function") {
+    _modulePoolSum(_nOp, _nA, _nB, _nIval, _wN, _wMeta, _dmap, _opd, _tplTok,
+                   _tplNum, _outBuf, _emitStack, _digits, _linA, _linB, _linStamp,
+                   _linStack, _polyPool, _polySlot, _polyFree, _polyStack,
+                   _distC, _distT, _distS, _mWraps, _addT, _addS, _tKFP, _T_OFFS);
+  }
+
   (function _initTable() {
     var i = 0;
     var k = 0;

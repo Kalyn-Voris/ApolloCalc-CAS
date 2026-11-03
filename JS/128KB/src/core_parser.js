@@ -14,6 +14,22 @@ var numberCount = 0;
 var evalStack = new Float64Array(128);   /* 64 → 128 */
 var matrixPool = new Float64Array(156);  /* 12x13 增广矩阵：按 128KB 家族功能对等承诺放开到 12 元 */
 
+/* F0 全池水位账本（feat/js-gate-f0）：模块池加载期自报合计（全局标量，零分配）
+ * 基础池（本文件/evaluator/base/solvers）由 checkMemoryWatermark live 读 byteLength；
+ * 其余池模块在自身文件内、池声明之后以
+ *   if (typeof _modulePoolSum === "function") { _modulePoolSum(自身全部池…); }
+ * 加载期自报（typeof 守卫兼容独立 require / 浏览器经典脚本 / 部分拼接 eval；
+ * arguments 仅存在于加载期这一次调用，非热路径）。
+ * 门禁线推导与逐模块账本：docs/contracts/f0-governance-v25.md、
+ * tests/js-pool-ledger.json、docs/js-128kb.md 池账本节 */
+var _modulePoolBytes = 0;
+function _modulePoolSum() {
+  var s = 0;
+  var i = 0;
+  for (i = 0; i < arguments.length; i++) { s += arguments[i].byteLength; }
+  _modulePoolBytes += s;
+}
+
 /* 精确数值系统（core_exact.js 使用，五分量模型）
  * value = ((exactRat + exactRadNum·√exactRad) / exactDen) × 10^exactExp */
 var exactRat = 0;
