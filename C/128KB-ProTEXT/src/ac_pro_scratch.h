@@ -550,6 +550,47 @@ typedef union {
         int32_t  sdep [AC_PRO_ST_BSTACK];                 /* 2592 .. 2848 : 二分栈深度        */
         uint8_t  sflg [AC_PRO_ST_BSTACK];                 /* 2848 .. 2912 : 二分栈占用标志    */
     } sturm;                                              /* 合计 2912 B(v2.5.0 F3) */
+
+    /* v2.6.0 G2:SVD 视图(feat/matrix-advanced 独占视图,v2.6 新增)
+     *   one-sided Jacobi(Hestenes,dgesvj 同族)m×n(m,n ≤ 12;m < n 走转置),
+     *   算法、表达式书写顺序、排序全序、符号规范化与错误码由
+     *   docs/contracts/svd-format-v26.md 逐字冻结(本版 C-only,JS v2.7 同构)。
+     *   布局(载荷 3760 B,8 的倍数,sizeof == 3760 由断言链钉死):
+     *     a    @    0   144×8 = 1152  工作副本 B(Jacobi 就地迭代;缩放域,
+     *                  行主序 p×k,p = max(m,n),k = min(m,n);出口归一化后
+     *                  即左/右奇异向量的原生侧矩阵)
+     *     u    @ 1152   144×8 = 1152  最终 U(列主序:第 j 列 = &u[j*m],
+     *                  m×k,列正交;零 σ 列为 Gram-Schmidt 补全向量)
+     *     v    @ 2304   144×8 = 1152  最终 V(列主序:第 j 列 = &v[j*n],
+     *                  n×k,列正交;Jacobi 旋转累计阵或其转置对偶)
+     *     w    @ 3456    12×8 =   96  奇异值,降序(出口已乘回 scale;
+     *                  σ ≤ 1e-12·σ₁ 判数值零,精确 0)
+     *     work @ 3552    24×8 =  192  排序列临时(work[0..11] b 列 +
+     *                  work[12..23] V 列,换序双列同时驻留;补全残量复用
+     *                  work[12..23]——补全在排序之后,无并发)
+     *     m_st @ 3744     4        =    4  行数 m 停泊(U 列步长,accessor 用)
+     *     n_st @ 3748     4        =    4  列数 n 停泊(V 列步长,accessor 用)
+     *     k_st @ 3752     4        =    4  已交付个数(= min(m,n),停泊)
+     *     pad  @ 3756     4        =    4  显式尾填充,恒 0(sizeof 可预测)
+     *     合计 3760 B(8 的倍数)≤ 3848(sparse 峰值)——被 union 完全吸收,
+     *   .bss 零增长(lu/eig/dec/gb/rat/schur/sturm 之后「union 吸收」判据的
+     *   又一次兑现;ROADMAP §G2 预估 3752 B,开工复核 +8 B:m/n 步长停泊
+     *   是矩形 accessor(列指针 + 变步长)的必要状态,schur 方阵口径
+     *   stride == count 才得以只停泊一个数;margin 96 → 88 B,吸收判据
+     *   不变,sparse 3848 仍是峰值)。
+     *   零 static 对象纪律:sweep 计数、旋转常数全走栈/视图,错误码走
+     *   返回值(ac_pro.h eig 节实测论证:一个 static = TU 净 +32 B .bss)。 */
+    struct {
+        double  a   [AC_PRO_MATRIX_MAX_SIZE];             /*    0 .. 1152 : 工作副本 B(缩放域)     */
+        double  u   [AC_PRO_MATRIX_MAX_SIZE];             /* 1152 .. 2304 : 最终 U(列主序 m×k)     */
+        double  v   [AC_PRO_MATRIX_MAX_SIZE];             /* 2304 .. 3456 : 最终 V(列主序 n×k)     */
+        double  w   [AC_PRO_MATRIX_MAX_DIM];              /* 3456 .. 3552 : 奇异值(降序)           */
+        double  work[2 * AC_PRO_MATRIX_MAX_DIM];          /* 3552 .. 3744 : 排序双列临时/补全残量  */
+        int32_t m_st;                                     /* 3744 .. 3748 : 行数 m 停泊(U 步长)   */
+        int32_t n_st;                                     /* 3748 .. 3752 : 列数 n 停泊(V 步长)   */
+        int32_t k_st;                                     /* 3752 .. 3756 : 已交付个数(停泊)      */
+        int32_t pad;                                      /* 3756 .. 3760 : 显式尾填充,恒 0      */
+    } svd;                                                /* 合计 3760 B(v2.6.0 G2) */
 } ac_pro_scratch_t;
 
 /* 编译期断言（从严，全部用 ==） */
@@ -589,6 +630,24 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sturm.limb) +
                  sizeof(((ac_pro_scratch_t *)0)->sturm.sdep) +
                  sizeof(((ac_pro_scratch_t *)0)->sturm.sflg) == 2912,
                  pro_sturm_payload_is_2912);
+
+/* v2.6.0 G2:svd 视图尺寸链(2.6 开工前按本断言链复核,构成账写进 PR):
+   144×8(a) + 144×8(u) + 144×8(v) + 12×8(w) + 24×8(work) + 16(m/n/k_st+pad)
+   = 3760,3760 % 8 == 0,≤ 3848(sparse 峰值,margin 88 B)→ union 峰值不动。 */
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->svd) == 3760, pro_view_svd_is_3760);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->svd.a) +
+                 sizeof(((ac_pro_scratch_t *)0)->svd.u) +
+                 sizeof(((ac_pro_scratch_t *)0)->svd.v) +
+                 sizeof(((ac_pro_scratch_t *)0)->svd.w) +
+                 sizeof(((ac_pro_scratch_t *)0)->svd.work) + 16 == 3760,
+                 pro_svd_payload_is_3760);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, svd) == 0, pro_view_svd_starts_at_zero);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, svd.w) == 3456, pro_svd_w_at_3456);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, svd.work) == 3552, pro_svd_work_at_3552);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, svd.m_st) == 3744, pro_svd_mst_at_3744);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->svd) % 8 == 0, pro_svd_is_8byte_multiple);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->svd) <= sizeof(((ac_pro_scratch_t *)0)->sparse),
+                 pro_view_svd_absorbed);
 
 /* 判据 1 在 Pro union 内部：每个视图都必须 ≤ 峰值，
    否则「union 尺寸 = max(视图)」这条前提被破坏。
@@ -764,6 +823,17 @@ extern ac_pro_storage_t g_ac_pro_storage;
 #define s_pro_st_hinum(i)   (g_ac_pro_scratch.sturm.hinum[(i)])
 #define s_pro_st_sdep(i)    (g_ac_pro_scratch.sturm.sdep[(i)])
 #define s_pro_st_sflg(i)    (g_ac_pro_scratch.sturm.sflg[(i)])
+/* v2.6.0 G2:SVD 视图。a 是缩放域工作副本(Jacobi 就地,出口时已是归一化
+   奇异向量矩阵);u/v 列主序(第 j 列 = &u[j*m] / &v[j*n]);w 降序奇异值
+   (已乘回 scale);work 是排序列临时 + 补全/闸门残量。 */
+#define s_pro_svd_a         (g_ac_pro_scratch.svd.a)
+#define s_pro_svd_u         (g_ac_pro_scratch.svd.u)
+#define s_pro_svd_v         (g_ac_pro_scratch.svd.v)
+#define s_pro_svd_w         (g_ac_pro_scratch.svd.w)
+#define s_pro_svd_work      (g_ac_pro_scratch.svd.work)
+#define s_pro_svd_m         (g_ac_pro_scratch.svd.m_st)
+#define s_pro_svd_n         (g_ac_pro_scratch.svd.n_st)
+#define s_pro_svd_k         (g_ac_pro_scratch.svd.k_st)
 
 /* 视图持有纪律（写进头注，而不是靠调用方自觉）
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，

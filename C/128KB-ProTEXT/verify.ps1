@@ -191,10 +191,11 @@ Verdict ($sturm -ge 12) 'STURM has >= 12 cases (v2.5.0 F3)' "$sturm"
 # ==== END ANCHOR STURM ====
 
 # ==== v2.6 ANCHOR: SVD (feat/matrix-advanced) ====
-# v2.6 预埋占位（仅注释，零行为变化）：SVD 用例门禁的落位锚点，参照
-# STURM 锚点先例（[case SVD-n] 计数 + Verdict 门槛，svd_runner 走独立
-# 探针路径时另接 Makefile SVD 锚点）。feat/matrix-advanced 分支合入时
-# 在上下标记之间填写；本版不携带任何可执行语句。
+# v2.6.0 G2:one-sided Jacobi SVD(契约 svd-format-v26;语料探针 svd_runner
+# 走 Makefile SVD 锚点独立目标,本节为 pro_runner 聚合口径的用例数门禁)
+$svd = ([regex]::Matches($runOut, '\[case SVD-\d+\]')).Count
+Write-Host "  SVD svd (v2.6.0 G2): $svd cases"
+Verdict ($svd -ge 13) 'SVD has >= 13 cases (v2.6.0 G2)' "$svd"
 # ==== END ANCHOR SVD ====
 
 # ---------- 5) 上游零改动 ----------

@@ -147,10 +147,25 @@ PRO_EXTRA += src/ac_pro_sturm.c
 # ==== END ANCHOR STURM ====
 
 # ==== v2.6 ANCHOR: SVD (feat/matrix-advanced) ====
-# v2.6 预埋占位（仅注释，零行为变化）：svd_runner 独立探针目标与 SVD 增量 TU
-# 的落位锚点，参照 CX 锚点的 cx_runner 先例（PRO_EXTRA 追加 + OUTDIR 域内
-# 独立 runner 目标 + verify.ps1 SVD 锚点门禁）。feat/matrix-advanced 分支
-# 合入时在上下标记之间填写；本版不携带任何变量/配方。
+# v2.6.0 G2:one-sided Jacobi SVD（契约 docs/contracts/svd-format-v26.md）。
+# 1) 新 TU 无条件进 PRO_EXTRA（cx_runner 先例）：内核/runner 双口径编译；
+#    AC_PRO_DEGRADED=1 时整体编译为空对象（零 .bss，38672 退化口径不变）。
+PRO_EXTRA += src/ac_pro_svd.c
+# 2) 独立 C 探针目标 svd_runner：读语料 CSV 逐条跑 C 侧 SVD + 探针内独立
+#    重算不变量断言（重构残差/UᵗU/VᵗV/降序/符号规范化），任何一条失败
+#    非零退出；输出 tests/bench/svd128-c.csv（v2.7 JS 面对拍金标准）。
+#    对象路径显式写 $(OUTDIR)/obj（与模式规则 $(OBJDIR)/src/%.o 逐字符
+#    一致；OUTDIR 已由 CX 锚点先行 ?= 定义）。裸链接（KERNEL_LDFLAGS，
+#    同 pro_kernel/cx_runner）；零 malloc、零 static 为结构性保证
+#    （pro_runner 口径另有 --wrap=malloc live 拦截同源证明）。
+SVDRUNNER   := $(OUTDIR)/svd_runner.exe
+SVD_OBJS    := $(OUTDIR)/obj/src/ac_pro_svd.o \
+               $(OUTDIR)/obj/src/ac_pro_extra_globals.o
+SVD_PROBE_OBJ := $(patsubst test/%.c,$(OUTDIR)/obj/test/%.o,test/svd_runner.c)
+.PHONY: svdrunner
+svdrunner: $(SVDRUNNER)
+$(SVDRUNNER): $(SVD_OBJS) $(SVD_PROBE_OBJ)
+	$(CC) $(CFLAGS) $(KERNEL_LDFLAGS) -o $@ $^ -lm
 # ==== END ANCHOR SVD ====
 SRC          := $(PRO_SRC) $(PRO_EXTRA) src/ac_pro_smoke.c
 TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
@@ -161,7 +176,8 @@ TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
                 test/test_pro_ode.c test/test_pro_schur.c \
                 test/test_pro_sqfree.c \
                 test/test_pro_sysolve.c \
-                test/test_pro_sturm.c
+                test/test_pro_sturm.c \
+                test/test_pro_svd.c
 # 内核口径构建用的 trivial main（零静态存储，只为了让 .bss 口径可比）
 KERNEL_MAIN  := test/pro_kernel_main.c
 
