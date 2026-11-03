@@ -145,6 +145,13 @@ PRO_EXTRA += src/ac_pro_sturm.c
 # ==== v2.5 ANCHOR: STURM (feat/solvers) ====
 
 # ==== END ANCHOR STURM ====
+
+# ==== v2.6 ANCHOR: SVD (feat/matrix-advanced) ====
+# v2.6 预埋占位（仅注释，零行为变化）：svd_runner 独立探针目标与 SVD 增量 TU
+# 的落位锚点，参照 CX 锚点的 cx_runner 先例（PRO_EXTRA 追加 + OUTDIR 域内
+# 独立 runner 目标 + verify.ps1 SVD 锚点门禁）。feat/matrix-advanced 分支
+# 合入时在上下标记之间填写；本版不携带任何变量/配方。
+# ==== END ANCHOR SVD ====
 SRC          := $(PRO_SRC) $(PRO_EXTRA) src/ac_pro_smoke.c
 TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
                 test/test_pro_eigen.c test/test_pro_integrate.c \

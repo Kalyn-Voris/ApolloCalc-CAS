@@ -913,6 +913,13 @@ void test_sturm_buffer(sturm_tally_t *t);
 void test_sturm_cross_dk(sturm_tally_t *t);
 /* ==== END ANCHOR STURM ==== */
 
+/* ==== v2.6 ANCHOR: SVD (feat/matrix-advanced) ==== */
+/* v2.6 预埋占位（仅注释，零行为变化）：SVD 验收套件的 tally 类型与用例
+ * 声明落位锚点（锚点纪律：main() 聚合区不设锚点，注册调用块由功能分支
+ * 按既有功能块同款追加）。feat/matrix-advanced 分支合入时在上下标记
+ * 之间填写；本版不携带任何声明。 */
+/* ==== END ANCHOR SVD ==== */
+
 int main(void) {
     tally_t t;
 

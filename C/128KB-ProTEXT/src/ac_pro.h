@@ -801,4 +801,10 @@ int ac_pro_sturm_isolate(const char *src, char *out, int out_len);
 
 /* ==== END ANCHOR STURM ==== */
 
+/* ==== v2.6 ANCHOR: SVD (feat/matrix-advanced) ==== */
+/* v2.6 预埋占位（仅注释，零行为变化）：SVD 的 Pro API 声明区落位锚点。
+ * feat/matrix-advanced 分支合入时在上下标记之间填写声明；本版不携带
+ * 任何声明/定义。 */
+/* ==== END ANCHOR SVD ==== */
+
 #endif /* AC_PRO_H */
