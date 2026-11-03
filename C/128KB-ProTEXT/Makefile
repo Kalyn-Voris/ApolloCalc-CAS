@@ -281,6 +281,28 @@ kernel:
 $(KEXE): $(OBJS_SRC) $(OBJS_KMAIN)
 	$(CC) $(CFLAGS) $(KERNEL_LDFLAGS) -o $@ $^ -lm
 
+# ==== v2.6 ANCHOR: BENCH (收尾组 G3) ====
+# v2.6.0 G3:100 万次压测的 pro_runner 列（tests/bench/run-all.sh 调用，产物
+# tests/bench/result-pro-1M.csv）。pro_bench.exe = 内核对象（$(OBJS_SRC)，与
+# pro_runner / pro_kernel 共享同一批 obj 缓存，TU 只编译一次）+ tests/bench/
+# bench-c.c 的 main。四 stage（parse/eval/solve/exact）、池过滤与预热口径同
+# 上游 bench-c 构建（bench-c-makefile KERNEL=../../C/128KB/src）完全一致，
+# 唯一差异是所链接的内核对象来自 ProTEXT（上游 16 模块包装 TU + Pro 增量）。
+# bench-c.c 本体按其余各列同款旗标编译（-std=c99 -O2 -Wall，不带 -Werror，
+# 验收门禁旗标不进基准构建）；头文件路径指向上游（-I../../C/128KB/src，
+# bench-c.c 的 ac_ratroot.h / ac_scratch.h 探测哨兵与 c128 列命中同款）。
+# 裸链接（KERNEL_LDFLAGS，同 pro_kernel 口径：bench-c.c 无 __wrap_* 定义）。
+# -D AC_PRO_BENCH_PROTEXT=1 仅让 STATIC 行的 kernel_tag 打印 ProTEXT，
+# 与上游 C 128KB 列区分，不影响任何代码生成。
+BENCH_C     := ../../tests/bench/bench-c.c
+BENCH_POOL  := ../../tests/bench/pool_c.h
+PROBENCH    := $(OUTDIR)/pro_bench.exe
+.PHONY: probench
+probench: $(PROBENCH)
+$(PROBENCH): $(OBJS_SRC) $(BENCH_C) $(BENCH_POOL)
+	$(CC) -std=c99 -O2 -Wall -DAC_PRO_BENCH_PROTEXT=1 -I../../C/128KB/src $(KERNEL_LDFLAGS) -o $@ $(OBJS_SRC) $(BENCH_C) -lm
+# ==== END ANCHOR BENCH ====
+
 # ---- .bss 门禁 ----
 # 门禁用 make 自身的 $(if)/$(error) 实现，不依赖 sh/awk（Windows 上两者都常缺），
 # 失败时 make 直接以非 0 退出，符合「不符则 make 失败」的要求。
@@ -327,8 +349,9 @@ endif
 clean:
 	-$(RM) $(EXE)
 	-$(RM) $(KEXE)
+	-$(RM) $(PROBENCH)
 	-$(RM) $(DEXE)
 	-$(RMDIR) $(OBJDIR)
 	-$(RMDIR) $(DEGOBJDIR)
 
-.PHONY: all pro_runner kernel bss-check degraded-check clean
+.PHONY: all pro_runner kernel probench bss-check degraded-check clean

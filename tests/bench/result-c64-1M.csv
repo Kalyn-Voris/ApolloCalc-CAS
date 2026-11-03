@@ -1,8 +1,8 @@
 STATIC,kernel_tag,64KB
 STATIC,expr_pools_bytes,5336
 stage,name,iterations,total_ms,us_per_op
-parse,pool220,1000120,19.394,0.0194
-eval,pool220,1000120,63.853,0.0638
-solve,pool100,1000000,356.623,0.3566
-exact,pool50,1000000,202.267,0.2023
-SUMMARY,total_ops,4000240,total_ms,642.136,avg_us_per_op,0.1605
+parse,pool220,1000120,19.421,0.0194
+eval,pool220,1000120,62.781,0.0628
+solve,pool100,1000000,358.214,0.3582
+exact,pool50,1000000,199.456,0.1995
+SUMMARY,total_ops,4000240,total_ms,639.872,avg_us_per_op,0.1600

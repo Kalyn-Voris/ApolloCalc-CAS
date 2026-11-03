@@ -220,7 +220,13 @@ int main(int argc, char **argv) {
     g_solve_n = filter_into(POOL_SOLVE, POOL_SOLVE_N, g_solve);
     g_exact_n = filter_into(POOL_EXACT, POOL_EXACT_N, g_exact);
 
+#if defined(AC_PRO_BENCH_PROTEXT)
+    /* v2.6.0 G3 pro_runner 列：链接 ProTEXT 内核对象（ProTEXT Makefile BENCH
+     * 锚点以 -D AC_PRO_BENCH_PROTEXT=1 注入），kernel_tag 与上游 C 128KB 列区分 */
+    printf("STATIC,kernel_tag,%s\n", "ProTEXT");
+#else
     printf("STATIC,kernel_tag,%s\n", AC_IS_128KB ? "128KB" : "64KB");
+#endif
     printf("STATIC,expr_pools_bytes,%zu\n", static_pool_bytes());
     printf("stage,name,iterations,total_ms,us_per_op\n");
 

@@ -1,7 +1,9 @@
 #!/bin/bash
 # ApolloCalc-CAS · 一键跑全部版本 100 万次压测
 # 用法：bash run-all.sh        （Windows 上 bash 不在 PATH 时：F:/Git/bin/bash.exe run-all.sh）
-# 产物：result-js64-1M.csv / result-js128-1M.csv / result-c64-1M.csv / result-c128-1M.csv
+# 产物：result-js64-1M.csv / result-js128-1M.csv / result-c64-1M.csv / result-c128-1M.csv /
+#       result-pro-1M.csv（v2.6.0 G3 新增 pro_runner 列：C/128KB-ProTEXT 内核，
+#       经 ProTEXT Makefile 的 probench 目标构建 pro_bench.exe）
 #       summary-ratio.csv（跨版本耗时比值，基线 = JS 64KB 的 us_per_op）
 #
 # 池：pool.json（650 条，gen_pool.py 生成）；C 端读 pool_c.h（gen_pool_c.py 生成）
@@ -79,9 +81,24 @@ else
   fi
 fi
 
+echo "=== C 128KB-ProTEXT (pro_bench, v2.6.0 G3) ==="
+if [ ! -f "../../C/128KB-ProTEXT/src/ac_pro.h" ]; then
+  echo "  (跳过：C/128KB-ProTEXT 不存在)"
+elif [ -z "$MAKE_BIN" ] || [ "$HAVE_GCC" = 0 ]; then
+  echo "  (跳过：make 或 gcc 不可用)"
+else
+  rm -f result-pro-1M.csv
+  if "$MAKE_BIN" -C ../../C/128KB-ProTEXT SHELL=cmd.exe probench &&
+     ../../C/128KB-ProTEXT/pro_bench.exe > result-pro-1M.csv; then
+    echo "  → result-pro-1M.csv"
+  else
+    echo "  (失败：C/128KB-ProTEXT probench 编译或运行未通过)"
+  fi
+fi
+
 echo "=== 汇总 ==="
 echo "--- 表达式池静态占用（C 端编译期口径） ---"
-grep "STATIC" result-c*-1M.csv 2>/dev/null || echo "  (无 C 结果)"
+grep "STATIC" result-c*-1M.csv result-pro-1M.csv 2>/dev/null || echo "  (无 C 结果)"
 echo "--- 运行时堆增量（JS 端，--expose-gc 口径，Zero-GC 内核 delta 应≈0） ---"
 grep "MEM" result-js*-1M.csv 2>/dev/null || echo "  (无 JS 结果)"
 echo "--- 全 stage 汇总行 ---"
@@ -90,10 +107,16 @@ echo "--- CSV 列名一致性 ---"
 H64="$(grep -m1 '^stage,' result-js64-1M.csv 2>/dev/null)"
 H128="$(grep -m1 '^stage,' result-js128-1M.csv 2>/dev/null)"
 HC="$(grep -m1 '^stage,' result-c64-1M.csv 2>/dev/null)"
-if [ -n "$H64" ] && [ "$H64" = "$H128" ] && [ "$H64" = "$HC" ]; then
-  echo "  三版列名一致: $H64"
+HC128="$(grep -m1 '^stage,' result-c128-1M.csv 2>/dev/null)"
+HP="$(grep -m1 '^stage,' result-pro-1M.csv 2>/dev/null)"
+CONSIST_OK=1
+for h in "$H128" "$HC" "$HC128" "$HP"; do
+  if [ -n "$h" ] && [ "$h" != "$H64" ]; then CONSIST_OK=0; fi
+done
+if [ -n "$H64" ] && [ "$CONSIST_OK" = 1 ]; then
+  echo "  各列列名一致（pro 列存在时为五列口径）: $H64"
 else
-  echo "  列名不一致或结果缺失: js64=[$H64] js128=[$H128] c64=[$HC]"
+  echo "  列名不一致或结果缺失: js64=[$H64] js128=[$H128] c64=[$HC] c128=[$HC128] pro=[$HP]"
 fi
 echo "--- 跨版本耗时比值（基线 = JS 64KB 的 us_per_op） ---"
 if [ "$HAVE_NODE" = 1 ] && [ -f result-js64-1M.csv ]; then
@@ -103,7 +126,8 @@ if [ "$HAVE_NODE" = 1 ] && [ -f result-js64-1M.csv ]; then
 var fs = require("fs");
 var STAGES = ["parse", "eval", "solve", "exact"];
 var vers = [["js64","result-js64-1M.csv"],["js128","result-js128-1M.csv"],
-            ["c64","result-c64-1M.csv"],["c128","result-c128-1M.csv"]];
+            ["c64","result-c64-1M.csv"],["c128","result-c128-1M.csv"],
+            ["pro","result-pro-1M.csv"]];
 var data = {}, order = [];
 vers.forEach(function (ve) {
   var f = ve[1];
@@ -129,7 +153,7 @@ if (order.length === 0) { console.log("  (无计时行，无法汇总)"); return
 var head = "stage";
 vers.forEach(function (ve) { head += "," + ve[0] + "_us_per_op"; });
 vers.slice(1).forEach(function (ve) { head += "," + ve[0] + "_over_js64"; });
-head += ",js64_pool,js128_pool,c64_pool,c128_pool";
+head += ",js64_pool,js128_pool,c64_pool,c128_pool,pro_pool";
 var out = [head];
 order.forEach(function (key) {
   var row = key;
