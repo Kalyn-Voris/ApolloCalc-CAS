@@ -1,20 +1,20 @@
 {
   "contract": "docs/contracts/f0-governance-v25.md",
   "component": "JS/128KB",
-  "feature": "F0 治理前置（feat/js-gate-f0）",
-  "measuredAt": "2026-11-03",
+  "feature": "F0 治理前置（feat/js-gate-f0）；F2 sysolve / F3 sturm 合并（feat/solvers）登记更新",
+  "measuredAt": "2026-11-04",
   "node": "v24.19.0",
   "baseline": {
-    "totalBytes": 170304,
-    "allocations": 143,
-    "method": "加载期 TypedArray 逐分配 stack 行号归属实测（JS/128KB/test/test-watermark.js 可复现）；懒分配 0（代表性工作负载前后分配计数不变）"
+    "totalBytes": 174624,
+    "allocations": 182,
+    "method": "加载期 TypedArray 逐分配 stack 行号归属实测（JS/128KB/test/test-watermark.js 可复现）；懒分配 0（代表性工作负载前后分配计数不变）；记录器包装 Float64Array/Int32Array 两型——F2/F3 新增 7 个 Uint8 池（992 B）不在逐文件计数内，但按契约 §3『全部池』义务纳入模块自报（见 gate.moduleRegisteredBytes）"
   },
   "gate": {
     "staticLineBytes": 178496,
-    "derivation": "170304 + 8192（v2.5 JS 新增池预算封顶 2^13 B，ROADMAP-v2.5-v2.6.md §三/§F0；对分项和 +4864–6502 B 留 26–41% 余量）",
+    "derivation": "170304（F0 基线）+ 8192（v2.5 JS 新增池预算封顶 2^13 B，ROADMAP-v2.5-v2.6.md §三/§F0）= 178496 封顶固定；F2 sysolve +2880 B（26 池）、F3 sturm +1440 B（13 池，均为记录器口径）及 992 B Uint8 池并入自报后，基线 174624，封顶下剩余预算 3872 B（记录器口径）",
     "heapLineBytes": 98304,
     "basicLiveBytes": 11992,
-    "moduleRegisteredBytes": 158312
+    "moduleRegisteredBytes": 163624
   },
   "perFile": [
     { "file": "core_parser.js", "pools": 4, "bytes": 6368, "registration": "live" },
@@ -25,7 +25,7 @@
     { "file": "core_calculus.js", "pools": 2, "bytes": 2176, "registration": "selfReport" },
     { "file": "core_base.js", "pools": 1, "bytes": 256, "registration": "live" },
     { "file": "core_solvers.js", "pools": 8, "bytes": 720, "registration": "live" },
-    { "file": "core_ratroot.js", "pools": 26, "bytes": 3424, "registration": "selfReport" },
+    { "file": "core_ratroot.js", "pools": 39, "bytes": 4864, "registration": "selfReport" },
     { "file": "core_symboltree.js", "pools": 20, "bytes": 35232, "registration": "selfReport" },
     { "file": "core_integrate.js", "pools": 29, "bytes": 93676, "registration": "selfReport" },
     { "file": "core_multivar.js", "pools": 6, "bytes": 10208, "registration": "selfReport" },
@@ -33,6 +33,6 @@
     { "file": "core_special.js", "pools": 0, "bytes": 0, "registration": "none" },
     { "file": "core_numtheory.js", "pools": 3, "bytes": 288, "registration": "selfReport" },
     { "file": "core_ode.js", "pools": 11, "bytes": 1500, "registration": "selfReport" },
-    { "file": "core_groebner.js", "pools": 18, "bytes": 6648, "registration": "selfReport" }
+    { "file": "core_groebner.js", "pools": 44, "bytes": 9528, "registration": "selfReport" }
   ]
 }

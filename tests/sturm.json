@@ -1,0 +1,39 @@
+{
+  "description": "ApolloCalc-CAS 共享一致性契约 v2.5:F3 Sturm 序列与实根隔离(docs/contracts/sturm-format-v25.md 冻结镜像)。三层:dualCases(deg<=4 且 JS 精确域全程成立,双侧零分叉——计数精确整数、隔离区间端点既约分数精确、错误码精确);cOnlyDEG(deg 5..8:C 断言真实期望,JS 断言 EDEG=-2);cOnlyOVF(JS 2^53 精确域审计触发,C 断言真实期望,JS 断言 ECOEF=-3)。计数约定 = 闭区间 [a,b](端点为根计入;V(a)-V(b)+[p(a)=0]);隔离 = 半开 (lo,hi] 二分、深度上限 48、未解析区间尾标 '!';端点渲染为既约分数。期望值经 node BigInt 精确 oracle 独立核算。",
+  "dualCases": [
+    { "id": "st-lin", "p": "2x-3", "counts": [{ "a": "0", "b": "2", "want": 1 }, { "a": "-inf", "b": "inf", "want": 1 }], "isolate": [["-4", "4"]] },
+    { "id": "st-cubic", "p": "x^3-x", "counts": [{ "a": "-2", "b": "2", "want": 3 }, { "a": "-inf", "b": "inf", "want": 3 }, { "a": "0", "b": "1", "want": 2 }, { "a": "-1", "b": "inf", "want": 3 }, { "a": "-inf", "b": "1", "want": 3 }, { "a": "-1", "b": "1", "want": 3 }], "isolate": [["-2", "-1"], ["-1", "0"], ["0", "2"]] },
+    { "id": "st-x2p1", "p": "x^2+1", "counts": [{ "a": "-5", "b": "5", "want": 0 }, { "a": "-inf", "b": "inf", "want": 0 }, { "a": "-999999", "b": "999999", "want": 0 }], "isolate": [], "note": "零实根 + 大端点(链小,JS 精确 Horner 全程 <= 2^53:99 万^2+1 = 999998000002)" },
+    { "id": "st-x4p1", "p": "x^4+1", "counts": [{ "a": "-3", "b": "3", "want": 0 }], "isolate": [], "note": "零实根(deg 4)+ 隔离空表" },
+    { "id": "st-quartic4", "p": "x^4-5x^2+4", "counts": [{ "a": "-inf", "b": "inf", "want": 4 }, { "a": "0", "b": "10", "want": 2 }, { "a": "-99", "b": "99", "want": 4 }], "isolate": [["-4", "-2"], ["-2", "0"], ["0", "1"], ["1", "2"]] },
+    { "id": "st-sff-dual", "p": "x^3-3x+2", "counts": [{ "a": "-10", "b": "10", "want": 2 }], "isolate": [["-4", "0"], ["0", "4"]], "note": "重根经 SFF 后计数:(x-1)^2(x+2) 相异 2" },
+    { "id": "st-endpoints", "p": "x^2-4", "counts": [{ "a": "-2", "b": "3", "want": 2 }, { "a": "-3", "b": "2", "want": 2 }, { "a": "-2", "b": "2", "want": 2 }, { "a": "0", "b": "10", "want": 1 }, { "a": "3", "b": "10", "want": 0 }, { "a": "2", "b": "2", "want": 1 }, { "a": "0", "b": "0", "want": 0 }], "note": "端点恰为根的开闭语义(闭区间计入)与 a=b 退化" },
+    { "id": "st-neglc", "p": "-x^3+x", "counts": [{ "a": "-2", "b": "2", "want": 3 }], "note": "负首项本原化(计数对标量缩放不变)" },
+    { "id": "st-content", "p": "6x^2-6", "counts": [{ "a": "-2", "b": "2", "want": 2 }], "isolate": [["-2", "0"], ["0", "2"]], "note": "非常数内容 6" },
+    { "id": "st-const", "p": "7", "counts": [{ "a": "-3", "b": "3", "want": 0 }], "isolate": [], "note": "非零常数:计数 0、隔离空表" },
+    { "id": "st-close", "p": "999x^2-2", "counts": [{ "a": "0", "b": "1", "want": 1 }], "isolate": [["-2", "0"], ["0", "2"]], "note": "近根正常隔离" },
+    { "id": "st-close2", "p": "x^2-999", "counts": [{ "a": "0", "b": "100", "want": 1 }], "isolate": [["-1024", "0"], ["0", "1024"]] },
+    { "id": "st-mignotte-iso", "p": "999x^4-999x^3+1", "isolate": [["0", "1/2"], ["1/2", "1"]], "note": "隔离轨道 = 浮点 Horner + 前向误差界,全域可判定(界 <= 1e-11,|p| >= 0.6),与 C 精确二分同路径零分叉" },
+    { "id": "st-eparam", "p": "x^2-4", "counts": [{ "a": "5", "b": "3", "err": -4 }, { "a": "abc", "b": "1", "err": -4 }, { "a": "1000000", "b": "inf", "err": -4 }, { "a": "1.5", "b": "2", "err": -4 }], "note": "a>b / 非法端点 / 越域 |n|>999999 / 小数端点" },
+    { "id": "st-eparse", "p": "X^2-4", "err": -1, "note": "大写 X" },
+    { "id": "st-eparse-eq", "p": "x^2=4", "err": -1, "note": "'=' 一律非法" },
+    { "id": "st-eparse-slash", "p": "x^2/2", "err": -1, "note": "非整系数在文法层拒绝" },
+    { "id": "st-eparse-empty", "p": "", "err": -1, "note": "空串" },
+    { "id": "st-eparse-dup", "p": "x^2+x^2", "err": -1, "note": "同次项重复(sqfree 词法域语义)" },
+    { "id": "st-edeg9", "p": "x^9+1", "err": -2, "note": "次数 9:C 与 JS 同码(>=9 双侧拒绝)" },
+    { "id": "st-ecoef-zero", "p": "0", "err": -3, "note": "全零多项式" },
+    { "id": "st-ecoef-1000", "p": "1000x", "err": -3, "note": "|c| > 999「刚好拒绝」(999x 为「刚好通过」对照)" }
+  ],
+  "cOnlyDEG": [
+    { "id": "st-deg5", "p": "x^5-1", "jsErr": -2, "cCount": { "a": "-2", "b": "2", "want": 1 }, "cIsolate": [["-2", "2"]], "note": "次数 5:JS EDEG 成文分叉;C 全功能" },
+    { "id": "st-deg5-rep", "p": "x^5+x^4-5x^3-x^2+8x-4", "jsErr": -2, "cCount": { "a": "-10", "b": "10", "want": 2 }, "cIsolate": [["-4", "0"], ["0", "4"]], "note": "(x-1)^3(x+2)^2:SFF 去重后 2,DK 交叉校验锚" },
+    { "id": "st-deg8", "p": "x^8+1", "jsErr": -2, "cCount": { "a": "-3", "b": "3", "want": 0 }, "cIsolate": [] },
+    { "id": "st-dense8", "p": "9x^8+8x^7+7x^6+6x^5+5x^4+4x^3+3x^2+2x+1", "jsErr": -2, "cCount": { "a": "-2", "b": "2", "want": 0 }, "note": "deg 8 稠密:链系数峰值 72(C 实测 bits 7),远低 8 limb 上限" }
+  ],
+  "cOnlyOVF": [
+    { "id": "st-ovf-pass-9741", "p": "x^4+1", "a": "-9741", "b": "9741", "cCount": 0, "jsExpect": 0, "note": "「刚好通过」:9741^4+1 = 9003558140700561 <= 2^53-1,JS 精确 Horner 不触发" },
+    { "id": "st-ovf-reject-9742", "p": "x^4+1", "a": "-9742", "b": "9742", "cCount": 0, "jsExpect": -3, "note": "「刚好拒绝」:9742^4+1 = 9007255890286096 > 2^53-1,JS 审计触发 ECOEF" },
+    { "id": "st-ovf-mignotte-endpoint", "p": "999x^4-999x^3+1", "a": "-999999", "b": "999999", "cCount": 2, "jsExpect": -3, "note": "链系数 3996 * 端点 1e6:Horner 中间量 ~1e21,JS 审计触发;C ac_bigint 精确计数 2" },
+    { "id": "st-ovf-cubic-endpoint", "p": "x^3-2", "a": "-999999", "b": "999999", "cCount": 1, "jsExpect": -3, "note": "t^3 = 999997000002999999 > 2^53;C 计数 1(实根 2^(1/3))" }
+  ]
+}

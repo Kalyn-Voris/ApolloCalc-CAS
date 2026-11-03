@@ -137,7 +137,9 @@ $(CXRUNNER): $(CX_OBJS) $(CX_TEST_OBJ)
 # ==== END ANCHOR CX ====
 
 # ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ====
-
+# v2.5.0 F2:二元方程组 GB 消元数值全解(契约 sysolve-format-v25)
+PRO_EXTRA += src/ac_pro_sysolve.c
+PRO_EXTRA += src/ac_pro_sturm.c
 # ==== END ANCHOR SYSOLVE ====
 
 # ==== v2.5 ANCHOR: STURM (feat/solvers) ====
@@ -150,7 +152,9 @@ TEST_SRC     := test/test_pro_runner.c test/test_pro_multi.c \
                 test/test_pro_sparse.c test/test_pro_bigdec.c \
                 test/test_pro_groebner.c test/test_pro_rational.c \
                 test/test_pro_ode.c test/test_pro_schur.c \
-                test/test_pro_sqfree.c
+                test/test_pro_sqfree.c \
+                test/test_pro_sysolve.c \
+                test/test_pro_sturm.c
 # 内核口径构建用的 trivial main（零静态存储，只为了让 .bss 口径可比）
 KERNEL_MAIN  := test/pro_kernel_main.c
 

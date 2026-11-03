@@ -176,11 +176,17 @@ Verdict ($cxFailed -eq 0) 'CX zero failed assertions' "$cxFailed failed"
 # ==== END ANCHOR CX ====
 
 # ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ====
-
+# v2.5.0 F2:二元方程组 GB 消元数值全解(契约 sysolve-format-v25)
+$sysolve = ([regex]::Matches($runOut, '\[case SYSOLVE-\d+\]')).Count
+Write-Host "  SYSOLVE sysolve (v2.5.0 F2): $sysolve cases"
+Verdict ($sysolve -ge 16) 'SYSOLVE has >= 16 cases (v2.5.0 F2)' "$sysolve"
 # ==== END ANCHOR SYSOLVE ====
 
 # ==== v2.5 ANCHOR: STURM (feat/solvers) ====
-
+# v2.5.0 F3:Sturm 序列与实根隔离(契约 sturm-format-v25)
+$sturm = ([regex]::Matches($runOut, '\[case STURM-\d+\]')).Count
+Write-Host "  STURM sturm (v2.5.0 F3): $sturm cases"
+Verdict ($sturm -ge 12) 'STURM has >= 12 cases (v2.5.0 F3)' "$sturm"
 # ==== END ANCHOR STURM ====
 
 # ---------- 5) 上游零改动 ----------

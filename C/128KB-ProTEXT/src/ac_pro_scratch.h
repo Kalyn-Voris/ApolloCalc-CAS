@@ -262,6 +262,18 @@ AC_STATIC_ASSERT(sizeof(ac_bigint_t) == 88, pro_dec_bigint_is_88_bytes);
 #define AC_PRO_GB_TERMS     16    /* 单个基元素项数上限 */
 #define AC_PRO_GB_PAIRS     32    /* critical pair 队列容量（≥ C(8,2)=28） */
 
+/* v2.5.0 F3：Sturm 序列视图常量（feat/solvers；契约 sturm-format-v25）
+ *   链三角打包：成员 k 次数 ≤ 8−k ⟹ 系数数 ≤ 9−k，合计 9+8+…+1 = 45。
+ *   每系数 8 limb（基数 1e9）= 72 位十进制 ≈ 239 bits：deg 8 |c| ≤ 999 的
+ *   链系数峰值实测 ~144 bits（60K 样本），余量 ~66%；离群 → ECOEF。
+ *   二分显式栈 64 格：深度 ≤ 48（契约冻结），DFS 待处理格 ≤ 深度 + 1。 */
+#define AC_PRO_ST_MAX_DEG    8     /* 输入次数上限（sqfree 词法域同款） */
+#define AC_PRO_ST_LIMBS      8     /* 每系数 limb 上限（8 × 9 = 72 位十进制） */
+#define AC_PRO_ST_CHAIN      45    /* 三角系数总数 9+8+…+1 */
+#define AC_PRO_ST_MEMS       9     /* 链成员数上限（deg 8 满链） */
+#define AC_PRO_ST_BSTACK     64    /* 二分显式栈格数（≥ 深度 48 + 1） */
+#define AC_PRO_ST_BDEPTH_MAX 48    /* 契约冻结的二分深度上限（双侧统一） */
+
 typedef struct {
     int64_t b_coef[AC_PRO_GB_BASIS * AC_PRO_GB_TERMS];   /*   0 .. 1024 : 基系数（槽 s 项 t = b_coef[s*16+t]） */
     uint8_t b_ep  [AC_PRO_GB_BASIS * AC_PRO_GB_TERMS];   /* 1024 .. 1152 : 基打包指数 (ex<<4)|ey，降序 */
@@ -504,6 +516,40 @@ typedef union {
      *   算法（逐对 S-多项式、稠密伪除归约、终结 interreduce）见
      *   src/ac_pro_groebner.c 的文件头。 */
     ac_pro_gb_view_t gb;                                  /* 合计 1888 B */
+
+    /* v2.5.0 F3：Sturm 序列与实根隔离（feat/solvers 独占视图，v2.5 新增）
+     *   精确有理余 PRS（−rem 的正倍数逐成员整化，规避 prem 符号陷阱）+
+     *   V(a)−V(b) 闭区间计数 + 显式栈二分隔离（深度 ≤ 48）。
+     *   布局（载荷 2912 B,8 字节对齐,sizeof == 2912 由断言链钉死）:
+     *     limb  @    0   45×8×4  = 1440  链系数幅值 limb（基数 1e9 低位在前，
+     *                    三角打包：成员 k 有 deg_k+1 个系数，≤ 8 limb/系数 =
+     *                    72 位十进制 ≈ 239 bits；超限 → ECOEF 离群诚实拒绝）
+     *     sgn   @ 1440   45(+3 填充)      系数符号（−1/0/+1）
+     *     deg   @ 1488   9×4  =  36      成员次数（deg_0 > deg_1 > … ≥ 0）
+     *     off   @ 1524   9×4  =  36      成员 k 的系数起始下标（三角偏移）
+     *     nmem  @ 1560    4              链成员数（gcd(p,p')=1 ⟹ 末元为非零常数）
+     *     lonum @ 1568   64×8 = 512      二分显式栈：区间左端分子（值 = num/2^dep，
+     *                                    num ≤ 2^59 < int64 精确）
+     *     hinum @ 2080   64×8 = 512      二分显式栈：区间右端分子
+     *     sdep  @ 2592   64×4 = 256      二分显式栈：网格深度（≤ 48）
+     *     sflg  @ 2816   64×1 =  64      二分显式栈：占用标志
+     *     合计 2912 B（8 的倍数）≤ 3848（sparse 峰值）——被 union 完全
+     *   吸收，.bss 零增长（lu/eig/dec/gb/rat/schur 之后「union 吸收」判据的
+     *   又一次兑现；ROADMAP §F3 估算 2.0-2.8 KB,落地 2912 B 同量级上沿)。
+     *   bigint 工作槽刻意走栈上 ac_bigint_t 局部变量（dec 视图先例：
+     *   「工作量走栈上 ac_bigint_t 局部变量,不占 .bss」），视图只存
+     *   跨 V() 求值存活的链与二分栈。 */
+    struct {
+        uint32_t limb[AC_PRO_ST_CHAIN * AC_PRO_ST_LIMBS]; /*    0 .. 1440 : 链系数幅值 limb   */
+        int8_t   sgn [AC_PRO_ST_CHAIN];                   /* 1440 .. 1485 : 系数符号          */
+        int32_t  deg [AC_PRO_ST_MEMS];                    /* 1488 .. 1524 : 成员次数          */
+        int32_t  off [AC_PRO_ST_MEMS];                    /* 1524 .. 1560 : 成员系数起始下标  */
+        int32_t  nmem;                                    /* 1560 .. 1564 : 链成员数          */
+        int64_t  lonum[AC_PRO_ST_BSTACK];                 /* 1568 .. 2080 : 二分栈左端分子    */
+        int64_t  hinum[AC_PRO_ST_BSTACK];                 /* 2080 .. 2592 : 二分栈右端分子    */
+        int32_t  sdep [AC_PRO_ST_BSTACK];                 /* 2592 .. 2848 : 二分栈深度        */
+        uint8_t  sflg [AC_PRO_ST_BSTACK];                 /* 2848 .. 2912 : 二分栈占用标志    */
+    } sturm;                                              /* 合计 2912 B(v2.5.0 F3) */
 } ac_pro_scratch_t;
 
 /* 编译期断言（从严，全部用 ==） */
@@ -529,6 +575,20 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)     ==  464, pro_view_rat_
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      ==  460 + 4,
                  pro_view_rat_is_8byte_aligned_464);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->schur)   == 2744, pro_view_schur_is_2744);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sturm)   == 2912, pro_view_sturm_is_2912);
+AC_STATIC_ASSERT(AC_PRO_ST_CHAIN == AC_PRO_ST_MEMS * (AC_PRO_ST_MEMS + 1) / 2,
+                 pro_sturm_chain_is_triangular_45);
+AC_STATIC_ASSERT(AC_PRO_ST_LIMBS == 8, pro_sturm_limbs_is_72_decimal_digits);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sturm.limb) +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.sgn) + 3 +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.deg) +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.off) +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.nmem) + 4 +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.lonum) +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.hinum) +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.sdep) +
+                 sizeof(((ac_pro_scratch_t *)0)->sturm.sflg) == 2912,
+                 pro_sturm_payload_is_2912);
 
 /* 判据 1 在 Pro union 内部：每个视图都必须 ≤ 峰值，
    否则「union 尺寸 = max(视图)」这条前提被破坏。
@@ -555,6 +615,8 @@ AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->rat)      <= 1536,
                  pro_view_rat_under_task_budget);
 AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->schur)    <= sizeof(((ac_pro_scratch_t *)0)->sparse),
                  pro_view_schur_absorbed);
+AC_STATIC_ASSERT(sizeof(((ac_pro_scratch_t *)0)->sturm)    <= sizeof(((ac_pro_scratch_t *)0)->sparse),
+                 pro_view_sturm_absorbed);
 /* v1.3.5 的历史档案：mv 比 eig 恰好大 96 B（当年「.bss 零增长」的充要
    条件）。v2.1.0 峰值上移后这条等式仍然为真，保留作回归锚点。
    v2.1.0 ⑤：dec 480 < mv 2688（当年的峰值）—— lu（v1.3）、eig（v1.3.5）
@@ -582,6 +644,7 @@ AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, sparse) == 0, pro_view_sparse_starts
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, dec) == 0, pro_view_dec_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, gb) == 0, pro_view_gb_starts_at_zero);
 AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, schur) == 0, pro_view_schur_starts_at_zero);
+AC_STATIC_ASSERT(offsetof(ac_pro_scratch_t, sturm) == 0, pro_view_sturm_starts_at_zero);
 
 /* g_var_val 的字节数必须与账本常量一致（80 = 10 × 8）。 */
 AC_STATIC_ASSERT(AC_PRO_VAR_VAL_BYTES == AC_PRO_VAR_COUNT * 8, pro_var_val_is_80_bytes);
@@ -689,6 +752,18 @@ extern ac_pro_storage_t g_ac_pro_storage;
 #define s_pro_schur_work    (g_ac_pro_scratch.schur.work)
 #define s_pro_schur_piv     (g_ac_pro_scratch.schur.piv)
 #define s_pro_schur_n       (g_ac_pro_scratch.schur.n_st)
+/* v2.5.0 F3:Sturm 视图。limb/sgn 三角打包的链系数(成员 k 系数 j =
+   下标 off[k]+j,幅值 limb 基数 1e9 低位在前,符号 sgn);deg/off/nmem
+   是链结构;lonum/hinum/sdep/sflg 是二分显式栈(值 = num/2^dep)。 */
+#define s_pro_st_limb(i)    (g_ac_pro_scratch.sturm.limb[(i)])
+#define s_pro_st_sgn(i)     (g_ac_pro_scratch.sturm.sgn[(i)])
+#define s_pro_st_deg(k)     (g_ac_pro_scratch.sturm.deg[(k)])
+#define s_pro_st_off(k)     (g_ac_pro_scratch.sturm.off[(k)])
+#define s_pro_st_nmem       (g_ac_pro_scratch.sturm.nmem)
+#define s_pro_st_lonum(i)   (g_ac_pro_scratch.sturm.lonum[(i)])
+#define s_pro_st_hinum(i)   (g_ac_pro_scratch.sturm.hinum[(i)])
+#define s_pro_st_sdep(i)    (g_ac_pro_scratch.sturm.sdep[(i)])
+#define s_pro_st_sflg(i)    (g_ac_pro_scratch.sturm.sflg[(i)])
 
 /* 视图持有纪律（写进头注，而不是靠调用方自觉）
    ① 一次 API 调用只持有一个视图。ac_pro_numroots 用 nr，ac_mat_lu 用 lu，

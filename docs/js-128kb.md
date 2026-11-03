@@ -127,14 +127,16 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 | `core_matrix.js` 池（独立模块） | — | 5 160 B（v2.4.0 升 12×12，实测） |
 | `core_special.js` 池（独立模块） | — | **0 B**（纯标量，无池） |
 
-> **v2.4.1 全项目静态池实测**：17 文件全部模块加载期 TypedArray byteLength 求和为
-> **170 304 B（166.3 KiB，2026-11-01 实测、2026-11-03 F0 复测一致，逐模块脚本可复现）**。大头：
+> **v2.5.0 全项目静态池实测**：17 文件全部模块加载期 TypedArray byteLength 求和为
+> **174 624 B（170.5 KiB，2026-11-01 实测、2026-11-03 F0 复测一致，2026-11-04 F2/F3 合并
+> 登记更新，逐模块脚本可复现；记录器口径 Float64Array/Int32Array）**。大头：
 > `core_integrate.js` 93 676 B（128 项积分表落 TypedArray）、`core_symboltree.js`
 > 35 232 B（表达式树 512 节点池 + diff 工作区）、`core_multivar.js` 10 208 B、
-> `core_groebner.js` 6 648 B、`core_matrix.js` 5 160 B（v2.4.0 升 12×12）、
-> `core_parser.js` 6 368 B、`core_evaluator.js` 4 648 B。v2.0.0 时代的
-> 「全项目 22 416 B」是 12 文件快照，已被 v2.1.0 稀疏/小数与 v2.3.0/v2.4.0
-> 五轮功能扩张取代。
+> `core_groebner.js` 9 528 B（F2 sysolve 段 +2 880 B）、`core_matrix.js` 5 160 B（v2.4.0 升 12×12）、
+> `core_parser.js` 6 368 B、`core_ratroot.js` 4 864 B（F3 sturm 段 +1 440 B）、
+> `core_evaluator.js` 4 648 B。v2.0.0 时代的
+> 「全项目 22 416 B」是 12 文件快照，已被 v2.1.0 稀疏/小数与 v2.3.0/v2.4.0/v2.5.0
+> 各轮功能扩张取代。
 >
 > **口径澄清**：静态池是 TypedArray **外部内存**，不计入 V8 `heapUsed`；
 > 水位门禁 `checkMemoryWatermark`（core_solvers.js）自 F0 起为**两条独立的线**：
@@ -155,15 +157,18 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 
 1. **堆线（不变）**：`performance.memory.usedJSHeapSize > 98 304 B`（128KB × 75%）拒绝；
 2. **全池静态线（F0 新增）**：基础池 live `byteLength`（11 992 B）+
-   `_modulePoolBytes`（各池模块加载期自报合计，实测 158 312 B）+
+   `_modulePoolBytes`（各池模块加载期自报合计，实测 163 624 B，含 F2/F3 新增
+   Uint8 池 992 B）+
    动态游标（`(tokenCount<<3) + (numberCount<<3)`）> **178 496 B** 拒绝。
    推导：**170 304 B**（F0 开工实测全项目加载期 TypedArray byteLength 之和，143 组
    分配，`test/test-watermark.js` 加载期逐分配 stack 归属可复现）+ **8 192 B**
-   （v2.5 JS 新增池预算封顶 2^13，ROADMAP-v2.5-v2.6 §三）= 178 496 B。旧降级估算的
+   （v2.5 JS 新增池预算封顶 2^13，ROADMAP-v2.5-v2.6 §三）= 178 496 B（封顶固定）。
+   F2 sysolve（+2 880 B/26 池）与 F3 sturm（+1 440 B/13 池，记录器口径）合并时按
+   契约 §3 登记义务入账，基线 174 624 B/182 组，封顶下剩余预算 3 872 B。旧降级估算的
    +2 048 B 堆代理冗余退役（游标已显式计入）。
 
 **逐模块账本**（机器可读镜像 [tests/js-pool-ledger.json](../tests/js-pool-ledger.json)，
-2026-11-03 实测，加载期一次性分配、懒分配 0）：
+2026-11-04 实测（F0 基线 2026-11-03 + F2/F3 登记更新），加载期一次性分配、懒分配 0）：
 
 | 模块 | 池数 | byteLength | 登记方式 |
 |---|---:|---:|---|
@@ -175,7 +180,7 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 | core_calculus.js | 2 | 2 176 B | 加载期自报 |
 | core_base.js | 1 | 256 B | 基础池，门禁 live 读 `byteLength` |
 | core_solvers.js | 8 | 720 B | 基础池，门禁 live 读 `byteLength` |
-| core_ratroot.js | 26 | 3 424 B（顶层 8 池 1 184 + sqfree IIFE 18 池 2 240） | 加载期自报（两处） |
+| core_ratroot.js | 39 | 4 864 B（顶层 8 池 1 184 + sqfree IIFE 18 池 2 240 + sturm 段 13 池 1 440） | 加载期自报（三处） |
 | core_symboltree.js | 20 | 35 232 B | 加载期自报（allocCount=20 一致） |
 | core_integrate.js | 29 | 93 676 B | 加载期自报（模块 `allocCount=28` 不含 `_T_OFFS` 偏移表） |
 | core_multivar.js | 6 | 10 208 B | 加载期自报（allocCount=6 一致） |
@@ -183,8 +188,8 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 | core_special.js | 0 | 0 B | —（allocCount=0 一致） |
 | core_numtheory.js | 3 | 288 B | 加载期自报（allocCount=3 一致） |
 | core_ode.js | 11 | 1 500 B | 加载期自报（allocCount=11 一致） |
-| core_groebner.js | 18 | 6 648 B | 加载期自报（allocCount=18 一致） |
-| **合计** | **143** | **170 304 B** | 门禁线 **178 496 B** |
+| core_groebner.js | 44 | 9 528 B（GB 段 18 池 6 648 + sysolve 段 26 池 2 880） | 加载期自报（两处） |
+| **合计** | **182** | **174 624 B** | 门禁线 **178 496 B** |
 
 **登记机制**：`core_parser.js`（拼接序第 1）声明 `var _modulePoolBytes = 0` 与求和
 助手 `_modulePoolSum()`（加载期一次性调用，`arguments` 不落热路径）；其余池模块在

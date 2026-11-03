@@ -730,10 +730,74 @@ int ac_pro_cgamma(void);    /* TMP = Γ(A)，Lanczos g=7/n=9 + 反射式；非�
 /* ==== END ANCHOR CX ==== */
 
 /* ==== v2.5 ANCHOR: SYSOLVE (feat/solvers) ==== */
+/* v2.5.0 F2:二元多项式方程组 GB 消元数值全解(实现于 src/ac_pro_sysolve.c)。
+ * 行为边界由 docs/contracts/sysolve-format-v25.md 逐字冻结(契约 §7 全序)。
+ *   f,g 两多项式串(gb 文法,输入总次数 ≤ 4)→ 现有 Groebner(lex x>y)
+ *   → 访问器 copy-out(y-单变元消元多项式 h 与混合元素入栈缓冲,copy-out
+ *   后 gb 视图不再持有;DK 阶段复用同 union 的 nr 视图)→ h 经 sqfree
+ *   预处理去重根 → h 求根 1 直接式 / 2..4 精确根式 / 5..8 DK → 解耦 GB
+ *   交叉积;耦合 GB 逐 y 根代回混合元得复系数一元式,一律复数 DK →
+ *   每个 (x,y) 候选代回 f,g 残差 ≤1e-9(相对)回验才输出 → 去重 →
+ *   y Re ↓ / y Im ↓ / x Re ↓ / x Im ↓(1e-9 并列)排序渲染。
+ *   GB={1} → 成功 0 解 "[]";无 y-单变元元 / 某 y 根处全部混合元恒零
+ *   → EZDIM(正维数)。零 static 对象、零新视图,栈缓冲 < 22 KB(单帧)。
+ *   求解层 clobber 副作用(g_coeffs、g_root_*、g_solve_error、gb 与 nr 视图)
+ *   按 sqfree 先例成文(契约 §8)。
+ *
+ *   int ac_pro_sysolve(const char *fsrc, const char *gsrc, char *out, int out_len);
+ *   out 由调用方提供(建议 out_len ≥ 1024,16 解最坏形态);实际输出超
+ *   out_len → EOVER 且不写部分内容;失败时 out 内容未定义(除 {1} 早退
+ *   会写 "[]")。JS 侧为 ApolloGroebner.sysolve(f,g) + getSysolveString()
+ *   (core_groebner.js 扩段,与本节互为镜像)。 */
+int ac_pro_sysolve(const char *fsrc, const char *gsrc, char *out, int out_len);
+
+#define AC_PRO_SYS_OK        0    /* 成功(out 已写入,含 "[]") */
+#define AC_PRO_SYS_EARG    (-1)   /* 空指针/空串/gb 词法结构错误(= GB_EARG) */
+#define AC_PRO_SYS_EDEG    (-2)   /* 输入总次数 > 4 或单变量指数 > 8(= GB_EDEG) */
+#define AC_PRO_SYS_ETERM   (-3)   /* GB 单元素项数超限(= GB_ETERM 透传) */
+#define AC_PRO_SYS_ESLOT   (-4)   /* GB 基槽超限(= GB_ESLOT 透传) */
+#define AC_PRO_SYS_EPAIR   (-5)   /* GB pair 队列超限(= GB_EPAIR 透传) */
+#define AC_PRO_SYS_EOVER   (-6)   /* 中间整数溢出(C int64 域)/输出缓冲不足 */
+#define AC_PRO_SYS_EBUF    (-7)   /* 预留(= GB_EBUF 同值;本层不产生) */
+#define AC_PRO_SYS_EZDIM   (-8)   /* 正维数:无 y-单变元元 / 某 y 根处全部混合元恒零 */
+#define AC_PRO_SYS_ESOLT   (-9)   /* 回验通过且去重后的解数 > 16(Bézout 界熔断) */
+#define AC_PRO_SYS_EVERIFY (-10)  /* 任一候选 f/g 残差 > 1e-9(相对) */
+#define AC_PRO_SYS_EINTERNAL (-11)/* GB 内部失败 / 除法余式非零 / DK 不收敛 / 渲染越域 */
 
 /* ==== END ANCHOR SYSOLVE ==== */
 
 /* ==== v2.5 ANCHOR: STURM (feat/solvers) ==== */
+/* v2.5.0 F3:Sturm 序列与实根隔离(实现于 src/ac_pro_sturm.c;C 全功能
+ * deg 1..8,JS 侧 deg ≤ 4 镜像见 core_ratroot.js 扩段,5..8 → EDEG 成文分叉)。
+ * 行为边界由 docs/contracts/sturm-format-v25.md 逐字冻结(契约 §2/§6)。
+ *   单变量整系数多项式(sqfree 词法域:小写 x、|c| ≤ 999、deg ≤ 8、ASCII、
+ *   ≤ 128 B)→ 本原化+首项化正 → square-free 预归一 → 精确 Sturm 链
+ *   p_{k+1} = −rem(p_{k−1},p_k) 的正倍数逐成员整化(ac_bigint 承载,
+ *   prem 符号因子显式校正)→ V(a)−V(b) 闭区间计数(端点根计入;±∞ 走
+ *   lc/奇偶)→ 显式栈二分隔离(深度 ≤ 48,dyadic 既约分数端点,未解析 "!")。
+ *   视图:sturm 槽(2912 B ≤ 3848 吸收线,.bss 零增长;feat/solvers 独占)。
+ *   零 static 对象、零 malloc、零 VLA、零递归;ac_bi_mul 的截断语义由
+ *   逐算术位数预检对冲(超界 → ECOEF,绝不消费截断值)。
+ *
+ *   int ac_pro_sturm_count(const char *src, const char *a, const char *b);
+ *     成功返回闭区间 [a,b] 内 p_sf 相异实根数(≥0);失败返回负错误码。
+ *     端点 = "inf"/"-inf"(逐字)或整数 |n| ≤ 999999;a > b → EPARAM。
+ *   int ac_pro_sturm_isolate(const char *src, char *out, int out_len);
+ *     成功(0)写 "[[a1, b1], ...]"(端点既约分数,未解析格尾标 "!",
+ *     无实根 "[]");out_len 不足 → EOVER 不写部分内容;失败 out 未定义。
+ *   JS 侧为 ApolloSqfree.sturmCount(src,a,b) / sturmIsolate(src) +
+ *   getSturmString()(core_ratroot.js 扩段,与本节互为镜像)。 */
+int ac_pro_sturm_count(const char *src, const char *a, const char *b);
+int ac_pro_sturm_isolate(const char *src, char *out, int out_len);
+
+#define AC_PRO_STM_OK        0    /* 成功(count ≥ 0 / isolate out 已写入) */
+#define AC_PRO_STM_EPARSE   (-1)  /* 词法/结构错误(大写 X、=、同次重复、悬空符号) */
+#define AC_PRO_STM_EDEG     (-2)  /* 次数 ≥ 9(两侧);JS 侧 deg ≥ 5 同码(cOnly-DEG 分叉) */
+#define AC_PRO_STM_ECOEF    (-3)  /* C:|c|>999/全零/链系数超 8 limb/中间量超 20 limb;
+                                   * JS:链构造或精确求值中间量 > 2^53−1(ECOEF 双语义) */
+#define AC_PRO_STM_EPARAM   (-4)  /* 端点不合法(格式/越域)或 a > b */
+#define AC_PRO_STM_EOVER    (-5)  /* 输出缓冲不足(仅 C;JS 不产生) */
+#define AC_PRO_STM_EINTERNAL (-6) /* SFF 除法余式非零 / 链账本不平 / 渲染越域 */
 
 /* ==== END ANCHOR STURM ==== */
 
