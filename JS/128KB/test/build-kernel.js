@@ -68,7 +68,10 @@ var FILES = [
 
   /* ==== END ANCHOR sturm ==== */
 
-  /* ==== v2.5 ANCHOR: matrix-eig (feat/js-eigen) ==== */
+  /* ==== v2.5 ANCHOR: matrix-eig (feat/js-eigen) ====
+     F4（一般实矩阵特征值，Francis 隐式双移 QR）为 core_matrix.js 的 pro 层
+     扩展（proSchur* API），无独立 src 文件——本块不向 FILES 追加条目；
+     拼接顺序不变。 */
 
   /* ==== END ANCHOR matrix-eig ==== */
 ];
@@ -217,7 +220,12 @@ EXPORT_BLOCK = EXPORT_BLOCK.slice(0, -2) +
 
 /* ==== END ANCHOR sturm ==== */
 
-/* ==== v2.5 ANCHOR: matrix-eig (feat/js-eigen) ==== */
+/* ==== v2.5 ANCHOR: matrix-eig (feat/js-eigen) ====
+   F4 的导出面走既有 `matrix: ApolloMatrix` 命名空间（EXPORT_BLOCK 内已接线，
+   见上方 export default 对象），新方法 proSchur/proSchurCount/proSchurRe/
+   proSchurIm/proSchurHasVec/proSchurVector 在 core_matrix.js 的 IIFE 返回
+   对象内追加，随命名空间自动导出——本块无需向 EXPORT_BLOCK 注入任何行，
+   EXPORTED_NAMES 亦不动（v2.3.0 功能 2 先例：命名空间内方法不进静态扫描名单）。 */
 
 /* ==== END ANCHOR matrix-eig ==== */
 

@@ -107,8 +107,8 @@ for (i = 0; i < wmFiles.length; i++) {
 
 /* ---- 门禁线算术与登记机制 ---- */
 var wmGate = wmLedger.gate;
-ok("门禁线推导闭合 174624+3872=178496（封顶固定，F2/F3 登记后剩余预算）",
-   wmGate.staticLineBytes === wmLedger.baseline.totalBytes + 3872 &&
+ok("门禁线推导闭合 175104+3392=178496（封顶固定，F2/F3/F4 登记后剩余预算）",
+   wmGate.staticLineBytes === wmLedger.baseline.totalBytes + 3392 &&
    wmGate.staticLineBytes === 178496,
    "staticLineBytes=" + wmGate.staticLineBytes);
 ok("模块池自报合计 = 账本", _modulePoolBytes === wmGate.moduleRegisteredBytes,

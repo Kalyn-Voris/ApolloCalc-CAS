@@ -18,20 +18,33 @@
  *   proEigValue/proEigVector 读取。UI 调用序 proSetA → proXxx → proGetR*，
  *   与既有 setA → det → getR 契约同构。
  *
- * pro 层池账本（全部加载期一次分配，allocCount=7，合计 4944 B：
- * 4×1152 + 48 + 96 + 192；全模块 10 池 5160 B，F0 实测修回——原 5944 系笔误）
+ * pro 层池账本（全部加载期一次分配，allocCount=7，合计 5424 B：
+ * 4×1152 + 48 + 288 + 480；全模块 10 池 5640 B，F0 实测修回——原 5944 系笔误，
+ * F4 扩容 _eigLam +192 B / _work +288 B 后 +480 B）
  *   _pa    Float64Array(144)  输入寄存器 A（12×12）      1152 B
  *   _pr    Float64Array(144)  结果寄存器 R                1152 B
  *   _luBuf Float64Array(144)  LU 打包 L\U / det·rank·inv
- *                             工作副本 / eig deflated A    1152 B
- *   _vBuf  Float64Array(144)  QR 的 Q / eig 特征向量 V     1152 B
- *   _piv   Int32Array(12)     LU 置换 / eig 零空间列主元    48 B
- *   _eigLam Float64Array(12)  特征值 λ（|λ| 降序）          96 B
- *   _work  Float64Array(24)   eig x/y 向量 / QR 列草稿     192 B
- *   池合计 ≈ 5.8 KiB（ROADMAP 预算 ~6 KB 内）；C 侧 eig 视图 2592 B
- *   （ac_pro.h:272）作上界参照，JS 以独立池替代 union 视图。
- *   共享草稿约定：LU/det/rank/inv/eig 依次复用 _luBuf，一次调用使上一次
- *   的草稿结果失效（C Pro union「一次调用只持有一个视图」同款语义）。
+ *                             工作副本 / eig deflated A
+ *                             / schur Hessenberg+LU 槽    1152 B
+ *   _vBuf  Float64Array(144)  QR 的 Q / eig·schur 特征向量 1152 B
+ *   _piv   Int32Array(12)     LU 置换 / eig 零空间 / schur
+ *                             反迭代列主元                 48 B
+ *   _eigLam Float64Array(36)  [0..12) eig λ（|λ| 降序），
+ *                             [12..24) schur Re，[24..36) schur Im
+ *                                                          288 B
+ *   _work  Float64Array(60)   [0..24) eig x/y / QR 列草稿，
+ *                             [24..36) schur Householder u，
+ *                             [36..48) schur 反迭代 b / 排序 ure，
+ *                             [48..60) schur 反迭代 w / 排序 uim
+ *                                                          480 B
+ *   池合计 5424 B（v2.4.3 实测 4944 B = 1152×4 + 48 + 96 + 192；
+ *   features.md:98 的「5944 B」系 4944 笔误，按逐池 byteLength 求和修正）。
+ *   F4（v2.5.0）零新池——红线 test-matrix-pro.js:95 钉死 proAllocCount()===7
+ *   ——只扩容 _eigLam（+192 B）与 _work（+288 B）两个既有池，增量 +480 B
+ *   ≪ ROADMAP F4 池封顶 ~2816 B。C 侧 eig 视图 2592 B / schur 视图 2744 B
+ *   （ac_pro_scratch.h:335）作上界参照，JS 以共享池替代 union 视图。
+ *   共享草稿约定：LU/det/rank/inv/eig/schur 依次复用 _luBuf，一次调用使
+ *   上一次的草稿结果失效（C Pro union「一次调用只持有一个视图」同款语义）。
  *
  *   - 部分主元消元核 = C ac_matrix.c mat_echelon（主元阈值 1e-12、零列
  *     右移计秩、swap 奇偶定 det 符号）；rank 支持矩形 m×n。
@@ -45,12 +58,30 @@
  *     零矩阵 → −4，不收敛 → −3；λ 按原始 A 的 Rayleigh 商复核。
  *   - QR = ac_matrix.c ac_mat_qr 的 Gram-Schmidt 逐字移植：Q m×n 正交列、
  *     R n×n 上三角；秩亏列 R[j][j]=0 且 q 零列（成文语义）。
+ *   - schur（v2.5.0 F4）= ac_pro_schur.c（C v2.4.0 功能 8）逐条移植：
+ *     幂 2 精确缩放（条目压 [0.5,1]，Francis 的 H² 项绝无溢出）→
+ *     Householder 化 Hessenberg → Francis 隐式双移 QR（bulge chasing，
+ *     全显式循环零递归）→ 1×1/2×2 deflation（2×2 走 Vieta 稳定闭式）；
+ *     次对角可忽略判据 |h[i][i-1]| ≤ 1e-12·(|h[i-1][i-1]|+|h[i][i]|)
+ *     （分母 0 退 ‖H‖∞）；每 10 轮不 deflation 注入 EISPACK 同款异常位移
+ *     （s = 1.5·s0，t = −0.4375·s0²），单特征值 50 轮预算，超限返 −2
+ *     绝不输出垃圾；实特征向量走 M = A−λI 部分主元 LU + 两步反迭代，
+ *     残差 ‖Av−λv‖∞ ≤ 1e-9·(1+‖A‖) 才接受，6 组尝试全败返 −3；复特征值
+ *     不产出向量（proSchurVector 返 NaN、proSchurHasVec 返 0），绝不硬凑。
+ *     输出契约（排序全序 (|λ|,Re,Im) 降序稳定、共轭对相邻 +Im 在前、
+ *     特征向量符号规范化）见 docs/contracts/eigen-format-v25.md；
+ *     差分对拍 tests/bench/diff-eigen.js（C 探针 eig128-c.csv）。
+ *     JS 侧特有（C 无、契约 §7 成文不对等）：NaN/±Inf 域闸返 −1。
  *
  * pro 层错误码（getError，与既有码共用通道）
- *   0 OK / 1 维度超界（>12 或 ≤0 或下标越界）/ 3 非方阵 / 4 奇异 /
- *   5 幂迭代不收敛 / 6 非对称矩阵 / 7 零矩阵（特征向量无法归一化）。
+ *   0 OK / 1 维度超界（>12 或 ≤0 或下标越界或非有限输入）/ 3 非方阵 /
+ *   4 奇异 / 5 幂迭代不收敛 / 6 非对称矩阵 / 7 零矩阵（特征向量无法
+ *   归一化）/ 8 schur QR 迭代不收敛 / 9 schur 反迭代 6 组全败。
  *   proEig 返回值本身即 C 侧同款错误码：1 成功 / −1 维度 / −2 非对称 /
  *   −3 不收敛 / −4 零矩阵（0 内部错误，不应出现）。
+ *   proSchur 返回值同 C ac_pro_schur_all：1 成功 / −1 维度（含非有限
+ *   输入，JS 域闸）/ −2 QR 迭代不收敛 / −3 特征向量全败（此时特征值
+ *   已正确但一并放弃，count=0，调用方不得读取视图——C 同款语义）。
  *
  * 零 GC：10 个 TypedArray 加载期一次分配，全路径无对象/数组字面量、
  * 无字符串操作、无递归。
@@ -84,11 +115,16 @@ var ApolloMatrix = (function () {
 
   var _pa = new Float64Array(PRO_CAP);
   var _pr = new Float64Array(PRO_CAP);
-  var _luBuf = new Float64Array(PRO_CAP);    /* LU 打包 / 工作副本 / deflated A */
-  var _vBuf = new Float64Array(PRO_CAP);     /* QR 的 Q / eig 的 V（行存） */
-  var _piv = new Int32Array(PRO_MAX_DIM);    /* LU 置换 / eig 零空间列主元 */
-  var _eigLam = new Float64Array(PRO_MAX_DIM);
-  var _work = new Float64Array(2 * PRO_MAX_DIM);  /* eig x/y / QR 列草稿 */
+  var _luBuf = new Float64Array(PRO_CAP);    /* LU 打包 / 工作副本 / deflated A / schur H */
+  var _vBuf = new Float64Array(PRO_CAP);     /* QR 的 Q / eig·schur 的 V（行存） */
+  var _piv = new Int32Array(PRO_MAX_DIM);    /* LU 置换 / eig 零空间 / schur 反迭代列主元 */
+  var _eigLam = new Float64Array(3 * PRO_MAX_DIM); /* [0..12) eig λ；[12..24) schur Re；[24..36) schur Im */
+  var _work = new Float64Array(5 * PRO_MAX_DIM);   /* [0..24) eig x/y / QR 草稿；[24..60) schur u/b/w */
+
+  /* schur（F4）在 _work 内的槽基址（u ≤ n−1 ≤ 11、b/w 各 ≤ 12，均不越槽） */
+  var SCH_U = 2 * PRO_MAX_DIM;   /* 24：Householder 反射器（Hessenberg/Francis） */
+  var SCH_B = 3 * PRO_MAX_DIM;   /* 36：反迭代初值 b；排序期临时复用为 ure */
+  var SCH_W = 4 * PRO_MAX_DIM;   /* 48：反迭代解向量 w；排序期临时复用为 uim */
 
   /* F0 全池水位账本：模块池加载期自报（寄存器层 3 池 + pro 层 7 池共 10 池，
    * docs/contracts/f0-governance-v25.md §3） */
@@ -98,10 +134,11 @@ var ApolloMatrix = (function () {
 
   var _pRowsA = 0, _pColsA = 0;
   var _pRowsR = 0, _pColsR = 0;
-  var _pN = 0;                      /* 最近一次方阵口径的阶（det/inv/LU/eig） */
+  var _pN = 0;                      /* 最近一次方阵口径的阶（det/inv/LU/eig/schur） */
   var _qrM = 0, _qrN = 0;           /* 最近一次 QR 的输入形状（Q 为 m×n） */
   var _luN = 0;                     /* 最近一次成功 LU 的阶 */
   var _eigCount = 0;                /* 最近一次成功 eig 的特征对个数 */
+  var _schCount = 0;                /* 最近一次成功 schur 的特征值个数（失败恒 0，C 同款） */
   var _swaps = 0;                   /* echelon 行交换奇偶计数（标量寄存） */
   var _allocProCount = 7;
 
@@ -154,7 +191,7 @@ var ApolloMatrix = (function () {
     _det = 0;
     _pRowsA = 0; _pColsA = 0;
     _pRowsR = 0; _pColsR = 0;
-    _pN = 0; _luN = 0; _eigCount = 0;
+    _pN = 0; _luN = 0; _eigCount = 0; _schCount = 0;
     _qrM = 0; _qrN = 0;
     return 0;
   }
@@ -942,6 +979,497 @@ var ApolloMatrix = (function () {
   function proQRRows() { return _qrM; }
   function proQRCols() { return _qrN; }
 
+  /* ===== v2.5.0 F4：一般实矩阵全部特征值 + 可选实特征向量 =====
+   * ac_pro_schur.c 逐条移植（C v2.4.0 功能 8）。视图映射（对应 C schur
+   * 视图槽 ac_pro_scratch.h:306-333）：h → _luBuf、v → _vBuf（行 k·n+i）、
+   * wr/wi → _eigLam[12..24)/[24..36)、piv → _piv、work → _work[SCH_U/SCH_B/
+   * SCH_W ..+12)。常量与 C 逐字同值（ac_pro_schur.c:48-51）。
+   * 压缩体预算注记：C 的 sch_house2 在 JS 并入 _schHouse3（z=0，IEEE754
+   * 加 0.0 精确无差，x*x+y*y+0.0 === x*x+y*y）——两函数本就只差一个恒零
+   * 分量，合并后 F4 压缩内核增量落回 +3 072–5 120 B 封顶内。 */
+  var SCHUR_TOL = 1e-12,        /* 次对角可忽略的相对阈值 */
+      SCHUR_MAX_EPOCH = 50,     /* 单特征值 Francis 步预算（每 10 步异常位移） */
+      SCHUR_VEC_RESID = 1e-9,   /* 实特征向量验收残差（相对 1+‖A‖） */
+      SCHUR_VEC_TRIES = 6;      /* 反迭代尝试组数（扰动 × 初值） */
+
+  /* 单位 2-范数 Householder（3 元；2 元调用传 z=0）：u 单位向量，
+   * P = I − 2uuᵀ；全零向量返回 β = 0（调用方跳过变换）。
+   * a = −sign(x)·‖·‖ 使 v₀ = x−a 无相消（LAPACK 同款）。返回 β（恒 2.0）或 0。 */
+  function _schHouse3(x, y, z, uoff) {
+    var nrm = Math.sqrt(x * x + y * y + z * z);
+    var a, v0, vv;
+    if (nrm === 0.0) {
+      _work[uoff] = 1.0; _work[uoff + 1] = 0.0; _work[uoff + 2] = 0.0;
+      return 0.0;
+    }
+    a = (x >= 0.0) ? -nrm : nrm;
+    v0 = x - a;
+    vv = Math.sqrt(v0 * v0 + y * y + z * z);
+    if (vv === 0.0) {
+      _work[uoff] = 1.0; _work[uoff + 1] = 0.0; _work[uoff + 2] = 0.0;
+      return 0.0;
+    }
+    _work[uoff] = v0 / vv;
+    _work[uoff + 1] = y / vv;
+    _work[uoff + 2] = z / vv;
+    return 2.0;
+  }
+
+  /* 左乘 P：行 i0..i0+w-1，列 jlo..n-1，H ← H − β·u(uᵀH)（H 在 _luBuf） */
+  function _schApplyLeft(n, i0, w, jlo, beta, uoff) {
+    var j, t;
+    if (beta === 0.0) { return; }
+    for (j = jlo; j < n; j++) {
+      var s = 0.0;
+      for (t = 0; t < w; t++) { s += _work[uoff + t] * _luBuf[(i0 + t) * n + j]; }
+      if (s !== 0.0) {
+        for (t = 0; t < w; t++) { _luBuf[(i0 + t) * n + j] -= beta * _work[uoff + t] * s; }
+      }
+    }
+  }
+
+  /* 右乘 P：行 ilo..ihi，列 i0..i0+w-1，H ← H − β·(Hu)uᵀ */
+  function _schApplyRight(n, i0, w, ilo, ihi, beta, uoff) {
+    var i, t;
+    if (beta === 0.0) { return; }
+    for (i = ilo; i <= ihi; i++) {
+      var s = 0.0;
+      for (t = 0; t < w; t++) { s += _luBuf[i * n + i0 + t] * _work[uoff + t]; }
+      if (s !== 0.0) {
+        for (t = 0; t < w; t++) { _luBuf[i * n + i0 + t] -= beta * s * _work[uoff + t]; }
+      }
+    }
+  }
+
+  /* Householder 化 Hessenberg：逐列 k = 0..n-3，反射器作用于行 k+1..n-1
+   * （左，列 k..n-1）与列 k+1..n-1（右，行 0..n-1）；变换后把该列显式置成
+   * (a, 0, ..., 0)，舍入残渣不留巢。u 槽布局与 C 同：u[0] = v₀/‖·‖，
+   * 行 k+1+t ↔ u[t]（行 k+2 的分量写 u[1]——C 头注点名的 off-by-one 陷阱）。 */
+  function _schHessenberg(n) {
+    var k, i, u = SCH_U;
+    for (k = 0; k + 2 < n; k++) {
+      var sq = 0.0, nrm, a, v0;
+      for (i = k + 1; i < n; i++) { sq += _luBuf[i * n + k] * _luBuf[i * n + k]; }
+      nrm = Math.sqrt(sq);
+      if (nrm === 0.0) { continue; }
+      a = (_luBuf[(k + 1) * n + k] >= 0.0) ? -nrm : nrm;
+      v0 = _luBuf[(k + 1) * n + k] - a;
+      sq = v0 * v0;
+      for (i = k + 2; i < n; i++) { sq += _luBuf[i * n + k] * _luBuf[i * n + k]; }
+      nrm = Math.sqrt(sq);
+      if (nrm === 0.0) { continue; }
+      _work[u] = v0 / nrm;
+      for (i = k + 2; i < n; i++) { _work[u + (i - k - 1)] = _luBuf[i * n + k] / nrm; }
+      _schApplyLeft(n, k + 1, n - 1 - k, k, 2.0, u);
+      _schApplyRight(n, k + 1, n - 1 - k, 0, n - 1, 2.0, u);
+      _luBuf[(k + 1) * n + k] = a;
+      for (i = k + 2; i < n; i++) { _luBuf[i * n + k] = 0.0; }
+    }
+  }
+
+  /* 2×2 实块的闭式特征值（压缩映射稳定的 Vieta 形式），写入 wr/wi 槽 i1/i2 */
+  function _schEig2x2(a, b, c, d, i1, i2) {
+    var tr = a + d;
+    var det = a * d - b * c;
+    var disc = tr * tr - 4.0 * det;
+    if (disc >= 0.0) {
+      var sq = Math.sqrt(disc);
+      var l1 = (tr >= 0.0) ? (tr + sq) / 2.0 : (tr - sq) / 2.0;
+      var l2 = (l1 !== 0.0) ? det / l1 : tr - l1;
+      _eigLam[12 + i1] = l1; _eigLam[24 + i1] = 0.0;
+      _eigLam[12 + i2] = l2; _eigLam[24 + i2] = 0.0;
+    } else {
+      var re = tr / 2.0;
+      var im = Math.sqrt(-disc) / 2.0;
+      _eigLam[12 + i1] = re; _eigLam[24 + i1] = im;
+      _eigLam[12 + i2] = re; _eigLam[24 + i2] = -im;
+    }
+  }
+
+  /* Francis 隐式双移一步（窗口 [l..q]，位移和 s、位移积 t 显式传入）。
+   * 左乘列域 jlo = max(l, k−1)（k = l 时含 l−1，保持相似性对次对角残条的
+   * 精确缩放）；右乘行域 0..min(k+3, q)。k ≥ l+1 的左乘之后把被零化的
+   * 凸出条显式清零。k = q−2 时 z 读出界 → 0，3 元反射器退化仍成立。 */
+  function _schFrancis(n, l, q, s, t) {
+    var u = SCH_U;
+    var x = _luBuf[l * n + l] * _luBuf[l * n + l]
+          + _luBuf[l * n + l + 1] * _luBuf[(l + 1) * n + l]
+          - s * _luBuf[l * n + l] + t;
+    var y = _luBuf[(l + 1) * n + l] * (_luBuf[l * n + l] + _luBuf[(l + 1) * n + l + 1] - s);
+    var z = _luBuf[(l + 1) * n + l] * _luBuf[(l + 2) * n + l + 1];
+    var k;
+    for (k = l; k <= q - 2; k++) {
+      var beta = _schHouse3(x, y, z, u);
+      if (beta !== 0.0) {
+        var jlo = (k > l) ? (k - 1) : ((l > 0) ? (l - 1) : 0);
+        _schApplyLeft(n, k, 3, jlo, beta, u);
+        _schApplyRight(n, k, 3, 0, (k + 3 < q) ? (k + 3) : q, beta, u);
+      }
+      if (k > l) {
+        _luBuf[(k + 1) * n + (k - 1)] = 0.0;
+        _luBuf[(k + 2) * n + (k - 1)] = 0.0;
+      }
+      x = _luBuf[(k + 1) * n + k];
+      y = _luBuf[(k + 2) * n + k];
+      z = (k + 3 <= q) ? _luBuf[(k + 3) * n + k] : 0.0;
+    }
+    /* 末步：2 行反射器消 H[q][q-2] 残余凸出（C sch_house2 ≡ z=0 的 house3） */
+    var beta2 = _schHouse3(_luBuf[(q - 1) * n + (q - 2)], _luBuf[q * n + (q - 2)], 0.0, u);
+    if (beta2 !== 0.0) {
+      _schApplyLeft(n, q - 1, 2, q - 2, beta2, u);
+      _schApplyRight(n, q - 1, 2, 0, q, beta2, u);
+    }
+    _luBuf[q * n + (q - 2)] = 0.0;
+  }
+
+  /* 反迭代：对实特征值 lam_s（缩放域）求 M = A_s − (lam_s+eps)I 的最小
+   * 奇异方向。M 就地部分主元 LU（_luBuf，行交换记 _piv），两步反迭代，
+   * 残差过闸才接受。返回 1 = 成功（v 已归一化，_vBuf 行 voff），0 = 失败。
+   * h/piv/b/w 全是共享池槽：特征值已全部提取，_luBuf 此时空闲（C 同款）。 */
+  function _schInviter(n, scaleExp, lamS, mode, voff) {
+    var pw = Math.pow(2, scaleExp);   /* 2^scaleExp 精确（整数指数幂） */
+    var b = SCH_B;
+    var w = SCH_W;
+    var anorm = 0.0;
+    var i, j, c, r, t, attempt;
+    var got = 0;
+
+    /* ‖A_s‖∞（缩放域）：残差闸门的归一尺度（逐条 |·|，C fabs 同款） */
+    for (i = 0; i < n; i++) {
+      var s = 0.0;
+      for (j = 0; j < n; j++) {
+        var av = _pa[i * n + j];
+        if (av < 0.0) { av = -av; }
+        s += av / pw;
+      }
+      if (s > anorm) { anorm = s; }
+    }
+
+    for (attempt = 0; attempt < SCHUR_VEC_TRIES && got === 0; attempt++) {
+      var eps = (attempt % 2 === 1) ? anorm * 1e-13 : 0.0;
+      var tiny = (anorm > 0.0) ? anorm * 1e-30 : 1e-30;
+      var nrm;
+
+      /* M = A_s − (lam_s + eps)·I（每次从 const 源重拷，精确幂 2 缩放） */
+      for (i = 0; i < n; i++) {
+        for (j = 0; j < n; j++) { _luBuf[i * n + j] = _pa[i * n + j] / pw; }
+        _luBuf[i * n + i] -= lamS + eps;
+      }
+
+      /* 部分主元 LU（就地），零主元替换为 tiny */
+      for (c = 0; c < n; c++) {
+        var p = c;
+        var best = _luBuf[c * n + c] < 0.0 ? -_luBuf[c * n + c] : _luBuf[c * n + c];
+        var f;
+        for (r = c + 1; r < n; r++) {
+          var m2 = _luBuf[r * n + c] < 0.0 ? -_luBuf[r * n + c] : _luBuf[r * n + c];
+          if (m2 > best) { best = m2; p = r; }
+        }
+        if (best < tiny) {
+          _luBuf[p * n + c] = (_luBuf[p * n + c] < 0.0) ? -tiny : tiny;
+        }
+        if (p !== c) {
+          for (j = 0; j < n; j++) {
+            var tmp = _luBuf[c * n + j];
+            _luBuf[c * n + j] = _luBuf[p * n + j];
+            _luBuf[p * n + j] = tmp;
+          }
+        }
+        _piv[c] = p;
+        for (r = c + 1; r < n; r++) {
+          f = _luBuf[r * n + c] / _luBuf[c * n + c];
+          _luBuf[r * n + c] = f;
+          if (f !== 0.0) {
+            for (j = c + 1; j < n; j++) { _luBuf[r * n + j] -= f * _luBuf[c * n + j]; }
+          }
+        }
+      }
+
+      /* 初值（确定性，与 C mode 族同风格） */
+      if (mode === 0) {
+        for (i = 0; i < n; i++) { _work[b + i] = 1.0; }
+      } else if (mode === 1) {
+        for (i = 0; i < n; i++) { _work[b + i] = 1.0 + 0.5 * i; }
+      } else if (mode === 2) {
+        for (i = 0; i < n; i++) { _work[b + i] = ((i & 1) !== 0 ? -1.0 : 1.0) * (1.0 + 0.25 * i); }
+      } else {
+        for (i = 0; i < n; i++) { _work[b + i] = (i === mode - 3) ? 1.0 : 0.0; }
+      }
+
+      /* 两步反迭代：w = M⁻¹b，归一；v = M⁻¹w，归一（C 同款自拷语义） */
+      for (t = 0; t < 2; t++) {
+        var src = (t === 0) ? b : w;
+        for (i = 0; i < n; i++) { _work[w + i] = _work[src + i]; }
+        for (i = 0; i < n; i++) {
+          var p2 = _piv[i];
+          if (p2 !== i) {
+            var tw = _work[w + i]; _work[w + i] = _work[p2 + w]; _work[p2 + w] = tw;
+          }
+        }
+        for (i = 1; i < n; i++) {
+          var s2 = 0.0;
+          for (j = 0; j < i; j++) { s2 += _luBuf[i * n + j] * _work[w + j]; }
+          _work[w + i] -= s2;
+        }
+        for (i = n - 1; i >= 0; i--) {
+          var s3 = 0.0;
+          for (j = i + 1; j < n; j++) { s3 += _luBuf[i * n + j] * _work[w + j]; }
+          _work[w + i] = (_work[w + i] - s3) / _luBuf[i * n + i];
+        }
+        nrm = 0.0;
+        for (i = 0; i < n; i++) { nrm += _work[w + i] * _work[w + i]; }
+        nrm = Math.sqrt(nrm);
+        if (!(nrm > 0.0) || !isFinite(nrm)) { break; }   /* 归一化失败，换组 */
+        for (i = 0; i < n; i++) { _work[w + i] /= nrm; }
+      }
+      if (t < 2) { continue; }   /* 内层 break：本组失败 */
+
+      /* 残差闸门：‖A_s v − lam_s v‖∞ ≤ 1e-9·(1 + ‖A_s‖) */
+      var resid = 0.0;
+      for (i = 0; i < n; i++) {
+        var s4 = 0.0, d;
+        for (j = 0; j < n; j++) { s4 += (_pa[i * n + j] / pw) * _work[w + j]; }
+        d = s4 - lamS * _work[w + i];
+        if (d < 0.0) { d = -d; }
+        if (d > resid) { resid = d; }
+      }
+      if (resid <= SCHUR_VEC_RESID * (1.0 + anorm)) {
+        for (i = 0; i < n; i++) { _vBuf[voff + i] = _work[w + i]; }
+        got = 1;
+      }
+    }
+    return got;
+  }
+
+  /* 特征向量符号规范化（契约 §4，两侧同式同序）：每列最大 |·| 分量置正、
+   * 并列取最小索引（严格 > 保证首达即最大）。 */
+  function _schSignNormalize(voff, n) {
+    var i, a, big = 0.0, imax = 0;
+    for (i = 0; i < n; i++) {
+      a = _vBuf[voff + i];
+      if (a < 0.0) { a = -a; }
+      if (a > big) { big = a; imax = i; }
+    }
+    if (_vBuf[voff + imax] < 0.0) {
+      for (i = 0; i < n; i++) { _vBuf[voff + i] = -_vBuf[voff + i]; }
+    }
+  }
+
+  /* 主入口。返回值 = C ac_pro_schur_all 同款：1 / −1 / −2 / −3。
+   * 结果读取：proSchurCount/proSchurRe/proSchurIm/proSchurHasVec/
+   * proSchurVector（复特征值列 _vBuf 全零 + 访问器 NaN，绝不硬凑）。 */
+  function proSchur() {
+    _err = 0;
+    if (!_pSquareOK()) { _schCount = 0; return -1; }
+    _opCount++;
+    var n = _pN;
+    _schCount = 0;                 /* 失败路径的 accessor 归零（C 同款） */
+
+    var i, j, k, q, l, its, nu;
+
+    /* JS 域闸（C 无此检查，契约 §7 成文不对等）：NaN/±Inf 一律 −1 拒绝，
+     * 绝不让非有限值进入 QR 迭代（v−v≠0 ⇔ 非有限）。 */
+    for (i = 0; i < n * n; i++) {
+      var v0 = _pa[i];
+      if (v0 - v0 !== 0.0) { _err = 1; return -1; }
+    }
+
+    /* 幂 2 缩放：条目压进 [0.5, 1]，Francis 的 H² 项绝无溢出。
+     * C 用 frexp：m = f·2^e，f ∈ [0.5,1) ⇔ 唯一整数 e 满足 2^(e-1) ≤ m < 2^e。
+     * JS 用 log2 初值 + 双侧精确校正环（不依赖 log2 实现精度），与 frexp
+     * 逐位一致——缩放域两侧不同则舍入路径分叉，差分对拍会炸（实测教训：
+     * m=2 时「最小 2^e ≥ m」给 e=1，frexp 给 e=2，tri4 向量残差即失配）。 */
+    var maxabs = 0.0;
+    for (i = 0; i < n * n; i++) {
+      var va = _pa[i];
+      if (va < 0.0) { va = -va; }
+      if (va > maxabs) { maxabs = va; }
+    }
+    var scaleExp = 0;
+    var scale = 1.0;
+    if (maxabs > 0.0) {
+      scaleExp = Math.ceil(Math.log2(maxabs));
+      while (Math.pow(2, scaleExp) <= maxabs) { scaleExp++; }
+      while (scaleExp > -1022 && Math.pow(2, scaleExp - 1) > maxabs) { scaleExp--; }
+      scale = Math.pow(2, scaleExp);
+    }
+    var hnorm = 0.0;
+    for (i = 0; i < n; i++) {
+      for (j = 0; j < n; j++) {
+        var e = _pa[i * n + j] / scale;
+        _luBuf[i * n + j] = e;
+        var ae = e < 0.0 ? -e : e;
+        if (ae > hnorm) { hnorm = ae; }
+      }
+    }
+
+    /* Householder 化 Hessenberg */
+    _schHessenberg(n);
+
+    /* Francis 隐式双移 QR（bulge chasing，自底向上 deflation）。
+     * 零矩阵：hnorm = 0，次对角全 0，判定式 0 ≤ 0 成立 → 逐位 1×1
+     * deflation，特征值全 0，无需特例（C 同款）。 */
+    q = n - 1;
+    its = 0;
+    while (q >= 0) {
+      if (q === 0) {
+        _eigLam[12] = _luBuf[0];
+        _eigLam[24] = 0.0;
+        q = -1;
+        break;
+      }
+      /* 找窗口起点 l：自底向上找第一条可忽略次对角（找到即清零） */
+      l = q;
+      while (l > 0) {
+        var below = _luBuf[l * n + (l - 1)];
+        if (below < 0.0) { below = -below; }
+        var un = Math.abs(_luBuf[(l - 1) * n + (l - 1)]) + Math.abs(_luBuf[l * n + l]);
+        var tol = SCHUR_TOL * ((un > 0.0) ? un : hnorm);
+        if (below <= tol) {
+          _luBuf[l * n + (l - 1)] = 0.0;
+          break;
+        }
+        l--;
+      }
+      if (l === q) {
+        /* 1×1 deflation */
+        _eigLam[12 + q] = _luBuf[q * n + q];
+        _eigLam[24 + q] = 0.0;
+        _luBuf[q * n + (q - 1)] = 0.0;
+        q--;
+        its = 0;
+        continue;
+      }
+      if (l === q - 1) {
+        /* 2×2 块闭式解（共轭对相邻，+im 在前） */
+        _schEig2x2(_luBuf[(q - 1) * n + (q - 1)],
+                   _luBuf[(q - 1) * n + q],
+                   _luBuf[q * n + (q - 1)],
+                   _luBuf[q * n + q],
+                   q - 1, q);
+        _luBuf[q * n + (q - 1)] = 0.0;
+        q -= 2;
+        its = 0;
+        continue;
+      }
+      /* Francis 步：位移取窗口尾 2×2；每 10 步不 deflation 注入
+       * EISPACK 同款异常位移，50 步仍不收敛 → −2 绝不硬凑 */
+      its++;
+      if (its > SCHUR_MAX_EPOCH) { _err = 8; return -2; }
+      if (its % 10 === 0) {
+        var s0 = Math.abs(_luBuf[q * n + (q - 1)])
+               + Math.abs(_luBuf[(q - 1) * n + (q - 2)]);
+        _schFrancis(n, l, q, 1.5 * s0, -0.4375 * s0 * s0);
+      } else {
+        var s = _luBuf[(q - 1) * n + (q - 1)] + _luBuf[q * n + q];
+        var t = _luBuf[(q - 1) * n + (q - 1)] * _luBuf[q * n + q]
+              - _luBuf[(q - 1) * n + q] * _luBuf[q * n + (q - 1)];
+        _schFrancis(n, l, q, s, t);
+      }
+    }
+
+    /* 单元化 + 排序：实值自成单元，复共轭对（相邻，结构保证）合成一个
+     * 单元（代表值 im ≥ 0）；键 = (|λ|, re, im) 降序，稳定插入（精确并列
+     * 保持提取序 → 确定性）。展开回 wr/wi：共轭对相邻，+im 在前。
+     * 排序草稿 ure/uim 复用反迭代 b/w 槽（排序先于反迭代，不共存）。 */
+    var ure = SCH_B, uim = SCH_W;
+    nu = 0;
+    for (k = 0; k < n; ) {
+      if (_eigLam[24 + k] === 0.0) {
+        _work[ure + nu] = _eigLam[12 + k];
+        _work[uim + nu] = 0.0;
+        nu++;
+        k++;
+      } else {
+        var imk = _eigLam[24 + k];
+        _work[ure + nu] = _eigLam[12 + k];
+        _work[uim + nu] = (imk > 0.0) ? imk : -imk;
+        nu++;
+        k += 2;
+      }
+    }
+    for (i = 1; i < nu; i++) {
+      var kre = _work[ure + i];
+      var kim = _work[uim + i];
+      var kmod = Math.sqrt(kre * kre + kim * kim);
+      j = i - 1;
+      while (j >= 0) {
+        var mj = Math.sqrt(_work[ure + j] * _work[ure + j] + _work[uim + j] * _work[uim + j]);
+        if (mj < kmod ||
+            (mj === kmod && _work[ure + j] < kre) ||
+            (mj === kmod && _work[ure + j] === kre && _work[uim + j] < kim)) {
+          _work[ure + j + 1] = _work[ure + j];
+          _work[uim + j + 1] = _work[uim + j];
+          j--;
+        } else {
+          break;
+        }
+      }
+      _work[ure + j + 1] = kre;
+      _work[uim + j + 1] = kim;
+    }
+    k = 0;
+    for (i = 0; i < nu; i++) {
+      _eigLam[12 + k] = _work[ure + i];
+      _eigLam[24 + k] = _work[uim + i];
+      if (_work[uim + i] !== 0.0) {
+        _eigLam[12 + k + 1] = _work[ure + i];
+        _eigLam[24 + k + 1] = -_work[uim + i];
+        k += 2;
+      } else {
+        k += 1;
+      }
+    }
+
+    /* 缩放还原（乘幂 2，精确） */
+    for (k = 0; k < n; k++) {
+      _eigLam[12 + k] *= scale;
+      _eigLam[24 + k] *= scale;
+    }
+
+    /* 实特征向量：反迭代（缩放域；向量与缩放无关），出口做符号规范化。
+     * 复特征值列显式全零，绝不硬凑复向量。 */
+    for (k = 0; k < n; k++) {
+      var voff = k * n;
+      if (_eigLam[24 + k] !== 0.0) {
+        for (i = 0; i < n; i++) { _vBuf[voff + i] = 0.0; }
+        continue;
+      }
+      var lamS = _eigLam[12 + k] / scale;   /* 幂 2 除法，精确 */
+      var mode = k % 3;
+      if (_schInviter(n, scaleExp, lamS, mode, voff) !== 1) {
+        _schCount = 0;
+        _err = 9;
+        return -3;    /* 6 组尝试全败：诚实失败，绝不硬凑 */
+      }
+      _schSignNormalize(voff, n);
+    }
+
+    _schCount = n;
+    return 1;
+  }
+
+  /* schur 结果读取（C ac_pro_schur_count/re/im/vector 同款边界语义） */
+  function proSchurCount() { return _schCount; }
+  function proSchurRe(k) {
+    if (k < 0 || k >= _schCount) { return 0.0; }
+    return _eigLam[12 + k];
+  }
+  function proSchurIm(k) {
+    if (k < 0 || k >= _schCount) { return 0.0; }
+    return _eigLam[24 + k];
+  }
+  /* 复特征值（与越界）无向量：0；实特征值：1（proSchurVector 可读） */
+  function proSchurHasVec(k) {
+    if (k < 0 || k >= _schCount) { return 0; }
+    return _eigLam[24 + k] === 0.0 ? 1 : 0;
+  }
+  function proSchurVector(k, i) {
+    if (k < 0 || i < 0 || k >= _schCount || i >= _schCount) { return NaN; }
+    if (_eigLam[24 + k] !== 0.0) { return NaN; }   /* 复特征值不产出向量 */
+    return _vBuf[k * _schCount + i];
+  }
+
   return {
     MAX_DIM: MAX_DIM,
     PRO_MAX_DIM: PRO_MAX_DIM,
@@ -984,6 +1512,14 @@ var ApolloMatrix = (function () {
     proQRGetQ: proQRGetQ,
     proQRRows: proQRRows,
     proQRCols: proQRCols,
+
+    /* v2.5.0 F4：一般实矩阵特征值（Francis 隐式双移 QR，契约 eigen-format-v25） */
+    proSchur: proSchur,
+    proSchurCount: proSchurCount,
+    proSchurRe: proSchurRe,
+    proSchurIm: proSchurIm,
+    proSchurHasVec: proSchurHasVec,
+    proSchurVector: proSchurVector,
 
     reset: reset,
     getError: getError,
