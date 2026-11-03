@@ -813,7 +813,7 @@ int ac_pro_sturm_isolate(const char *src, char *out, int out_len);
  *   (≤ 1e-12·σ₁ 精确置 0)与零列 Gram-Schmidt 补全 → 符号规范化(U 每列
  *   最大 |·| 分量置正、并列取最小索引,V 同因子成对翻转)→ 出口双闸门
  *   ‖A−UΣVᵗ‖∞ 与 ‖UᵗU−I‖ 回乘验证,不过闸绝不硬凑。
- *   视图:svd 槽(3752 B ≤ 3848 吸收线,margin 96 B,.bss 零增长;
+ *   视图:svd 槽(3760 B ≤ 3848 吸收线,margin 88 B,.bss 零增长;
  *   feat/matrix-advanced 独占)。零 static 对象、零 malloc、零 VLA、
  *   零递归;错误码一律走返回值。
  *
