@@ -1,10 +1,10 @@
-# ApolloCalc-CAS · 四版本 100 万次压测
+# ApolloCalc-CAS · 五版本 100 万次压测
 
-- 数据来源：`tests/bench/result-{js64,js128,c64,c128}-1M.csv`（本目录）
+- 数据来源：`tests/bench/result-{js64,js128,c64,c128,pro}-1M.csv`（本目录）
 - 表达式池：`pool.json`（650 条，`gen_pool.py` 生成）；C 端读 `pool_c.h`（`gen_pool_c.py` 生成）
 - 迭代口径：**每 stage 独立 100 万次**，3 轮取中位数；实际迭代数按整遍对齐（略高于 100 万）
 - 环境：Windows 11 x64，MinGW-w64 gcc 8.1.0（`-std=c99 -O2 -Wall`），Node v24.19.0
-- 池有效性：`node tests/bench/validate-pool.js` 四版本全部通过（无 parse/extract/solve 错误短路）
+- 池有效性：`node tests/bench/validate-pool.js` 四基础版本全部通过（无 parse/extract/solve 错误短路）
 
 > **v1.1.0 更新（2026-10-21）**：C/128KB 完成零堆内存压缩（`.bss` 59024 → 39408 B，−33.24%）。
 > 新增 [§6.5 v1.0.0 vs v1.1.0 性能回归](#65-v110-内存压缩后的性能回归c-128kb)，
@@ -13,6 +13,11 @@
 > **v2.4.0 复测（2026-10-31）**：五件套全量复跑（650 条池与口径不变），§6.1–6.3 已按本次中位数整体刷新——
 > solve/exact 段与上一轮记录差在噪声带内；js128 parse（1.00→1.08）与 c128 eval（0.47→0.54）
 > 偏移超出带内，如实按实测刷新。
+>
+> **v2.6.0 终版（2026-11-04，G3）**：口径扩为**五列**——新增 `pro_runner` 列
+> （C/128KB-ProTEXT 内核，ProTEXT Makefile `probench` 目标构建 `pro_bench.exe`），
+> 五列同机同轮全量复跑，§6.1–6.3 按本次中位数整体刷新；**预热丢首轮口径自此成文**
+> （见口径说明第 5 条）。wasm 列随 v3 裁决顺延 v2.7+，本版不设。
 
 ## 口径说明（与旧版 `cases.json` 压测的差异）
 
@@ -22,8 +27,84 @@
 2. **solve/exact 段**：环内跑完整规范链路
    `solversReset → parseExpression → extractCoefficients → solveQuadratic/Cubic/Quartic`。
 3. **exact 段只测耗时**（不校验精确形式），池偏向精确形式路径：纯分数根 20 / 纯根式根 20 /
-   五分量混合形式 10。四版本都跑这 50 条（64KB 两版混合形式 `valid=0`，路径不同恰好可对比）。
+   五分量混合形式 10。四基础版本都跑这 50 条（64KB 两版混合形式 `valid=0`，路径不同恰好可对比）。
 4. `name` 列是 `pool<池大小>`：64KB 两版过滤掉 30 条 128KB 专属条目（双曲函数），池为 220。
+5. **预热丢首轮口径（v2.6.0 起成文）**：每 stage 在计时环之前，先按池顺序预热 **1000 次**
+   （`WARMUP`，池顺序循环、覆盖全部条目）——冷启动成本（首次页入 / 缓存填充 / 分支预测）
+   由预热吸收、**不计入计时，等效于丢弃首轮**；正式计时 3 轮取中位数，进一步压制轮间抖动。
+   五列口径一致（`bench-c.c` 的 `WARMUP=1000` / `bench-js.js` 的 `--warmup=1000` 缺省同值）。
+6. **pro_runner 列（v2.6.0 G3 新增）**：与 C 128KB 列共用同一份 `bench-c.c` 与 `pool_c.h`，
+   唯一差异是链接的内核对象来自 `C/128KB-ProTEXT`（上游 16 模块包装 TU + Pro 增量，
+   `C/128KB-ProTEXT/Makefile` 的 `probench` 目标构建 `pro_bench.exe`；对象与 pro_runner /
+   pro_kernel 共享同一批 obj 缓存）。四 stage、池过滤、预热、迭代口径与其余各列逐字一致；
+   STATIC 行 `kernel_tag` 打印 `ProTEXT` 与上游 C 128KB 列区分。
+
+## 6.1 五版本横向对比（µs/op，越小越快）
+
+| stage | JS 64KB | JS 128KB | C 64KB | C 128KB | C 128KB-ProTEXT（pro_runner） |
+|:---|---:|---:|---:|---:|---:|
+| parse | 0.0409 | 0.0394 | 0.0194 | 0.0186 | 0.0185 |
+| eval（解析+求值） | 0.1253 | 0.1143 | 0.0628 | 0.0609 | 0.0555 |
+| solve | 0.6867 | 1.2045 | 0.3582 | 0.4275 | 0.4343 |
+| exact | 0.3956 | 0.6486 | 0.1995 | 0.2459 | 0.2563 |
+| **全 stage 均值** | **0.3121** | **0.5017** | **0.1600** | **0.1882** | **0.1912** |
+
+**各版本实际池大小与迭代数**
+
+| 版本 | parse | eval | solve | exact | 合计迭代 |
+|:---|---:|---:|---:|---:|---:|
+| JS 64KB | pool220 / 1,000,120 | pool220 / 1,000,120 | pool100 / 1,000,000 | pool50 / 1,000,000 | 4,000,240 |
+| JS 128KB | pool250 / 1,000,000 | pool250 / 1,000,000 | pool100 / 1,000,000 | pool50 / 1,000,000 | 4,000,000 |
+| C 64KB | pool220 / 1,000,120 | pool220 / 1,000,120 | pool100 / 1,000,000 | pool50 / 1,000,000 | 4,000,240 |
+| C 128KB | pool250 / 1,000,000 | pool250 / 1,000,000 | pool100 / 1,000,000 | pool50 / 1,000,000 | 4,000,000 |
+| C 128KB-ProTEXT | pool250 / 1,000,000 | pool250 / 1,000,000 | pool100 / 1,000,000 | pool50 / 1,000,000 | 4,000,000 |
+
+> 64KB 两版少 30 条双曲函数条目（`sinh`/`cosh`/`tanh`/`asinh`/`acosh`/`atanh` 仅 128KB 支持），
+> 故池为 220；`ceil(1e6/220)=4546` 遍 × 220 = 1,000,120 次。
+
+## 6.2 加速比矩阵（基线 = JS 64KB；>1 = 比 JS 64KB 慢，<1 = 更快）
+
+| stage | JS128 / JS64 | C64 / JS64 | C128 / JS64 | Pro / JS64 |
+|:---|---:|---:|---:|---:|
+| parse | 0.96（持平） | **0.47（快 2.1×）** | **0.45（快 2.2×）** | **0.45（快 2.2×）** |
+| eval | 0.91（持平） | **0.50（快 2.0×）** | **0.49（快 2.0×）** | **0.44（快 2.3×）** |
+| solve | **1.75（慢 1.8×）** | **0.52（快 1.9×）** | **0.62（快 1.6×）** | **0.63（快 1.6×）** |
+| exact | **1.64（慢 1.6×）** | **0.50（快 2.0×）** | **0.62（快 1.6×）** | **0.65（快 1.5×）** |
+
+同族内对比：
+
+| stage | JS 128KB / JS 64KB | C 128KB / C 64KB | Pro / C 128KB |
+|:---|---:|---:|---:|
+| parse | 0.96 | 0.96 | 0.99 |
+| eval | 0.91 | 0.97 | 0.91 |
+| solve | **1.75** | **1.19** | 1.02 |
+| exact | **1.64** | **1.23** | 1.04 |
+
+## 6.3 关键观察
+
+1. **C 版比同预算 JS 版快 1.5 – 2.9×**：以 `C64/JS64` 计，parse / eval / solve / exact 四个 stage 的
+   比值都落在 0.47 – 0.52，即快 **1.9 – 2.1×**；按同预算配对 `C128/JS128` 计为 0.35 – 0.58，
+   即快 **1.7 – 2.9×**（eval 段本轮 js128 偏快所致），**solve/exact 段 C 的领先幅度最大**。
+   零分配单遍扫描 + 静态池对 V8 字符串/对象开销的优势在 100 万次规模上稳定复现
+   （与旧版小规模结论方向一致）。
+2. **JS 128KB 的 solve/exact 比 JS 64KB 慢 1.6 – 1.8×**：这是五分量精确形式 + 有理根（ratRoot）
+   钩子的固定开销，与旧版 `cases.json` 测得的 1.57 – 2.18× 区间吻合。池扩大到 250/100/50 条
+   **没有放大也没有缩小**这一差距，说明它是每条求解的固定成本，不是池构成导致的。
+3. **C 128KB 的 solve/exact 比 C 64KB 慢 19% – 23%**（0.4275 vs 0.3582 / 0.2459 vs 0.1995），
+   远小于 JS 同族的 64% – 75%：同样是有理根钩子 + 五分量装配，但 C 版该开销明显更小
+   （实测只能确认差距本身，无法区分归因于静态内存还是编译期优化）。
+4. **parse 与 eval 的版本间差异在 ±8% 内**：C128/C64 = 0.96 / 0.97，JS128/JS64 = 0.96 / 0.91。
+   池从 220 扩到 250 条（含双曲函数解析）未见成倍开销，**池扩大不影响单次操作量级**。
+5. **双曲函数不是性能异常点**：128KB 池多出的 30 条双曲表达式，使 parse/eval 的单次成本
+   与 64KB 差异 ≤8%（方向不一），未见成倍额外开销。
+6. **Pro 层对上游四 stage 零可测回归（G3 新增 pro_runner 列的落点结论）**：ProTEXT 内核
+   与上游 C/128KB 是同一批上游 TU（包装文件编译恰好一次）+ Pro 增量，四 stage 对比
+   `Pro/C128 = 0.99 / 0.91 / 1.02 / 1.04`——方向不一致、全部落在 §6.5 记录的 3–10%
+   单次采样抖动带内，即 Pro 层的 union 静态化、Pro 增量 TU 与链接布局对基础四 stage
+   **无可测系统性影响**；eval 的 −9% 与 solve/exact 的 +2%/+4% 属布局级噪声，不作为性能结论。
+7. **对同预算 JS 128KB，Pro 快 2.1 – 2.8×**：Pro/JS128 = parse 0.47 / eval 0.49 /
+   solve 0.36 / exact 0.40，solve/exact 的领先（2.5 – 2.8×）与观察 1/2 的归因一致——
+   C 侧把五分量 + 有理根钩子的固定开销压得更小。
 
 ## 6.1 四版本横向对比（µs/op，越小越快）
 
@@ -99,6 +180,11 @@
 | C 64KB | 101,140 | 2,568 | **10,576 B（10.33 KB）** | — | — |
 | C 128KB（v1.0.0） | 201,480 | 2,716 | **59,024 B（57.64 KB）** | 98,304（96 KB） | 60.03% |
 | **C 128KB（v1.1.0）** | 202,804 | 2,716 | **39,408 B（38.48 KB）** | 98,304（96 KB） | **40.09%** |
+| C 128KB-ProTEXT（v1.8.0，内核口径） | — | — | **42,608 B（41.61 KB）** | 114,688（112 KiB） | **37.15%** |
+
+> ProTEXT 行是**内核口径**（pro_kernel.exe：38672 上游 + 80 var_val + 3848 Pro union +
+> 8 对齐填充）；pro_runner.exe 口径再 + 32 B（测试 TU）= 42640 B，见 verify.ps1 账本。
+> ProTEXT 列的「表达式池静态占用」与 C 128KB 行同为 8,648 B（同一批上游 TU，`sizeof` 口径）。
 
 > `size` 的 text 列含 `.rdata`。真实代码段：v1.0.0 `.text` 146,424 / `.rdata` 46,656；
 > v1.1.0 `.text` 146,376（−48）/ `.rdata` 48,048（+1392，CRC/Base64 常量表入 ROM）。
@@ -171,7 +257,7 @@ python tests/bench/gen_pool_c.py      # -> pool_c.h
 # 池有效性校验（压测前建议跑一次）
 node tests/bench/validate-pool.js
 
-# 四版本（每版本 < 10 秒）
+# 五版本（每版本 < 10 秒）
 node --expose-gc tests/bench/bench-js.js JS/64KB/src/core_kernel.js  > tests/bench/result-js64-1M.csv
 node --expose-gc tests/bench/bench-js.js JS/128KB/src/core_kernel.js > tests/bench/result-js128-1M.csv
 
@@ -182,10 +268,15 @@ mingw32-make -f bench-c-makefile KERNEL=../../C/64KB/src && \
 mingw32-make -f bench-c-makefile KERNEL=../../C/128KB/src clean && \
 mingw32-make -f bench-c-makefile KERNEL=../../C/128KB/src && \
 ./bench-c.exe > result-c128-1M.csv
+
+# v2.6.0 G3 新增：pro_runner 列（链接 ProTEXT 内核对象；首次构建编译 ~40 个 TU，
+# 之后与 pro_runner 共享 obj 缓存）
+mingw32-make -C ../../C/128KB-ProTEXT SHELL=cmd.exe probench && \
+../../C/128KB-ProTEXT/pro_bench.exe > result-pro-1M.csv
 ```
 
 一键：`bash tests/bench/run-all.sh`（Windows 上 bash 不在 PATH 时用 `F:/Git/bin/bash.exe`）
-→ 四份 CSV + `summary-ratio.csv`。
+→ 五份 CSV + `summary-ratio.csv`。
 
 ## 附：原始汇总行
 
@@ -200,4 +291,11 @@ result-js64-1M.csv  SUMMARY,total_ops,4000240,total_ms,1264.706,avg_us_per_op,0.
 result-js128-1M.csv SUMMARY,total_ops,4000000,total_ms,2066.399,avg_us_per_op,0.5166
 result-c64-1M.csv   SUMMARY,total_ops,4000240,total_ms,642.136,avg_us_per_op,0.1605
 result-c128-1M.csv  SUMMARY,total_ops,4000000,total_ms,774.437,avg_us_per_op,0.1936
+
+# v2.6.0 终版（2026-11-04，G3 五列口径；pro 列为首发基线）
+result-js64-1M.csv  SUMMARY,total_ops,4000240,total_ms,1248.588,avg_us_per_op,0.3121
+result-js128-1M.csv SUMMARY,total_ops,4000000,total_ms,2006.949,avg_us_per_op,0.5017
+result-c64-1M.csv   SUMMARY,total_ops,4000240,total_ms,639.872,avg_us_per_op,0.1600
+result-c128-1M.csv  SUMMARY,total_ops,4000000,total_ms,752.822,avg_us_per_op,0.1882
+result-pro-1M.csv   SUMMARY,total_ops,4000000,total_ms,764.634,avg_us_per_op,0.1912
 ```

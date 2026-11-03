@@ -6,6 +6,27 @@
 一次发布可只覆盖部分组件），本文件记录**组件版本**（见本目录 [VERSION](VERSION)）。
 双轨两个口径不必同号：全局版本每次发布都会注明对应的组件版本。
 
+## v1.8.0 (2026-11-04) · 对应全局 v2.6.0
+
+- **one-sided Jacobi SVD 奇异值分解**（新增 `ac_pro_svd.c`）：m,n ≤ 12 实矩阵
+  （m < n 内部走转置对偶）的降序奇异值与 U/V 出口。30 轮 sweep 预算超限返 −2、
+  出口双闸门（重构残差 ‖A−UΣVᵗ‖∞ + 正交性 ‖UᵗU−I‖∞）不过返 −3、超域输入
+  返 −1——一律诚实拒绝，绝不输出未验证结果；幂 2 精确缩放与符号规范化沿用
+  schur 同款纪律。输出契约冻结于
+  [docs/contracts/svd-format-v26.md](../../docs/contracts/svd-format-v26.md)，
+  52 例契约 JSON + 语料探针 `svd_runner`（金标准 `tests/bench/svd128-c.csv`）。
+  **SVD 为 C 独有能力**：JS 面因压缩内核实测 128 846 B 已越熔断线 126 976 B
+  按降载序顺延 v2.7（v2.4.0 schur C-only 先例），如实标注不对等。
+- svd 视图 3760 B ≤ 3848 吸收线（margin 88 B），被 Pro union 完全吸收——
+  内核静态内存维持 **42608 B** 零增长（2026-11-04 `bss-check` 复测：
+  42608 / 42640 / 39408 精确命中）。
+- verify.ps1 新增 SVD 用例数门禁（≥13 例），**43 项 verdict 全绿**；
+  pro_runner **692 → 935 checks, 0 failed**（SVD 16 例五组 = 243 checks）。
+- 新增 100 万次压测 `probench` 目标（`pro_bench.exe`，链接内核对象 +
+  tests/bench/bench-c.c）：供 run-all.sh 的 pro_runner 列（v2.6.0 G3 基准
+  终版）使用，与 pro_runner 共享 obj 缓存，实测 Pro 层对上游四 stage 零可测
+  回归（Pro/C128 = 0.99/0.91/1.02/1.04，抖动带内）。
+
 ## v1.7.0 (2026-11-04) · 对应全局 v2.5.0
 
 - **复域超越函数库**（新增 `ac_pro_complex_ext.c`，15 API）：复三角 / 复双曲 /

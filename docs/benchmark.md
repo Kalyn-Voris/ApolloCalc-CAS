@@ -1,65 +1,76 @@
 # ApolloCalc-CAS · 跨版本压测汇总
 
 数据来源：`tests/bench/`（`pool.json` / `gen_pool.py` / `gen_pool_c.py` / `bench-js.js` /
-`bench-c.c` / `bench-c-makefile` / `run-all.sh` / `validate-pool.js`）。
-压测口径：单操作平均耗时（`us_per_op`，越小越快）；同机顺序采集。
+`bench-c.c` / `bench-c-makefile` / `run-all.sh` / `validate-pool.js` / ProTEXT Makefile
+`probench` 目标）。压测口径：单操作平均耗时（`us_per_op`，越小越快）；同机顺序采集。
 
 - 环境：Windows 11 x64，MinGW-w64 gcc 8.1.0（`-std=c99 -O2 -Wall`），Node v24.19.0
-- 规模：**每 stage 独立 100 万次**，3 轮取中位数；四版本合计约 1600 万次操作
+- 规模：**每 stage 独立 100 万次**，3 轮取中位数；五版本合计约 2000 万次操作
 - 池：650 条（parse 250 / eval 250 / solve 100 / exact 50），`versions` 字段做版本门控
-- 有效性：`node tests/bench/validate-pool.js` 四版本全部通过（无错误短路）
+- 有效性：`node tests/bench/validate-pool.js` 四基础版本全部通过（无错误短路）
+- **预热丢首轮口径**：每 stage 计时前先按池顺序预热 1000 次（覆盖全部条目），冷启动成本
+  不计入计时（等效于丢弃首轮），正式计时 3 轮取中位数——五列一致，v2.6.0 起成文
 - **完整报告见 [`tests/bench/BENCH-1M.md`](../tests/bench/BENCH-1M.md)**
 
-> **v2.4.0 复测（2026-10-31）**：五件套全量复跑（650 条池与口径不变），下表与加速比矩阵已按本次
-> 中位数整体刷新——solve/exact 段与上一轮记录差在噪声带内；js128 parse（1.00→1.08）与
-> c128 eval（0.47→0.54）偏移超出带内，如实按实测刷新。
+> **v2.6.0 终版（2026-11-04，G3）**：口径扩为**五列**——新增 pro_runner 列
+> （C/128KB-ProTEXT 内核），五列同机同轮全量复跑，下表与加速比矩阵按本次中位数整体刷新。
+> Pro 层与上游 C/128KB 同一批上游 TU，四 stage 对比 Pro/C128 = 0.99 / 0.91 / 1.02 / 1.04，
+> 全部落在单次采样抖动带内——Pro 层对基础四 stage 零可测回归。
 
 ## 各版本单操作耗时（µs/op，100 万次口径）
 
-| 阶段 | JS 64KB | JS 128KB | C 64KB | C 128KB |
-|:---|---:|---:|---:|---:|
-| parse | 0.0402 | 0.0435 | 0.0194 | 0.0192 |
-| eval（解析+求值） | 0.1267 | 0.1178 | 0.0638 | 0.0681 |
-| solve | 0.6980 | 1.2375 | 0.3566 | 0.4374 |
-| exact | 0.3998 | 0.6676 | 0.2023 | 0.2497 |
-| **全 stage 均值** | **0.3162** | **0.5166** | **0.1605** | **0.1936** |
+| 阶段 | JS 64KB | JS 128KB | C 64KB | C 128KB | C 128KB-ProTEXT（pro_runner） |
+|:---|---:|---:|---:|---:|---:|
+| parse | 0.0409 | 0.0394 | 0.0194 | 0.0186 | 0.0185 |
+| eval（解析+求值） | 0.1253 | 0.1143 | 0.0628 | 0.0609 | 0.0555 |
+| solve | 0.6867 | 1.2045 | 0.3582 | 0.4275 | 0.4343 |
+| exact | 0.3956 | 0.6486 | 0.1995 | 0.2459 | 0.2563 |
+| **全 stage 均值** | **0.3121** | **0.5017** | **0.1600** | **0.1882** | **0.1912** |
 
 池大小：64KB 两版 parse/eval 为 pool220（过滤掉 30 条 128KB 专属双曲条目），
-128KB 两版为 pool250；solve/exact 四版本均为 pool100 / pool50。
+其余三版（JS 128KB / C 128KB / ProTEXT）为 pool250；solve/exact 五版本均为 pool100 / pool50。
 
 ## 跨版本加速比矩阵（基线 = JS 64KB；<1 = 更快）
 
-| 阶段 | JS128 / JS64 | C64 / JS64 | C128 / JS64 |
-|:---|---:|---:|---:|
-| parse | 1.08（慢 8%） | **0.48（快 2.1×）** | **0.48（快 2.1×）** |
-| eval | 0.93（持平） | **0.50（快 2.0×）** | **0.54（快 1.9×）** |
-| solve | **1.77（慢 1.8×）** | **0.51（快 2.0×）** | **0.63（快 1.6×）** |
-| exact | **1.67（慢 1.7×）** | **0.51（快 2.0×）** | **0.62（快 1.6×）** |
+| 阶段 | JS128 / JS64 | C64 / JS64 | C128 / JS64 | Pro / JS64 |
+|:---|---:|---:|---:|---:|
+| parse | 0.96（持平） | **0.47（快 2.1×）** | **0.45（快 2.2×）** | **0.45（快 2.2×）** |
+| eval | 0.91（持平） | **0.50（快 2.0×）** | **0.49（快 2.0×）** | **0.44（快 2.3×）** |
+| solve | **1.75（慢 1.8×）** | **0.52（快 1.9×）** | **0.62（快 1.6×）** | **0.63（快 1.6×）** |
+| exact | **1.64（慢 1.6×）** | **0.50（快 2.0×）** | **0.62（快 1.6×）** | **0.65（快 1.5×）** |
 
 **要点**：
 
-- **C 版比同预算 JS 版快 1.7 – 2.9×**：`C64/JS64` 四个 stage 比值都在 0.48 – 0.51（快 2.0 – 2.1×），
+- **C 版比同预算 JS 版快 1.7 – 2.9×**：`C64/JS64` 四个 stage 比值都在 0.47 – 0.52（快 1.9 – 2.1×），
   按同预算配对 `C128/JS128` 为 0.35 – 0.58（快 1.7 – 2.9×，eval 段本轮 js128 偏快所致）。
   solve/exact 段 C 的领先最大。零分配单遍扫描 + 静态池对 V8 字符串/对象开销的优势，
   在 100 万次规模上稳定复现。
-- **JS 128KB 的 solve/exact 比 JS 64KB 慢 1.7 – 1.8×**：五分量精确形式 + 有理根（ratRoot）
+- **Pro 层与上游 C/128KB 同一批上游 TU，四 stage 对比 `Pro/C128 = 0.99 / 0.91 / 1.02 / 1.04`**：
+  方向不一致、全部落在单次采样抖动带内——Pro 层的 union 静态化、Pro 增量 TU 与链接布局
+  对基础四 stage 零可测系统性影响。
+- **JS 128KB 的 solve/exact 比 JS 64KB 慢 1.6 – 1.8×**：五分量精确形式 + 有理根（ratRoot）
   钩子的**每条固定开销**。池从 8 条扩到 250/100/50 条后该比值未变（旧小规模口径为
   1.57 – 2.18×），说明差距来自单次求解路径而非池构成。
-- **C 128KB 的 solve/exact 比 C 64KB 慢 23%**，明显小于 JS 同族的 67% – 77%：
+- **C 128KB 的 solve/exact 比 C 64KB 慢 19% – 23%**，明显小于 JS 同族的 64% – 75%：
   同样是有理根钩子 + 五分量装配，C 版该开销明显更小（实测只能确认差距本身，
   无法区分归因于静态内存还是编译期优化）。
-- **parse / eval 的版本间差异在 ±8% 内**（C128/C64 = 0.99 / 1.07，JS128/JS64 = 1.08 / 0.93）：
+- **parse / eval 的版本间差异在 ±8% 内**（C128/C64 = 0.96 / 0.97，JS128/JS64 = 0.96 / 0.91）：
   池从 220 扩到 250 条（含双曲函数解析）未见成倍开销；双曲函数不是性能异常点。
 
 ## 内存对比
 
 | 版本 | 堆增量（10 万次 parse 后） | 表达式池静态占用 | 整版 `.bss` |
 |:---|---:|---:|---:|
-| JS 64KB | −48.09 KB（≈0，GC 噪声） | 5,504 B | —（无静态段概念） |
+| JS 64KB | −48.13 KB（≈0，GC 噪声） | 5,504 B | —（无静态段概念） |
 | JS 128KB | −51.17 KB（≈0，GC 噪声） | 11,736 B | — |
 | C 64KB | —（静态） | 5,336 B（`sizeof`） | **10,576 B（10.33 KB）** |
 | C 128KB（v1.0.0） | —（静态） | 11,208 B（`sizeof`） | 59,024 B（57.64 KB） |
 | **C 128KB（v1.1.0）** | —（静态） | **8,648 B**（`sizeof`，栈别名 + lhs/rhs 移除） | **39,408 B（38.48 KB）** |
+| C 128KB-ProTEXT（v1.8.0，内核口径） | —（静态） | 8,648 B（同一批上游 TU） | **42,608 B（41.61 KB）** |
+
+> ProTEXT 行 `.bss` 为内核口径（pro_kernel.exe，38672 上游 + 80 var_val + 3848 Pro union
+> + 8 对齐填充）；runner 口径 +32 B = 42640 B。v2.6.0 的 JS 堆增量按本轮实测刷新
+> （上一轮 −48.09 / −51.17 KB，同为 GC 噪声带内的负值）。
 
 - JS 堆增量在 `--expose-gc` 下两次 `global.gc()` 后测得，**负值即噪声**，符合 Zero-GC 预期。
 - 「表达式池静态占用」为表达式类池（token/number/eval_stack/matrix/rpn/op/lhs/rhs/coeffs/root）
@@ -100,8 +111,9 @@ lhs/rhs 副本 2048 B（原地切片，移除）。
 `C/128KB-ProTEXT` 自 v2.0.0 起 LUT 已迁 `const` `.rdata`，查表零 `.bss` 成本
 （实测迁出收益 16 416 B），见 [RELEASE-v2.0.0.md](RELEASE-v2.0.0.md)。
 
-> 本文档各节均为四基础版本口径。C 128KB-ProTEXT（v2.0.0，`.bss` 41 456 B、
-> 281 项测试）与 JS 128KB v2.0.0（603 项测试）的账本见 [ACCEPTANCE.md](ACCEPTANCE.md)。
+> 本文档耗时各节为**五列口径**（v2.6.0 起，含 ProTEXT pro_runner 列）；内存各节中
+> ProTEXT 行为内核口径账本，C 128KB-ProTEXT（`.bss` 42 608 B、pro_runner
+> 760 checks）与 JS 128KB v2.5.0（1563 项测试）的完整账本见 [ACCEPTANCE.md](ACCEPTANCE.md)。
 
 对比：C 64KB `.bss` 10576 B（10.3 KB）；C 128KB 是它的 **3.7×**（v1.0.0 为 5.6×），
 主要来自符号模块（C 独有，12.3 KB）与矩阵全局池（C 独有，4.6 KB）。
@@ -133,7 +145,7 @@ python tests/bench/gen_pool_c.py      # -> pool_c.h
 # 池有效性校验
 node tests/bench/validate-pool.js
 
-# 四版本 100 万次（每版本 < 10 秒）
+# 五版本 100 万次（每版本 < 10 秒）
 node --expose-gc tests/bench/bench-js.js JS/64KB/src/core_kernel.js  > tests/bench/result-js64-1M.csv
 node --expose-gc tests/bench/bench-js.js JS/128KB/src/core_kernel.js > tests/bench/result-js128-1M.csv
 
@@ -145,6 +157,10 @@ mingw32-make -f bench-c-makefile KERNEL=../../C/128KB/src clean && \
 mingw32-make -f bench-c-makefile KERNEL=../../C/128KB/src && \
 ./bench-c.exe > result-c128-1M.csv
 
+# v2.6.0 G3 新增 pro_runner 列（链接 ProTEXT 内核对象，与 pro_runner 共享 obj 缓存）
+mingw32-make -C ../../C/128KB-ProTEXT SHELL=cmd.exe probench && \
+../../C/128KB-ProTEXT/pro_bench.exe > result-pro-1M.csv
+
 # 跨版本冒烟一致性（第 11 轮）
 cd ../../C/128KB && mingw32-make smoke_runner && ./smoke_runner.exe > ../../tests/bench/c128-smoke.csv
 cd ../.. && node tests/bench/js128-smoke.js > tests/bench/js128-smoke.csv
@@ -152,10 +168,11 @@ node tests/bench/diff-smoke128.js
 ```
 
 一键：`bash tests/bench/run-all.sh`（Windows 上 bash 不在 PATH 时用 `F:/Git/bin/bash.exe`）
-→ 四份 `result-*-1M.csv` + `summary-ratio.csv`。
+→ 五份 `result-*-1M.csv` + `summary-ratio.csv`。
 
 原始数据：`result-js64-1M.csv` / `result-js128-1M.csv` / `result-c64-1M.csv` /
-`result-c128-1M.csv` / `summary-ratio.csv` / `c128-smoke.csv` / `js128-smoke.csv`。
+`result-c128-1M.csv` / `result-pro-1M.csv` / `summary-ratio.csv` / `c128-smoke.csv` /
+`js128-smoke.csv`。
 
 ## 历史数据（小规模口径，已被上表取代）
 

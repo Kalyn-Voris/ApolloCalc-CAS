@@ -8,12 +8,12 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 | 版本 | 状态 | 测试数 | 文档 |
 |:---|:---|:---|:---|
 | JS 64KB | ✅ 已完成 | 80（build-kernel 回归）+ 19 ESM 接线 | [js-64kb.md](js-64kb.md) |
-| JS 128KB | ✅ 已完成（v2.4.3） | 1230（run-all 21 套件合计，见下）+ 83 回归 + 49 ESM 接线 | [js-128kb.md](js-128kb.md) |
+| JS 128KB | ✅ 已完成（v2.5.0 功能面；v2.6.0 无 JS 变更） | 1563（run-all 25 套件合计，见下）+ 83 回归 + 49 ESM 接线 | [js-128kb.md](js-128kb.md) |
 | C 64KB | ✅ 已完成（v1.0.0） | 565（默认）/ 578（`LUT=1`） | [c99-64kb.md](c99-64kb.md) |
 | C 128KB | ✅ 已完成（v1.1.0，冻结） | 1171（默认）/ 1184（`LUT=1`） | [c99-128kb.md](c99-128kb.md) |
-| C 128KB-ProTEXT | ✅ 已完成（v2.4.3） | 583（`pro_runner.exe`，含上游回归） | [C/128KB-ProTEXT/README.md](../C/128KB-ProTEXT/README.md) |
+| C 128KB-ProTEXT | ✅ 已完成（v2.6.0） | 935（`pro_runner.exe`，含上游回归）+ 134（`cx_runner` 复变专项） | [C/128KB-ProTEXT/README.md](../C/128KB-ProTEXT/README.md) |
 
-**JS 128KB 测试明细**（实测，`node test/<suite>.js`；run-all 21/21 文件，2026-11-03 F0 实跑）：
+**JS 128KB 测试明细**（实测，`node test/<suite>.js`；run-all 25/25 文件，2026-11-04 v2.6.0 实跑）：
 
 | 套件 | 校验 |
 |:---|---:|
@@ -24,10 +24,11 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 | test-calculus.js | 28 |
 | test-taylor.js | 26 |
 | test-base.js | 63 |
-| test-consistency.js | 59 pass + 4 improve |
+| test-consistency.js | 59 |
 | test-multivar.js（多变量 + 符号求导） | 194 |
 | test-matrix.js（矩阵基础运算） | 39 |
 | test-matrix-pro.js（矩阵 pro 层 12×12） | 82 |
+| test-matrix-eig.js（一般实矩阵特征值，v2.5.0） | 93 |
 | test-special.js（特殊函数） | 33 |
 | test-browser.js（浏览器环境模拟） | 10 |
 | test-guard.js（多元非线性门禁） | 16 |
@@ -37,8 +38,11 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 | test-ode.js（常微分方程） | 83 |
 | test-sqfree.js（square-free 分解） | 70 |
 | test-groebner.js（Groebner 基/结式） | 60 |
+| test-sysolve.js（方程组 GB 消元，v2.5.0） | 40 |
+| test-complex-ext.js（复域超越函数库，v2.5.0） | 132 |
+| test-sturm.js（Sturm 实根隔离 ≤4 次，v2.5.0） | 68 |
 | test-watermark.js（F0 全池水位门禁自检） | 36 |
-| **合计** | **1230 pass + 4 improve** |
+| **合计** | **1563 pass** |
 
 另：`build-kernel.js` 拼接 17 文件后跑 83 项回归（evaluator 41 + solvers 42）+
 静态声明扫描 78/78 + ESM 导出链路 49/49。
@@ -47,8 +51,11 @@ Zero-GC 与内存账本汇总。所有数字均为本机实测，采集口径见
 259 + 多变量符号求导 12 + 多变量积分 10）+ 稀疏线性求解 35（[case SP-1..12]）
 + 任意精度定点小数 12（[case BD-1..12]）= **328 checks, 0 failed**；
 `bss-check` 三门禁精确命中（kernel 42608 / runner 42640 / upstream 39408），
-退化对拍 38672 B。v2.4.3 现状：**583 checks**（v1.6.1 579 + v1.6.2 ODE 差分回归 +4，
-见 C/128KB-ProTEXT/CHANGELOG.md），`.bss` 维持 42608 B。
+退化对拍 38672 B。v2.6.0 现状：**935 checks, 0 failed**（v2.4.3 基线 583 → v2.5.0
+692〔F2 方程组 20 例 / F3 Sturm 16 例 / F1 复变 134 项另计〕→ v2.6.0 935
+〔G2 SVD 16 例五组 = 243 checks〕，见 C/128KB-ProTEXT/CHANGELOG.md），
+`.bss` 维持 42608 B（svd 视图 3760 B 在 3848 B 吸收线内被 union 吸收）；
+verify.ps1 **43 项 verdict 全绿**（新增 SVD 用例数门禁）。
 
 **JS 64KB 测试明细**：`test-evaluator.js` 41 + `test-solvers.js` 40（单跑）/ 39（build-kernel 口径）
 + 静态扫描 34/34 + ESM 导出链路 19/19。
@@ -90,8 +97,8 @@ JS 侧堆增量实测（`node --expose-gc bench-js.js`，见 `tests/bench/result
 
 | 版本 | heap_before | heap_after | delta |
 |:---|---:|---:|---:|
-| JS 64KB | 4.575 MB | 4.578 MB | **+3.16 KB** |
-| JS 128KB | 4.811 MB | 4.806 MB | **−5.84 KB**（GC 回收后为负） |
+| JS 64KB | 4.639 MB | 4.592 MB | **−48.13 KB**（GC 回收后为负） |
+| JS 128KB | 5.095 MB | 5.045 MB | **−51.17 KB**（GC 回收后为负） |
 
 两版压测全程堆增量均在 KB 量级（远小于 10KB 门禁），确认 Zero-GC 内核不产生累积分配。
 
@@ -120,10 +127,10 @@ cd C/128KB && nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wr
 | 版本 | 静态池总量 | 水位门禁 | 采集口径 |
 |:---|---:|---:|:---|
 | JS 64KB | ~5.2 KB | 48 KB | 源码 TypedArray 声明加总 |
-| JS 128KB（v2.4.3，F0 后） | 170 304 B ≈ **166.3 KiB**（143 组加载期 TypedArray；基础池 11 992 + 模块池 158 312，逐模块见 js-128kb.md 池账本节） | 堆 96 KB + 全池静态 **178 496 B**（F0） | 加载期 `byteLength` 逐分配 stack 归属加总（test-watermark.js 可复现；见 js-128kb.md） |
+| JS 128KB（v2.5.0，F0 后） | 175 104 B ≈ **171.0 KiB**（143 组加载期 TypedArray，逐模块见 js-128kb.md 池账本节） | 堆 96 KB + 全池静态 **178 496 B**（F0） | 加载期 `byteLength` 逐分配 stack 归属加总（test-watermark.js 可复现；见 js-128kb.md） |
 | C 64KB | 10576 B ≈ 10.3 KB | 48 KB | `size` 的 `.bss` |
 | C 128KB（v1.1.0） | 39408 B ≈ **38.48 KiB / 39.4 KB** | 96 KB | `size` 的 `.bss` |
-| C 128KB-ProTEXT（v2.1.0） | 42608 B ≈ **41.61 KiB** | 112 KiB | `size pro_kernel.exe` 的 `.bss`（38 672 上游内核 + 80 + 3 848 sparse 峰值 + 8；sin/cos LUT 已迁 `.rdata`，dec 视图 480 B 完全吸收） |
+| C 128KB-ProTEXT（v2.6.0） | 42608 B ≈ **41.61 KiB** | 112 KiB | `size pro_kernel.exe` 的 `.bss`（38 672 上游内核 + 80 + 3 848 sparse 峰值 + 8；sin/cos LUT 已迁 `.rdata`，dec 视图 480 B / svd 视图 3760 B 完全吸收） |
 
 C 128KB 分段（`size test_runner.exe`）：
 
@@ -159,13 +166,17 @@ C 128KB 的主要占用（v1.1.0 实测 `nm --size-sort`）：符号节点池 `g
 - **C 64KB**：MCU 入门版（Cortex-M4 级），含数论 / 进制分数 / CRC/SHA/Base64 工具
 - **C 128KB**：嵌入式 CAS 完整形态（Cortex-M7 / ESP32-S3 级），含大整数 / 矩阵 /
   特殊函数 / 符号求导
-- **C 128KB-ProTEXT（v2.1.0）**：冻结上游之上的 Pro 层——多变量 GCD/因式分解/结式、
+- **C 128KB-ProTEXT（v2.6.0）**：冻结上游之上的 Pro 层——多变量 GCD/因式分解/结式、
   LU、实特征向量、隐函数求导、高次数值求根、符号积分、多变量符号求导/积分、
-  LUT 常量表化、稀疏线性方程组（n≤32）、任意精度定点小数（180 位），`.bss` 42 608 B
+  LUT 常量表化、稀疏线性方程组（n≤32）、任意精度定点小数（180 位），
+  v2.2.0–v2.6.0 陆续叠加 Groebner 基 / 有理函数工具 / ODE 通解 / 一般实矩阵
+  全部特征值 / square-free 分解 / 复域超越函数库 / 方程组 GB 消元 / Sturm 实根
+  计数与隔离 / one-sided Jacobi SVD（C 独有），`.bss` 42 608 B
 
 ## 验收结论
 
 四版本 + Pro 层均达到各自的验收标准：编译零警告、测试全绿、`nm` 无堆符号
 （JS 侧 `allocCount`/`--expose-gc` 探针等价验证）、跨版本数值 100% < 1e-9。
-C 64KB 与 C 128KB 具备 v1.0.0/v1.1.0 发布条件；JS 128KB 具备 v2.0.0 发布条件；
-C 128KB-ProTEXT 具备 **v2.1.0** 发布条件。
+C 64KB 与 C 128KB 具备 v1.0.0/v1.1.0 发布条件；JS 128KB 具备 v2.5.0 发布条件
+（v2.6.0 无 JS 变更）；C 128KB-ProTEXT 具备 **v2.6.0** 发布条件
+（verify.ps1 43 项 verdict 全绿 / pro_runner 935 checks, 0 failed）。

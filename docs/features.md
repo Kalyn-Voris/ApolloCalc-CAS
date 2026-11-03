@@ -1,27 +1,31 @@
 # ApolloCalc-CAS 功能对照表
 
 四版本家族（JS 与 C99 × 64KB 与 128KB）+ Pro 层的内核功能矩阵。
-JS/128KB（v2.5.0）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组件 v1.7.0）
+JS/128KB（v2.5.0）为浏览器侧功能最全实现；C99 128KB-ProTEXT（组件 v1.8.0）
 为代数能力最强的参考实现（`.bss` 内核口径 42608 B，上游 `C/128KB/` 冻结）。
 版本文档：[js-128kb.md](js-128kb.md) / [c99-128kb.md](c99-128kb.md) /
 [ROADMAP.md](../ROADMAP.md)。
 
-**基线数字（2026-11-04 v2.5.0 实测，非转抄）**：
+**基线数字（2026-11-04 v2.6.0 实测，非转抄）**：
 
-- C 侧 `verify.ps1` → **RESULT: 42 passed, 0 failed**（含 runner `.bss` 账本
-  42608 / 42640 / 上游对照 39408、degraded 38672）；`pro_runner` **692 checks,
-  0 failed**（v2.4.2 基线 583 + v2.5.0 F2 方程组 20 例 / F3 Sturm 16 例；每功能
+- C 侧 `verify.ps1` → **RESULT: 43 passed, 0 failed**（含 runner `.bss` 账本
+  42608 / 42640 / 上游对照 39408、degraded 38672）；`pro_runner` **935 checks,
+  0 failed**（v2.5.0 基线 692 + v2.6.0 SVD 16 例 243 checks；每功能
   用例数 B1=7 / A4=6 / A6=9 / A5=6 / B2=10 / SP=12 / BD=12 / GB=12 /
-  RAT=7 / ODE=7 / SCHUR=13 / SQFREE=10 / SYSOLVE=20 / STURM=16）；复变函数
-  专项 `cx_runner` 另计 **134 checks, 0 failed**（v2.5.0 F1）。
+  RAT=7 / ODE=7 / SCHUR=13 / SQFREE=10 / SYSOLVE=20 / STURM=16 / SVD=16）；
+  复变函数专项 `cx_runner` 另计 **134 checks, 0 failed**（v2.5.0 F1）。
 - JS 侧 `node test/run-all.js` → **TOTAL: 1563 pass, 0 fail**（25/25 文件；
-  v2.4.2 基线 1194 + 复变扩展 132 + 方程组 40 + Sturm 68 + 一般实矩阵特征值 93
-  + F0 全池水位门禁自检 36）。
+  v2.6.0 无 JS 功能变更，与 v2.5.0 基线一致）。
 - 压缩内核 `JS/128KB/src/core_kernel.js` 实测 **128 846 B**（预算 131 072 B，
-  余量 2 226 B；v2.5.0 五块新功能后由 103 599 B 重建，累计 +25 247 B）。
+  余量 2 226 B；已越过 v2.6 熔断线 126 976 B——SVD JS 面与 G4' 纯 JS 大整数
+  因此按 §6.2 R2 降载序顺延 v2.7，见
+  [ROADMAP-v2.5-v2.6.md](../ROADMAP-v2.5-v2.6.md) 附录「v2.6 执行记录」）。
 - 跨语言对拍 `node tests/bench/diff-smoke128.js` → **50/50 用例一致**，exit 0；
   v2.5.0 新增四个差分驱动同日复跑全部 exit 0（方程组 20/20、Sturm 62/62、
   特征值 47/47、复变语料 789 行零分歧）。
+- 100 万次压测 v2.6.0 起为**五列口径**（新增 pro_runner 列）：Pro 层对上游
+  四 stage 零可测回归（Pro/C128 = 0.99/0.91/1.02/1.04，抖动带内），完整报告
+  [BENCH-1M.md](../tests/bench/BENCH-1M.md)。
 
 ## 内核功能
 
@@ -92,11 +96,15 @@ v2.4.0）**、**复域超越函数库（15 API：复三角/复双曲/反三角/�
 v2.5.0，专项 cx_runner 验收）**、**二元多项式方程组 GB 消元数值全解
 （契约 [sysolve-format-v25](contracts/sysolve-format-v25.md)，v2.5.0）**、
 **Sturm 序列实根计数与根隔离（1..8 次，5..8 由 ac_bigint 承载，契约
-[sturm-format-v25](contracts/sturm-format-v25.md)，v2.5.0）**。
+[sturm-format-v25](contracts/sturm-format-v25.md)，v2.5.0）**、
+**one-sided Jacobi SVD 奇异值分解（m,n ≤12，C 独有——JS 面因压缩内核触熔断线
+顺延 v2.7，如实标注不对等，不称「对等」，契约
+[svd-format-v26](contracts/svd-format-v26.md)，v2.6.0）**。
 `.bss` 内核口径 **42 608 B** / runner 口径 42640 B / 上游对照 39408 B / 退化 38672 B
-（v2.2.0 起 Groebner 落地后零增长，2026-11-04 `bss-check` 复测），pro_runner
-**692 checks, 0 failed**（2026-11-04 实测，v2.5.0 含 F2 方程组 20 例 / F3 Sturm
-16 例；复变专项 cx_runner 另计 134 checks, 0 failed）。
+（v2.2.0 起 Groebner 落地后零增长，2026-11-04 `bss-check` 复测；v2.6.0 svd 视图
+3760 B 在 3848 B 吸收线内被 union 完全吸收），pro_runner
+**935 checks, 0 failed**（2026-11-04 实测，v2.5.0 含 F2 方程组 20 例 / F3 Sturm
+16 例，v2.6.0 含 SVD 16 例；复变专项 cx_runner 另计 134 checks, 0 failed）。
 详见 [c99-128kb.md](c99-128kb.md) 与 [RELEASE-v2.0.0.md](RELEASE-v2.0.0.md)。
 
 ## v2.3.0 双侧新功能（2026-10-31）
@@ -218,6 +226,29 @@ diff-smoke128.js（既有 50 例管线一行未动），2026-11-04 收尾复跑�
   3 392 B，记录器口径）；压缩内核 128 846 B，距 131 072 文件线余量
   2 226 B——两条线均已偏紧，v2.6 开工须先过预算 spike（路线图 §6.2 R2）。
 
+## v2.6.0 C 侧新功能（2026-11-04）
+
+主题「应用落地·纯数学」**按实测收窄交付**：全局 Tag v2.6.0 只覆盖 C 侧，JS 侧本版
+零功能变更（双轨制成文）。开发方式：`feat/matrix-advanced` 单 worktree（G2 C 侧）
++ 收尾组串行收口（G3 基准终版与全部成文）；契约先行机制同前
+（[svd-format-v26](contracts/svd-format-v26.md) 由 C 组开工第 1 个 commit 冻结）。
+
+| 功能 | 侧 | 落点 | 说明 |
+|---|---|---|---|
+| one-sided Jacobi SVD 奇异值分解 | **C（C 独有，如实标注不对等，不称「对等」）** | `ac_pro_svd.c`（新）+ `ac_pro_scratch.h` svd 视图 | m,n ≤12（m<n 内部走转置对偶）；Hestenes 固定循环序列正交化，30 轮 sweep 预算（超限返 −2）、frexp/ldexp 幂 2 精确缩放（零舍入）、出口双闸门（‖A−UΣVᵗ‖∞ 重构残差 + ‖UᵗU−I‖∞ 正交性）不过闸返 −3 绝不硬凑；奇异值降序稳定插入排序 + 符号规范化（每列最大 \|·\| 分量置正、并列取最小索引）与 F4 特征值同式同序。svd 视图 **3760 B ≤ 3848 吸收线**（margin 88 B）被 union 完全吸收，`.bss` 维持 42608 B 零增长。契约 [svd-format-v26](contracts/svd-format-v26.md) + [tests/svd-cases.json](../tests/svd-cases.json) 52 例 + 语料探针 `svd_runner`（金标准 [svd128-c.csv](../tests/bench/svd128-c.csv)，即 v2.7 JS 面的对拍输入）。pro_runner 内 16 例五组 = 243 checks |
+| 基准口径终版（G3） | 生态基建 | `tests/bench/run-all.sh` 五列 + ProTEXT Makefile `probench` 目标 | 100 万次压测新增 **pro_runner 列**（`pro_bench.exe` 链接 ProTEXT 内核对象，与 pro_runner 共享 obj 缓存；四 stage / 池 / 迭代口径与其余各列逐字一致）；**预热丢首轮口径成文**（每 stage 计时前按池顺序预热 1000 次覆盖全部条目，冷启动成本不计入计时，3 轮取中位数）。五列同机同轮复跑出 [BENCH-1M.md](../tests/bench/BENCH-1M.md) / [benchmark.md](benchmark.md) v2.6 终版；[getting-started.md](getting-started.md) 对比表改为引用 BENCH 报告（防单点快照漂移）。落点结论：Pro/C128 = 0.99/0.91/1.02/1.04 全在抖动带内，Pro 层对基础四 stage 零可测回归 |
+
+**如实口径（降载裁决，触线实测依据）**：
+
+- **压缩内核触熔断线**：`core_kernel.js` 实测 **128 846 B**，已越 v2.6 熔断线
+  **126 976 B**（131 072 文件线余量仅 **2 226 B**，`wc -c` 实测非估算）——
+  按 [ROADMAP-v2.5-v2.6.md](../ROADMAP-v2.5-v2.6.md) §6.2 R2 降载序②执行：
+  **SVD 的 JS 面顺延 v2.7**（先例：v2.4.0 schur C-only；上表「C 独有」标注即由此
+  而来，v2.7 落地 `core_matrix.js proSvd*` 前不称对等）；**G4' 纯 JS 大整数预算
+  前置判定 no-go、顺延 v2.7**（判定依据 = 实测余量不足，非估算），**F2 的
+  sqfree 5..8 联动收口一并顺延**；G1 主题维持 v2.7+。JS Sturm 5..8 与
+  sqfree 5..8 维持契约成文分叉（EDEG），收口机制与依据不变。
+
 ## 未落地项
 
 - 结果历史环形缓存：四版本均未规划落地时间（UI 层职责边界未定）。
@@ -226,9 +257,14 @@ diff-smoke128.js（既有 50 例管线一行未动），2026-11-04 收尾复跑�
   不硬解（ROADMAP v2.3.0 落选声明）。
 - ~~JS 一般实矩阵特征值（Francis QR）~~：**v2.5.0 已落地**（上节，JS 侧最后
   一个矩阵不对等项清账）。
-- JS 大整数 / 高精度：v2.6.0 G4' 主路线（v3 裁决：纯 JS 移植转正，20 limb
-  TypedArray 镜像 ac_bigint，开工前先出内核字节预算 spike 过熔断线
-  go/no-go）；**连带收口** JS Sturm 5..8 与 sqfree 5..8 两处成文分叉。
+- **SVD 的 JS 面（one-sided Jacobi）**：v2.6.0 规划为双端（G2），因压缩内核实测
+  128 846 B 已越熔断线 126 976 B，按 §6.2 R2 降载序②**顺延 v2.7**、成文
+  C-only（先例：v2.4.0 schur）；C 侧契约 svd-format-v26 与金标准
+  svd128-c.csv 已冻结，v2.7 按契约逐字镜像即可。
+- JS 大整数 / 高精度（G4' 纯 JS 移植，20 limb TypedArray 镜像 ac_bigint）：
+  v2.6.0 开工前置的内核字节预算 spike **判定 no-go**（判定依据 = 实测压缩内核
+  已触熔断线、余量不足，非估算），**顺延 v2.7**；**连带顺延** JS Sturm 5..8
+  与 sqfree 5..8 两处成文分叉的收口（EDEG 分叉维持）。
 - 多变量 Groebner 扩维（3+ 变量 / 更高次）与通用化简 simplify / trigsimp：
   维持 ROADMAP 落选声明，不做。
 
@@ -262,7 +298,8 @@ diff-smoke128.js（既有 50 例管线一行未动），2026-11-04 收尾复跑�
   JS 侧 `ECOEF`（−3）、C 侧真实结果（cOnly-OVF 层）——
   [tests/sturm.json](../tests/sturm.json) 三层收录，
   [SMOKE-DIFF-STURM.md](../tests/bench/SMOKE-DIFF-STURM.md) 62/62 一致
-  （含分叉断言）。收口随 v2.6 G4' 纯 JS 大整数。
+  （含分叉断言）。收口原随 v2.6 G4' 纯 JS 大整数；G4' 因内核实测触熔断线
+  判定 no-go，收口**顺延 v2.7**（见「v2.6.0 C 侧新功能 · 如实口径」）。
 - **v2.4.0 能力边界与副作用（两侧成文，非缺陷）**：Groebner 系数域收窄
   （JS 无 int64，不称「对等」）、结式数值路径 0 = 公共根判据、结式词法边界
   （无总次数上限、每变量指数 ≤15）、sqfree 求解层 clobber 副作用、符号积分
