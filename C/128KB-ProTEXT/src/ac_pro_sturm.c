@@ -476,10 +476,6 @@ static int st_build(const char *src) {
  * 返回变差数(≥0)或负错误码。 ---- */
 
 static int st_horner_sign(int k, int64_t num, int e, int *sg) {
-#define ST_TRACE 1
-#ifdef ST_TRACE
-    fprintf(stderr, "[horns k=%d num=%d e=%d dg=%d]", k, (int)num, e, s_pro_st_deg(k));
-#endif
     ac_bigint_t pw[AC_PRO_ST_MAX_DEG + 1];
     ac_bigint_t n;
     ac_bigint_t t1;
@@ -499,22 +495,15 @@ static int st_horner_sign(int k, int64_t num, int e, int *sg) {
         ac_bigint_t term;
         ac_bigint_t nn;
         st_coef_get(k, i, &term);
-        fprintf(stderr, " [i=%d cs=%d]", i, (int)term.sign);
         rc = st_mul_ck(&term, &pw[dg - i], &term);
         if (rc != 0) { return rc; }
-        fprintf(stderr, " ts=%d", (int)term.sign);
         ac_bi_from_int64(&nn, num);
         rc = st_mul_ck(&n, &nn, &t1);
         if (rc != 0) { return rc; }
-        fprintf(stderr, " t1s=%d", (int)t1.sign);
         rc = st_add_ck(&t1, &term, &n);
         if (rc != 0) { return rc; }
-        fprintf(stderr, " ns=%d", (int)n.sign);
     }
     *sg = n.sign;
-#ifdef ST_TRACE
-    fprintf(stderr, " sg=%d\n", (int)n.sign); fflush(stderr);
-#endif
     return 0;
 }
 
