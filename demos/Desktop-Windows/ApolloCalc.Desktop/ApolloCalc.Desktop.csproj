@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- 桥接 DLL 由 MinGW-w64 gcc 8.1.0 (x86_64) 产出，进程固定 64 位 -->
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>ApolloCalc.Desktop</RootNamespace>
+    <AssemblyName>ApolloCalc.Desktop</AssemblyName>
+    <Copyright>Copyright (c) 2026 Kalyn-Voris. MIT License.</Copyright>
+    <!-- dotnet publish 的输出目录（相对 csproj）：demos/Desktop-Windows/publish/，
+         产物不入库（见上级 .gitignore）。publish.bat 一键调用。 -->
+    <PublishDir>..\publish\</PublishDir>
+  </PropertyGroup>
+
+  <!-- 桥接 DLL：先运行 ../c_bridge/build.bat 产出，构建时复制到输出目录 -->
+  <ItemGroup>
+    <None Include="..\c_bridge\ApolloCalc.dll"
+          Condition="Exists('..\c_bridge\ApolloCalc.dll')"
+          Link="ApolloCalc.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

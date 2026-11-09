@@ -1,0 +1,9 @@
+# Desktop demo build artifacts (not project content)
+bin/
+obj/
+
+# Bridge DLL is produced by c_bridge/build.bat, never committed
+c_bridge/ApolloCalc.dll
+
+# dotnet publish output (see publish.bat)
+publish/

@@ -133,6 +133,7 @@ ApolloCalc-CAS/
 ├── LICENSE              MIT
 ├── docs/                各版本设计文档
 ├── tests/               四版本共享的一致性测试用例（JSON）
+├── demos/               跨平台图形计算器 Demo（单文件 HTML + C# WinForms/C99 DLL）
 ├── JS/
 │   ├── 64KB/            已验证内核（src + test + 说明）
 │   └── 128KB/           功能增强版（v2.5.0：v2.4.0 四块之上再 + 复域超越函数库/
@@ -153,6 +154,41 @@ ApolloCalc-CAS/
                          one-sided Jacobi SVD (m,n≤12，C 独有)；
                          内核静态内存 42608 B，上游零改动
 ```
+
+## Demos / 演示程序
+
+内核不只是测试用例——两个可直接上手的图形计算器 Demo 演示了同一套 C99 / JS
+引擎在真实 UI 中的表现。两者都完全离线、无遥测、MIT 许可。
+
+Two ready-to-run graphing calculators showing the same kernels behind a real UI.
+Both are fully offline, telemetry-free and MIT licensed.
+
+| Demo | 形态 / Form | 亮点 / Highlights |
+|:---|:---|:---|
+| **[demos/HTML](demos/HTML/)** | 单文件 Web（`index.html`，约 138 KB）<br>Single-file web app | 零依赖、零 GC、双击即用；Y 轴自适应量程 + 动态 1/2/5 网格；RAD/DEG 切换；中英双语界面<br>Zero dependencies, zero GC, double-click to run; adaptive Y-axis with dynamic 1/2/5 grid; RAD/DEG toggle; English/中文 UI |
+| **[demos/Desktop-Windows](demos/Desktop-Windows/)** | C# WinForms + C99 原生 DLL<br>Native Windows app | 解析/求值/采样全在 C99 内核（`ApolloCalc.dll`）内完成，C# 只负责输入与 GDI+ 绘图；自带一键编译（`build.bat`）与打包（`publish.bat`）脚本<br>Parsing, evaluation and sampling all run inside the C99 kernel (`ApolloCalc.dll`); C# only handles input and GDI+ drawing; ships one-click build (`build.bat`) and packaging (`publish.bat`) scripts |
+
+**HTML Demo / 网页版**：把整颗引擎（`core_kernel.js`）逐字内联进一个 HTML 文件，
+无网络、无构建、无 node_modules —— 打开即是图形计算器。Y 轴量程按当前曲线自适应，
+所以 DEG 下的 `sin(x)`（近乎一条斜线）和常数函数 `y=5` 都能看清，而 RAD 下的
+`sin(x)` 仍是完整正弦波。
+
+The whole engine (`core_kernel.js`) is inlined verbatim into one HTML file — no
+network, no build step, no `node_modules`: open it and you have a graphing
+calculator. The Y range adapts to the curve on screen, so `sin(x)` in DEG (nearly
+a straight line) and the constant `y = 5` are both clearly visible, while RAD
+still shows the full sine wave.
+
+**Desktop Demo / 桌面版**：`demos\Desktop-Windows\c_bridge\build.bat` 用 MinGW
+把核心 C99 源码编成 `ApolloCalc.dll`，`dotnet run` 启动 WinForms 界面；
+`publish.bat` 产出自包含（框架依赖）的 `ApolloCalc.Desktop.exe`。核心库目录
+`C/128KB/` 与 `C/128KB-ProTEXT/` 逐字节不动，Demo 与内核物理隔离。
+
+`build.bat` compiles the core C99 sources into `ApolloCalc.dll` with MinGW, and
+`dotnet run` launches the WinForms UI; `publish.bat` produces a ready-to-run
+(framework-dependent) `ApolloCalc.Desktop.exe`. The core directories
+`C/128KB/` and `C/128KB-ProTEXT/` stay byte-identical — the demo is physically
+isolated from the library. See the per-demo READMEs for details.
 
 ## 快速开始
 
