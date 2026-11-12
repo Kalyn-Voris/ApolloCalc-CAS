@@ -139,14 +139,6 @@ var ApolloGroebner = (function () {
     if (r > GB_SAFE || r < -GB_SAFE) { return NaN; }
     return r;
   }
-  function _igcd(a, b) {
-    var x = a;
-    var y = b;
-    var t = 0;
-    while (y !== 0) { t = x % y; x = y; y = t; }
-    return x;
-  }
-
   /* 槽位读取 */
 
   function _lm(s) {
@@ -347,7 +339,7 @@ var ApolloGroebner = (function () {
     var g = 0;
     var i = 0;
     for (i = 0; i < GB_DENSE; i++) {
-      if (_dense[i] !== 0) { g = _igcd(g, _dense[i] < 0 ? -_dense[i] : _dense[i]); }
+      if (_dense[i] !== 0) { g = igcd(g, _dense[i] < 0 ? -_dense[i] : _dense[i]); }
     }
     if (g > 1) {
       for (i = 0; i < GB_DENSE; i++) {
@@ -441,7 +433,7 @@ var ApolloGroebner = (function () {
     }
     _cnt[s] = n;
     if (n === 0) { return 0; }
-    for (i = 0; i < n; i++) { g = _igcd(g, _coef[s * GB_TERMS + i] < 0 ? -_coef[s * GB_TERMS + i] : _coef[s * GB_TERMS + i]); }
+    for (i = 0; i < n; i++) { g = igcd(g, _coef[s * GB_TERMS + i] < 0 ? -_coef[s * GB_TERMS + i] : _coef[s * GB_TERMS + i]); }
     if (g > 1) {
       for (i = 0; i < n; i++) { _coef[s * GB_TERMS + i] = _coef[s * GB_TERMS + i] / g; }
     }
@@ -682,18 +674,7 @@ var ApolloGroebner = (function () {
     _outLen++;
   }
   function pushInt(v) {
-    var nd = 0;
-    var m = v;
-    if (m < 0) { pushCC(45); m = -m; }
-    if (m === 0) { _digits[0] = 0; nd = 1; }
-    else {
-      while (m > 0) {
-        _digits[nd] = m % 10;
-        nd++;
-        m = (m - (m % 10)) / 10;
-      }
-    }
-    while (nd > 0) { nd--; pushCC(48 + _digits[nd]); }
+    emitInt(v, pushCC, _digits);
   }
 
   function formatElem(s) {
@@ -1129,83 +1110,8 @@ var ApolloGroebner = (function () {
 
   /* 溢出哨兵用 NaN:有限整数的和/积永不 NaN,而 −6 等合法值会与错误码
    * 撞车(实测踩坑:系数 −6 被误判 EOVER)。调用方以 isNaN 判溢出。 */
-  function sySafeAdd(a, b) {
-    var r = a + b;
-    if (r > SYS_SAFE || r < -SYS_SAFE) { return NaN; }
-    return r;
-  }
-  function sySafeMul(a, b) {
-    var r = a * b;
-    if (r > SYS_SAFE || r < -SYS_SAFE) { return NaN; }
-    return r;
-  }
   function syIabs(x) { return x < 0 ? -x : x; }
-  function syIgcd(a, b) {
-    var x = a, y = b, t = 0;
-    while (y !== 0) { t = x % y; x = y; y = t; }
-    return x;
-  }
-
   /* ---- f/g 残差表:解析进 GB 基槽(copy-out 后槽 0/1 即草稿) ---- */
-
-  function syParseInto(src, slot) {
-    var n = 0;
-    var i = 0;
-    var p = 0;
-    var len = src.length;
-    var rc;
-    while (p < len && (src.charCodeAt(p) === 32 || src.charCodeAt(p) === 9)) { p++; }
-    if (p >= len) { return GB_EARG; }
-    for (;;) {
-      rc = gbParseTerm(src, p, len);
-      if (rc !== 1) { return rc; }
-      p = _ptNext;
-      if (_ptC !== 0) {
-        if (n >= SYS_TERMS) { return GB_ETERM; }
-        _coef[slot * SYS_TERMS + n] = _ptNeg ? -_ptC : _ptC;
-        _ep[slot * SYS_TERMS + n] = (_ptNx << 4) | _ptNy;
-        n++;
-      }
-      while (p < len && (src.charCodeAt(p) === 32 || src.charCodeAt(p) === 9)) { p++; }
-      if (p >= len) { break; }
-      if (src.charCodeAt(p) !== 43 && src.charCodeAt(p) !== 45) { return GB_EARG; }
-    }
-    /* ep 降序插入排序 + 同类项合并 + 去零(gb_parse_into 同构) */
-    for (i = 1; i < n; i++) {
-      var kc = _coef[slot * SYS_TERMS + i];
-      var ke = _ep[slot * SYS_TERMS + i];
-      var j = i - 1;
-      while (j >= 0 && _ep[slot * SYS_TERMS + j] < ke) {
-        _coef[slot * SYS_TERMS + j + 1] = _coef[slot * SYS_TERMS + j];
-        _ep[slot * SYS_TERMS + j + 1] = _ep[slot * SYS_TERMS + j];
-        j--;
-      }
-      _coef[slot * SYS_TERMS + j + 1] = kc;
-      _ep[slot * SYS_TERMS + j + 1] = ke;
-    }
-    {
-      var out = 0;
-      i = 0;
-      while (i < n) {
-        var sum = _coef[slot * SYS_TERMS + i];
-        var e2 = _ep[slot * SYS_TERMS + i];
-        var k2 = i + 1;
-        while (k2 < n && _ep[slot * SYS_TERMS + k2] === e2) {
-          sum = sySafeAdd(sum, _coef[slot * SYS_TERMS + k2]);
-          if (isNaN(sum)) { return SYS_EOVER; }
-          k2++;
-        }
-        if (sum !== 0) {
-          _coef[slot * SYS_TERMS + out] = sum;
-          _ep[slot * SYS_TERMS + out] = e2;
-          out++;
-        }
-        i = k2;
-      }
-      _cnt[slot] = out;
-    }
-    return 1;
-  }
 
   /* ---- h 的 SFF 预处理(_syH 升幂;返回 h_sf 次数或负错误码) ---- */
 
@@ -1217,7 +1123,7 @@ var ApolloGroebner = (function () {
     if (dg < 0) { return dg; }
     for (i = 0; i <= dg; i++) {
       v = syIabs(arr[i]);
-      if (v !== 0) { g = (g === 0) ? v : syIgcd(g, v); }
+      if (v !== 0) { g = (g === 0) ? v : igcd(g, v); }
     }
     if (g === 0) { g = 1; }
     neg = arr[dg] < 0 ? 1 : 0;
@@ -1243,24 +1149,24 @@ var ApolloGroebner = (function () {
       lfw = w[df];
       k = df - dg;
       for (i = df; i >= 0; i--) {
-        t = sySafeMul(lcg, w[i]);
+        t = _safeMul(lcg, w[i]);
         if (isNaN(t)) { return SYS_EOVER; }
         w[i] = t;
         if (i >= k && i - k <= dg) {
-          t = sySafeMul(lfw, g[i - k]);
+          t = _safeMul(lfw, g[i - k]);
           if (isNaN(t)) { return SYS_EOVER; }
-          t = sySafeAdd(w[i], -t);
+          t = _safeAdd(w[i], -t);
           if (isNaN(t)) { return SYS_EOVER; }
           w[i] = t;
         }
       }
       if (qout !== null) {
         for (i = df; i >= 0; i--) {
-          t = sySafeMul(qout[i], lcg);
+          t = _safeMul(qout[i], lcg);
           if (isNaN(t)) { return SYS_EOVER; }
           qout[i] = t;
         }
-        t = sySafeAdd(qout[k], lfw);
+        t = _safeAdd(qout[k], lfw);
         if (isNaN(t)) { return SYS_EOVER; }
         qout[k] = t;
       }
@@ -1307,7 +1213,7 @@ var ApolloGroebner = (function () {
     if (dg >= 1) {
       for (i = 0; i <= SYS_ROOTS; i++) { _syD[i] = 0; _syV[i] = 0; }
       for (i = 1; i <= dg; i++) {
-        var t = sySafeMul(_syH[i], i);
+        var t = _safeMul(_syH[i], i);
         if (isNaN(t)) { return SYS_EOVER; }
         _syD[i - 1] = t;
       }
@@ -1354,13 +1260,13 @@ var ApolloGroebner = (function () {
       lfw = w[df2];
       k = df2 - dg;
       for (i = df2; i >= 0; i--) {
-        t = sySafeMul(lcg, w[i]);
+        t = _safeMul(lcg, w[i]);
         if (isNaN(t)) { return SYS_EOVER; }
         w[i] = t;
         if (i >= k && i - k <= dg) {
-          t = sySafeMul(lfw, g[i - k]);
+          t = _safeMul(lfw, g[i - k]);
           if (isNaN(t)) { return SYS_EOVER; }
-          t = sySafeAdd(w[i], -t);
+          t = _safeAdd(w[i], -t);
           if (isNaN(t)) { return SYS_EOVER; }
           w[i] = t;
         }
@@ -1369,7 +1275,7 @@ var ApolloGroebner = (function () {
       while (df2 >= 0 && w[df2] === 0) { df2--; }
     }
     for (i = 0; i < steps; i++) {
-      t = sySafeMul(scale, lcg);
+      t = _safeMul(scale, lcg);
       if (isNaN(t)) { return SYS_EOVER; }
       scale = t;
     }
@@ -1605,7 +1511,7 @@ var ApolloGroebner = (function () {
     var bestErr = 1e300;
     for (q = 1; q <= 1000; q++) {
       var p = Math.round(x * q);
-      var g = syIgcd(p < 0 ? -p : p, q);
+      var g = igcd(p < 0 ? -p : p, q);
       var pp = p;
       var qq = q;
       var err;
@@ -1748,9 +1654,9 @@ var ApolloGroebner = (function () {
       }
     }
     /* f,g 残差表(copy-out 后槽 0/1 即草稿) */
-    rc = syParseInto(fsrc, 0);
+    rc = gbParseInto(fsrc, 0);
     if (rc !== 1) { return rc === GB_EOVER ? SYS_EOVER : SYS_EINTERNAL; }
-    rc = syParseInto(gsrc, 1);
+    rc = gbParseInto(gsrc, 1);
     if (rc !== 1) { return rc === GB_EOVER ? SYS_EOVER : SYS_EINTERNAL; }
 
     if (dh < 0) { return SYS_EZDIM; }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Kalyn-Voris (ApolloCalc-CAS). See LICENSE at the repository root.
-/* ApolloCalc · core_multivar.js — 二元稀疏多项式（x, y）+ 高阶三角/复数补充，自包含。
+/* ApolloCalc · core_multivar.js — 二元稀疏多项式（x, y）+ 高阶三角/复数补充。
+   依赖 core_complex.js 的 cSqrt/cExp/cLn/cPowInt（拼接序在前，经统一测试加载器与内核拼接通道提供）。
    exps 编码与 C 版 ac_pro_term_t 一致：低 4 bit = y，高 4 bit = x；
    MAX_TOTAL_DEG = 6 时不同单项式正好 N(6) = C(8,2) = 28。
 
@@ -807,16 +808,12 @@ var ApolloMultivar = (function () {
     return 0.5 * Math.log((1 + x) / (1 - x));
   }
 
-  /* 复数域用寄存器而非对象传递，才能保持零分配。
-   * _zRe/_zIm 是操作数，_rRe/_rIm 是结果；
-   * _sqrtOf/_lnOf/_expOf 各写自己的结果寄存器，调用方必须先拷出再调下一个，
-   * 否则后一次 helper 会踩掉前一次的结果。 */
+  /* 复数域操作数在 _zRe/_zIm、结果在 _rRe/_rIm（零分配，寄存器传递）。
+   * 实现委托 core_complex 全局原语；经全局 A 寄存器借用，
+   * UI 契约 set-then-call 保证借用不跨调用存活。 */
 
   var _zRe = 0, _zIm = 0;
   var _rRe = 0, _rIm = 0;
-  var _sqRe = 0, _sqIm = 0;
-  var _lgRe = 0, _lgIm = 0;
-  var _exRe = 0, _exIm = 0;
 
   function setZ(re, im) { _zRe = re; _zIm = im; }
   /* 把结果寄存器搬回操作数寄存器，供链式调用（cExp 后再 cLn）用。 */
@@ -826,86 +823,33 @@ var ApolloMultivar = (function () {
   function getRRe() { return _rRe; }
   function getRIm() { return _rIm; }
 
-  /* 主值平方根，同 core_complex.js 的 cSqrt。 */
-  function _sqrtOf(re, im) {
-    if (re === 0 && im === 0) { _sqRe = 0; _sqIm = 0; return; }
-    if (im === 0) {
-      if (re >= 0) { _sqRe = Math.sqrt(re); _sqIm = 0; }
-      else { _sqRe = 0; _sqIm = Math.sqrt(-re); }
-      return;
-    }
-    var r = Math.sqrt(re * re + im * im);
-    var half = Math.atan2(im, re) * 0.5;
-    var sr = Math.sqrt(r);
-    _sqRe = sr * Math.cos(half);
-    _sqIm = sr * Math.sin(half);
+  /* 薄委托：_z 装入全局 A 寄存器 → 全局原语 → 结果拷回 _r。
+   * cPowInt 保留非整数守卫（全局版 ToInt32 截断语义不可暴露）。 */
+  function _mvLoad() { _aRe = _zRe; _aIm = _zIm; }
+  function _mvCsqrt() { _mvLoad(); cSqrt(); _rRe = _tmpRe; _rIm = _tmpIm; }
+  function _mvCexp() { _mvLoad(); cExp(); _rRe = _tmpRe; _rIm = _tmpIm; }
+  function _mvCln() { _mvLoad(); cLn(); _rRe = _tmpRe; _rIm = _tmpIm; }
+  function _mvCpowint(n) {
+    if (n !== (n | 0)) { _rRe = NaN; _rIm = NaN; return; }
+    _mvLoad();
+    cPowInt(n);
+    _rRe = _tmpRe;
+    _rIm = _tmpIm;
   }
-
-  function _lnOf(re, im) {
-    if (re === 0 && im === 0) { _lgRe = -Infinity; _lgIm = 0; return; }
-    _lgRe = 0.5 * Math.log(re * re + im * im);
-    _lgIm = Math.atan2(im, re);
-  }
-
-  function _expOf(re, im) {
-    var ea = Math.exp(re);
-    _exRe = ea * Math.cos(im);
-    _exIm = ea * Math.sin(im);
-  }
-
-  function cSqrt() { _sqrtOf(_zRe, _zIm); _rRe = _sqRe; _rIm = _sqIm; }
-  function cExp() { _expOf(_zRe, _zIm); _rRe = _exRe; _rIm = _exIm; }
-  function cLn() { _lnOf(_zRe, _zIm); _rRe = _lgRe; _rIm = _lgIm; }
-
-  /* 平方-乘法快速幂，负指数先取倒数。 */
-  function cPowInt(n) {
-    var bRe = _zRe;
-    var bIm = _zIm;
-    var exp = n;
-    if (exp !== (exp | 0)) { _rRe = NaN; _rIm = NaN; return; }
-
-    if (exp < 0) {
-      var d = bRe * bRe + bIm * bIm;
-      if (d === 0) { _rRe = NaN; _rIm = NaN; return; }
-      var iRe = bRe / d;
-      var iIm = -bIm / d;
-      bRe = iRe;
-      bIm = iIm;
-      exp = -exp;
-    }
-
-    var accRe = 1;
-    var accIm = 0;
-    var e = exp;
-    for (;;) {
-      if ((e & 1) === 1) {
-        var nRe = accRe * bRe - accIm * bIm;
-        var nIm = accRe * bIm + accIm * bRe;
-        accRe = nRe;
-        accIm = nIm;
-      }
-      e = e >> 1;
-      if (e === 0) { break; }
-      var sqRe = bRe * bRe - bIm * bIm;
-      var sqIm = 2 * bRe * bIm;
-      bRe = sqRe;
-      bIm = sqIm;
-    }
-    _rRe = accRe;
-    _rIm = accIm;
-  }
+  function _mvCsqrtAt(re, im) { _aRe = re; _aIm = im; cSqrt(); }
+  function _mvClnAt(re, im) { _aRe = re; _aIm = im; cLn(); }
 
   function cAsinh() {
     var re = _zRe;
     var im = _zIm;
     var z2re = re * re - im * im;
     var z2im = 2 * re * im;
-    _sqrtOf(z2re + 1, z2im);
-    var sr = _sqRe;
-    var si = _sqIm;
-    _lnOf(re + sr, im + si);
-    _rRe = _lgRe;
-    _rIm = _lgIm;
+    _mvCsqrtAt(z2re + 1, z2im);
+    var sr = _tmpRe;
+    var si = _tmpIm;
+    _mvClnAt(re + sr, im + si);
+    _rRe = _tmpRe;
+    _rIm = _tmpIm;
   }
 
   function cAcosh() {
@@ -913,12 +857,12 @@ var ApolloMultivar = (function () {
     var im = _zIm;
     var z2re = re * re - im * im;
     var z2im = 2 * re * im;
-    _sqrtOf(z2re - 1, z2im);
-    var sr = _sqRe;
-    var si = _sqIm;
-    _lnOf(re + sr, im + si);
-    _rRe = _lgRe;
-    _rIm = _lgIm;
+    _mvCsqrtAt(z2re - 1, z2im);
+    var sr = _tmpRe;
+    var si = _tmpIm;
+    _mvClnAt(re + sr, im + si);
+    _rRe = _tmpRe;
+    _rIm = _tmpIm;
   }
 
   /* z=1 是极点，返回 ±Infinity 由上层判错。 */
@@ -933,9 +877,9 @@ var ApolloMultivar = (function () {
     if (d === 0) { _rRe = Infinity; _rIm = 0; return; }
     var qr = (ar * br + ai * bi) / d;
     var qi = (ai * br - ar * bi) / d;
-    _lnOf(qr, qi);
-    _rRe = 0.5 * _lgRe;
-    _rIm = 0.5 * _lgIm;
+    _mvClnAt(qr, qi);
+    _rRe = 0.5 * _tmpRe;
+    _rIm = 0.5 * _tmpIm;
   }
 
   function cAbs() { return Math.sqrt(_zRe * _zRe + _zIm * _zIm); }
@@ -1017,10 +961,10 @@ var ApolloMultivar = (function () {
     getZIm: getZIm,
     getRRe: getRRe,
     getRIm: getRIm,
-    cSqrt: cSqrt,
-    cExp: cExp,
-    cLn: cLn,
-    cPowInt: cPowInt,
+    cSqrt: _mvCsqrt,
+    cExp: _mvCexp,
+    cLn: _mvCln,
+    cPowInt: _mvCpowint,
     cAsinh: cAsinh,
     cAcosh: cAcosh,
     cAtanh: cAtanh,
@@ -1035,7 +979,3 @@ var ApolloMultivar = (function () {
     reset: reset
   };
 })();
-
-if (typeof module === "object" && module && module.exports) {
-  module.exports = ApolloMultivar;
-}

@@ -41,23 +41,11 @@ var RATROOT_ENUM_MAX = 10000000;
 /* 模块一：基础工具 */
 
 /* 欧几里得 gcd（迭代，无递归；入参非负） */
-function ratRootGcd(a, b) {
-  var x = a;
-  var y = b;
-  var t = 0;
-  while (y !== 0) {
-    t = x % y;
-    x = y;
-    y = t;
-  }
-  return x;
-}
-
 /* 显式栈入栈：根值 p/q（自动约简、分母翻正）；栈满（8）丢弃 */
 function ratRootPush(p, q) {
   if (_ratRootFound >= 8) { return; }
   if (q < 0) { p = -p; q = -q; }
-  var g = ratRootGcd(p < 0 ? -p : p, q);
+  var g = igcd(p < 0 ? -p : p, q);
   if (g > 1) { p = p / g; q = q / g; }
   _ratRootValues[_ratRootFound] = p / q;
   _ratRootNum[_ratRootFound] = p;
@@ -142,7 +130,7 @@ function ratRootAddCands(q, dc) {
 /* 候选入表（约简 + 线性去重）；_ratRootCandidates 满 32 组即止 */
 function ratRootTryAdd(p, q) {
   if (q < 0) { p = -p; q = -q; }
-  var g = ratRootGcd(p < 0 ? -p : p, q);
+  var g = igcd(p < 0 ? -p : p, q);
   if (g > 1) { p = p / g; q = q / g; }
   var ci = 0;
   for (ci = 0; ci < _ratRootCount; ci++) {
@@ -548,13 +536,6 @@ var ApolloSqfree = (function () {
 
   /* 整系数多项式工具(升幂) */
 
-  function _igcd(a, b) {
-    var x = a;
-    var y = b;
-    var t = 0;
-    while (y !== 0) { t = x % y; x = y; y = t; }
-    return x;
-  }
   function _degOf(a, cap) {
     var k = cap;
     while (k >= 0) {
@@ -574,7 +555,7 @@ var ApolloSqfree = (function () {
     var k = 0;
     if (d < 0) { return -1; }
     for (k = 0; k <= d; k++) {
-      g = _igcd(g, a[k] < 0 ? -a[k] : a[k]);
+      g = igcd(g, a[k] < 0 ? -a[k] : a[k]);
       if (g > SQ_SAFE) { return -2; }
     }
     if (g > 1) {
@@ -684,14 +665,7 @@ var ApolloSqfree = (function () {
     _outLen++;
   }
   function _pushInt(m) {
-    var nd = 0;
-    if (m === 0) { _pushCC(48); return; }
-    while (m > 0) {
-      _digits[nd] = m % 10;
-      nd++;
-      m = (m - (m % 10)) / 10;
-    }
-    while (nd > 0) { nd--; _pushCC(48 + _digits[nd]); }
+    emitInt(m, _pushCC, _digits);
   }
   function _fmt(x) {
     var m = 0;
@@ -734,7 +708,7 @@ var ApolloSqfree = (function () {
       }
     }
     if (haveBest === 1) {
-      g = _igcd(bestP < 0 ? -bestP : bestP, bestQ);
+      g = igcd(bestP < 0 ? -bestP : bestP, bestQ);
       bestP = bestP / g;
       bestQ = bestQ / g;
       if (bestP < 0) { _pushCC(45); bestP = -bestP; }
@@ -1046,12 +1020,6 @@ var ApolloSqfree = (function () {
     if (r > ST_SAFE || r < -ST_SAFE) { return NaN; }
     return r;
   }
-  function stGcd(a, b) {
-    var x = a, y = b, t = 0;
-    while (y !== 0) { t = x % y; x = y; y = t; }
-    return x;
-  }
-
   /* 精确有理余:被除式 = (_stN,_stD)(有理,d>0);除式 = _stB(整数,deg db)。
    * 就地消去得 Q 上余式;返回余式次数(−1 = 零);溢出 → SQ_ECOEF。
    * negOut ≠ 0 时输出 −rem 的清母线整数式到 _stW(链步用),否则保持有理式。 */
@@ -1077,21 +1045,21 @@ var ApolloSqfree = (function () {
       qn = _stN[k];
       qd = stMul(_stD[k], _stB[db]);
       if (isNaN(qd)) { return SQ_ECOEF; }
-      g = stGcd(qn < 0 ? -qn : qn, qd);
+      g = igcd(qn < 0 ? -qn : qn, qd);
       if (g > 1) { qn = qn / g; qd = qd / g; }
       for (j = 0; j <= db; j++) {
         if (_stB[j] === 0) { continue; }
         tn = stMul(qn, _stB[j]);
         if (isNaN(tn)) { return SQ_ECOEF; }
         td = qd;
-        g = stGcd(tn < 0 ? -tn : tn, td);
+        g = igcd(tn < 0 ? -tn : tn, td);
         if (g > 1) { tn = tn / g; td = td / g; }
         ki = k - db + j;
         nn = stAdd(stMul(_stN[ki], td), -stMul(_stD[ki], tn));
         if (isNaN(nn)) { return SQ_ECOEF; }
         dd = stMul(_stD[ki], td);
         if (isNaN(dd)) { return SQ_ECOEF; }
-        g = stGcd(nn < 0 ? -nn : nn, dd);
+        g = igcd(nn < 0 ? -nn : nn, dd);
         if (g > 1) { nn = nn / g; dd = dd / g; }
         _stN[ki] = nn;
         _stD[ki] = dd;
@@ -1106,7 +1074,7 @@ var ApolloSqfree = (function () {
     /* 清母线:L = lcm(d_0..d_rd)(正);w_i = ±n_i·(L/d_i) */
     L = 1;
     for (k = 0; k <= rd; k++) {
-      g = stGcd(L, _stD[k]);
+      g = igcd(L, _stD[k]);
       mx = stMul(L / g, _stD[k]);
       if (isNaN(mx)) { return SQ_ECOEF; }
       L = mx;
@@ -1121,7 +1089,7 @@ var ApolloSqfree = (function () {
     g2 = 0;
     for (k = 0; k <= rd; k++) {
       var aw = _stW[k] < 0 ? -_stW[k] : _stW[k];
-      g2 = stGcd(g2, aw);
+      g2 = igcd(g2, aw);
     }
     if (g2 > 1) {
       for (k = 0; k <= rd; k++) { _stW[k] = _stW[k] / g2; }
@@ -1144,7 +1112,7 @@ var ApolloSqfree = (function () {
       var g = 0;
       for (i = 0; i <= dg; i++) {
         var aw = _coef[i] < 0 ? -_coef[i] : _coef[i];
-        if (aw !== 0) { g = (g === 0) ? aw : stGcd(g, aw); }
+        if (aw !== 0) { g = (g === 0) ? aw : igcd(g, aw); }
       }
       if (g > 1) {
         for (i = 0; i <= dg; i++) { _coef[i] = _coef[i] / g; }
@@ -1197,11 +1165,11 @@ var ApolloSqfree = (function () {
         var cn = _stN[kk];
         var cd = stMul(_stD[kk], _stB[dgc]);
         if (isNaN(cd)) { return SQ_ECOEF; }
-        var gg = stGcd(cn < 0 ? -cn : cn, cd);
+        var gg = igcd(cn < 0 ? -cn : cn, cd);
         if (gg > 1) { cn = cn / gg; cd = cd / gg; }
         _stQn[kk - dgc] = cn;
         /* 分母并入 qdG:lcm */
-        gg = stGcd(qdG, cd);
+        gg = igcd(qdG, cd);
         var mx2 = stMul(qdG / gg, cd);
         if (isNaN(mx2)) { return SQ_ECOEF; }
         qdG = mx2;
@@ -1210,14 +1178,14 @@ var ApolloSqfree = (function () {
           var tn = stMul(cn, _stB[j]);
           if (isNaN(tn)) { return SQ_ECOEF; }
           var td = cd;
-          gg = stGcd(tn < 0 ? -tn : tn, td);
+          gg = igcd(tn < 0 ? -tn : tn, td);
           if (gg > 1) { tn = tn / gg; td = td / gg; }
           var ki = kk - dgc + j;
           var nn = stAdd(stMul(_stN[ki], td), -stMul(_stD[ki], tn));
           if (isNaN(nn)) { return SQ_ECOEF; }
           var dd = stMul(_stD[ki], td);
           if (isNaN(dd)) { return SQ_ECOEF; }
-          gg = stGcd(nn < 0 ? -nn : nn, dd);
+          gg = igcd(nn < 0 ? -nn : nn, dd);
           if (gg > 1) { nn = nn / gg; dd = dd / gg; }
           _stN[ki] = nn;
           _stD[ki] = dd;

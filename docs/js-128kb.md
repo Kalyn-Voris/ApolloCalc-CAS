@@ -2,8 +2,8 @@
 
 - **状态**：v2.4.3（组件版本；17 文件内核拼接，terser 单遍 minify 交付）
 - **堆限制**：128KB（全局状态水位目标 ≤ 96KB）
-- **目标平台**：不限——任何支持 ES5 + TypedArray 的 JS 环境（Lite Wearable / JerryScript / 浏览器 / Node）
-- **内存模型**：与 64KB 版一致——TypedArray + 全局标量，零临时对象，禁止递归与热路径字符串拼接
+- **目标平台**：不限，任何支持 ES5 + TypedArray 的 JS 环境（Lite Wearable / JerryScript / 浏览器 / Node）
+- **内存模型**：与 64KB 版一致，TypedArray + 全局标量，零临时对象，禁止递归与热路径字符串拼接
 
 ## 功能清单
 
@@ -34,7 +34,7 @@
 14. **高阶特殊函数**（`core_special.js`，v2.0.0）：`erf`（A&S 26.2.17，|ε| ≤ 1.5e-7）、
     `gamma` / `lgamma`（Lanczos g=7 手工展开，相对误差 ~1e-13，负半轴反射公式）
 
-> 原计划的"有理根检验、多项式因式分解、线性方程组扩 12 元"已于第 8 步补做兑现
+> 原计划的"有理根检验、多项式因式分解、线性方程组扩 12 元"已于第 8 步补做
 > （见下）；"结果历史缓存"仍未落地：UI 层职责边界未定，另立任务卡。
 
 ### `core_multivar.js`（v1.3.5 落地，v2.0.0 增 `diff` 与内核接入）
@@ -67,7 +67,7 @@
 
 > 池账：`_coef` 448×8 = 3584、`_exps` 448×4 = 1792、`_cnt` 16×4 = 64、
 > `_strBuf` 1024×4 = 4096、`_tmpC` 56×8 = 448、`_tmpE` 56×4 = 224，合计 10 208 B。
-> 这是**独立于既有 11 992 B 静态池**的增量 —— 模块自包含，不共享既有 core 的池。
+> 这是**独立于既有 11 992 B 静态池**的增量，模块自包含，不共享既有 core 的池。
 
 **高阶三角 / 复数补充**：`sec / csc / cot / asec / acsc / acot / sech / csch / coth /
 asinh / acosh / atanh`，复数域 `cSqrt / cExp / cLn / cPowInt / cAsinh / cAcosh /
@@ -91,13 +91,13 @@ A/B/R 三个 3×3 行主序 Float64Array（3 × 72 = 216 B 加载期一次分配
 | 结果读取 | `getR(r, c)` / `getRRows()` / `getRCols()` / `getLastDet()` |
 | 错误通道 | 返回值 + `getError()`：1 维度超界 / 2 内维不匹配 / 3 非方阵 / 4 奇异 |
 
-边界诚实声明：≤3×3 闭式，无消元无选主元；12 元稠密消元是 C/128KB
+边界：≤3×3 闭式，无消元无选主元；12 元稠密消元是 C/128KB
 `ac_matrix`（C 独有）的能力，本模块是浏览器侧基础块。`test/test-matrix.js`
 39 条测试（含 A·A⁻¹ ≈ I 对拍、奇异/非方阵拒绝、寄存器独立性、热循环零分配）。
 
 ### `core_special.js`（v2.0.0）
 
-高阶特殊函数，纯标量实现——无池、无寄存器，加载期与热路径分配均为 **0**
+高阶特殊函数，纯标量实现，无池、无寄存器，加载期与热路径分配均为 **0**
 （Lanczos 级数与 A&S 系数全部手工展开为标量常量，模块内无数组字面量）。
 
 | 函数 | 算法 | 精度 |
@@ -140,14 +140,14 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 >
 > **口径澄清**：静态池是 TypedArray **外部内存**，不计入 V8 `heapUsed`；
 > 水位门禁 `checkMemoryWatermark`（core_solvers.js）自 F0 起为**两条独立的线**：
-> 堆线 96KB（不变）+ 全池静态线 178 496 B（见下节）——全量 1 563 项测试通过即
+> 堆线 96KB（不变）+ 全池静态线 178 496 B（见下节），全量 1 563 项测试通过即
 > 两线均健康。上表「既有静态池合计 11 992 B」仍是核心求值链路的逐池明细，
 > 外挂模块池另计。
 >
 > **内核文件体积口径（v2.6.0 终态）**：17 文件拼接，经 v2.2.0 落地的 terser
 > 单遍 minify 管线压缩后 `core_kernel.js` 为 **128 846 B ≤ 131 072 B**（128KB
 > 文件线，余量 2 226 B；v2.5.0 五块新功能后由 103 599 B 重建，已越过 v2.6
-> 熔断线 126 976 B——SVD JS 面与 G4' 纯 JS 大整数因此顺延 v2.7，见根
+> 熔断线 126 976 B，SVD JS 面与 G4' 纯 JS 大整数因此顺延 v2.7，见根
 > ROADMAP-v2.5-v2.6.md 附录「v2.6 执行记录」）；`--minify` 是压缩产物唯一重建入口
 > （test/build-kernel.js，复跑后核对 `git status` 防工具链漂移）。
 > C 侧对照：`C/128KB-ProTEXT` v2.6.0 以 `.bss` 42 608 B 零增长承载同等能力。
@@ -197,7 +197,7 @@ NaN 输入返回 NaN 且 `getError() = 1`。`test/test-special.js` 33 条测试�
 **登记机制**：`core_parser.js`（拼接序第 1）声明 `var _modulePoolBytes = 0` 与求和
 助手 `_modulePoolSum()`（加载期一次性调用，`arguments` 不落热路径）；其余池模块在
 **自身文件内**池声明之后以 `if (typeof _modulePoolSum === "function")
-{ _modulePoolSum(自身全部池…); }` 自报——`typeof` 守卫使独立 `require()`、浏览器
+{ _modulePoolSum(自身全部池…); }` 自报；`typeof` 守卫使独立 `require()`、浏览器
 经典 `<script>`、部分拼接 eval 三通道行为与 v2.4.x 逐字节一致（test-multivar /
 test-matrix-pro / test-browser 等独立加载环境已回归验证）。
 
@@ -206,7 +206,7 @@ test-matrix-pro / test-browser 等独立加载环境已回归验证）。
 冲突）；②更新 `tests/js-pool-ledger.json` 对应行与合计；③更新本表；④
 `test/test-watermark.js` 实测复核对不上即红。全池合计超 178 496 B 时门禁直接拒绝。
 
-**自检**：`node test/test-watermark.js`（run-all 自动发现）——逐文件账本比对 +
+**自检**：`node test/test-watermark.js`（run-all 自动发现），逐文件账本比对 +
 「刚好通过/刚好拒绝」双侧边界（178 496/178 497 与 98 304/98 305）+ 懒分配 0 +
 工作负载后游标计入不误拒，36 项。
 

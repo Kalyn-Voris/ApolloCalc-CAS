@@ -7,9 +7,12 @@
    期望值口径：erf/gamma/lgamma 的真值取自标准数学常数表；
    erf 容差 2e-7（A&S 26.2.17 的 1.5e-7 上限留余量），
    gamma/lgamma 容差按 Lanczos g=7 实测精度（~1e-13 相对）放宽到 1e-9。 */
-"use strict";
-
-var S = require("../src/core_special.js");
+/* 加载器（svd-format-v26.md §10 再授权）：单文件独立 eval——不装其余 core，
+   被测模块意外引用其他 core 全局即 ReferenceError（自包含金丝雀保留）。
+   不用 "use strict"，严格模式会把 eval 内 var 困在 eval 作用域 */
+var fs = require("fs");
+eval(fs.readFileSync(__dirname + "/../src/core_special.js", "utf8"));
+var S = ApolloSpecial;
 
 var pass = 0, fail = 0;
 function approx(a, b, tol) {

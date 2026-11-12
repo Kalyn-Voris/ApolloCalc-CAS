@@ -1,6 +1,6 @@
 # ApolloCalc-CAS · 十分钟接入
 
-> 本文档所有代码块与输出均为**实跑逐字实录**(2026-11-03,v2.4.2 首录;2026-11-04 v2.6.0
+> 所有代码块与输出为实跑逐字实录(2026-11-03,v2.4.2 首录;2026-11-04 v2.6.0
 > 复跑逐字一致)。
 > ApolloCalc-CAS 是零依赖的 C99 / JavaScript 双内核计算机代数系统:
 > 全静态分配(Zero-GC)、无递归、无第三方库,面向嵌入式与受限环境。
@@ -89,7 +89,7 @@ y = C₁*exp(-1*x) + C₂*exp(-2*x)
 1. 把 `C/128KB-ProTEXT/src/` 下**全部 `.c` 与 `.h`**(37 个文件)加入工程;头文件搜索路径加该目录。
 2. 编译选项与仓库 Makefile 逐字一致:`-std=c99 -Wall -Wextra -Wstrict-prototypes -O2`(仓库额外加 `-Werror` 兜底零警告)。源码**不使用**任何编译器扩展、无 VLA、无 `malloc`。
 3. 链接数学库(Keil 的 Math 库 / gcc 的 `-lm`):内核用到 `sin/cos/exp/log/sqrt/pow`。
-4. 内存预算:内核 `.bss` **42 608 B** + `.data` 2 716 B,栈预留 ≥ 2 KB——全部静态,启动期一次到位,运行期零分配。
+4. 内存预算:内核 `.bss` **42 608 B** + `.data` 2 716 B,栈预留 ≥ 2 KB，全部静态,启动期一次到位,运行期零分配。
 5. 验收捷径:同族的 `C/64KB/` 是 **10 576 B `.bss`** 的参考实现,面向 Cortex-M4F / M0+ / ESP32 约定验证过(见 `docs/c99-64kb.md`);移植遇到问题时先对它跑一遍。
 
 > 移植说明:以上 MinGW(gcc 8.1.0)路径在本仓库全量验收过;Keil / ESP-IDF 的工程组织属标准操作,内核代码本身不含任何平台相关调用。
@@ -108,7 +108,7 @@ idf_component_register(SRCS "src/ac_parser.c" ... # 全部 src/*.c
 
 - **零依赖直接引入**(推荐):把 `JS/128KB/src/core_kernel.js`(128 846 B,压缩后单文件,v2.5.0
   起功能面;v2.6.0 无 JS 变更)拷进工程,
-  `import ApolloCalc from "./core_kernel.js"` 即用——它是纯 ESM 默认导出,
+  `import ApolloCalc from "./core_kernel.js"` 即用，它是纯 ESM 默认导出,
   webpack / esbuild / vite 均可直接处理。
 - **npm**:仓库当前**未发布 npm 包**。下游两种接法:①`npm install` 时用 `file:` 依赖指向本仓库;
   ②自行对 `core_kernel.js` 做 `npm pack`(核心就是这一个文件,无任何传递依赖)。
@@ -173,17 +173,17 @@ ApolloCalc JS ██                                   9.3 ms(ESM 加载 8.1 + �
 ApolloCalc C  █                                    ~15 ms(进程;纯求解 µs 级,见 BENCH 报告)
 ```
 
-> **一条叙事线读懂这张图**:ApolloCalc C/64KB 用 **10 576 B(≈10 KB)的静态 RAM**
-> 跑出了多项式、方程求解、矩阵、数论等完整 CAS 能力;128KB Pro 层在这个量级上继续
-> 叠加符号积分、Groebner 基、一般矩阵特征值、SVD、ODE 通解——这些在 SymPy 里需要
-> 74 MB 安装 + ~34 MB 运行内存。不是谁替代谁:SymPy 是全功能桌面符号系统,
-> ApolloCalc 解决的是「SAME 能力在 10 KB 级静态内存、µs 级启动下可用」。
-> Eigenmath 与我们同属轻量 C 阵营,但它运行期 malloc 自由增长,没有静态预算概念。
+> ApolloCalc C/64KB 用 **10 576 B(≈10 KB)静态 RAM** 跑出多项式、方程求解、矩阵、
+> 数论等完整 CAS 能力;128KB Pro 层在此基础上叠加符号积分、Groebner 基、一般矩阵
+> 特征值、SVD、ODE 通解。这些在 SymPy 里需要 74 MB 安装 + ~34 MB 运行内存。
+> SymPy 是全功能桌面符号系统,ApolloCalc 做的是同一能力在 10 KB 级静态内存、
+> µs 级启动下可用。Eigenmath 与我们同属轻量 C 阵营,但运行期 malloc 自由增长,
+> 没有静态预算概念。
 
-**性能数字以压测管线为准(防单点快照漂移)**:ApolloCalc 侧各 stage 的 µs/op 级细目
-**不自建口径**,统一引用压测报告 [../tests/bench/BENCH-1M.md](../tests/bench/BENCH-1M.md)
-——v2.6.0 终版为五版本(JS/C × 64KB/128KB + ProTEXT pro_runner 列)× 四 stage × 3 轮中位数,
-由 `bash tests/bench/run-all.sh` 一键复跑供数,口径说明(含预热丢首轮)随报告成文;
+**性能数字以压测管线为准**:各 stage 的 µs/op 细目统一引用压测报告
+[../tests/bench/BENCH-1M.md](../tests/bench/BENCH-1M.md)。v2.6.0 终版为五版本
+(JS/C × 64KB/128KB + ProTEXT pro_runner 列)× 四 stage × 3 轮中位数,由
+`bash tests/bench/run-all.sh` 一键复跑供数,口径说明(含预热丢首轮)随报告成文;
 概览表见 [benchmark.md](benchmark.md)。本节图表只保留交付物体积 / 常驻内存 /
 启动时序三组快照,其中 ApolloCalc 静态预算两行随组件版本刷新。
 

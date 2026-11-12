@@ -23,7 +23,7 @@ to the host allocator so the binary contains no static malloc/free symbol.
 
 禁 malloc / VLA / 递归 / 热路径字符串函数；全部内存静态分配。链接期 `--wrap` 验证：
 main 入口之后任何 malloc/free 立即 abort（内核 + 测试全程零堆）；main 之前的宿主 CRT
-启动调用（裸机不存在）转发给宿主分配器，二进制中不含任何静态 malloc/free 符号
+启动调用（裸机不存在）转发给宿主分配器，二进制中无静态 malloc/free 符号
 （达标口径：`nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wrap` 无命中）。
 
 ## 精度模型
@@ -123,7 +123,7 @@ C/64KB/
 每轮完成后，用相同输入对 C 和 JS 两侧跑，比对：Token 流一致（数量、类型、payload）、
 数值结果一致（浮点容差 1e-9）、精确形式分量一致（num/den/rad/valid）。
 
-## 开发状态（9 + 1 轮：全部完成）
+## 开发状态（9 + 1 轮）
 
 - [x] 骨架搭建 + ac_parser.c
 - [x] ac_evaluator.c

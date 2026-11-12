@@ -300,26 +300,9 @@ var ApolloOde = (function () {
     return x >= 0 ? Math.floor(x + 0.5) : Math.ceil(x - 0.5);
   }
 
-  function _igcd(a, b) {
-    while (b !== 0) {
-      var t = a % b;
-      a = b;
-      b = t;
-    }
-    return a;
-  }
-
   /* 整数十进制(负号在前),写入 _outBuf */
   function _pushInt(m) {
-    if (m === 0) { _pushCC(48); return; }
-    if (m < 0) { _pushCC(45); m = -m; }
-    var nd = 0;
-    while (m > 0) {
-      _workI[nd] = m % 10;
-      nd++;
-      m = (m - (m % 10)) / 10;
-    }
-    while (nd > 0) { nd--; _pushCC(48 + _workI[nd]); }
+    emitInt(m, _pushCC, _workI);
   }
 
   function _pushCC(code) {
@@ -358,7 +341,7 @@ var ApolloOde = (function () {
       if (err < 0) { err = -err; }
       if (err <= TOL) {
         if (haveBest === 0 || err < bestErr) {
-          g = _igcd(p < 0 ? -p : p, q);
+          g = igcd(p < 0 ? -p : p, q);
           p2 = p / g;
           q2 = q / g;
           bestP = p2;

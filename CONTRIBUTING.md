@@ -53,7 +53,7 @@ node diff-smoke.js             # C64 vs JS64 → SMOKE-DIFF.md
 
 ## Zero-GC 铁律
 
-**这是项目的核心约束，任何 PR 都不得违反。**
+**核心约束，任何 PR 不得违反。**
 
 ### C 版
 

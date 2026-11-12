@@ -5,9 +5,12 @@
         大素数取公认事实值(2^31−1、F6 因子 67280421310721 等)。
    运行:node test/test-numtheory.js   (JS/128KB 目录下)
    全过输出:==== numtheory: N pass, 0 fail ==== */
-"use strict";
-
-var NT = require("../src/core_numtheory.js");
+/* 加载器（svd-format-v26.md §10 再授权）：单文件独立 eval——不装其余 core，
+   被测模块意外引用其他 core 全局即 ReferenceError（自包含金丝雀保留）。
+   不用 "use strict"，严格模式会把 eval 内 var 困在 eval 作用域 */
+var fs = require("fs");
+eval(fs.readFileSync(__dirname + "/../src/core_numtheory.js", "utf8"));
+var NT = ApolloNumtheory;
 
 var pass = 0, fail = 0;
 function ok(name, cond, detail) {

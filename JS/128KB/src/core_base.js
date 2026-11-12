@@ -21,6 +21,35 @@ var _siPrefixCode = 0;               /* 如 'k' = 107；空串用 0 表示 */
 var _siPrefixExp = 0;                /* 10 的幂，3 的倍数，范围 -24..+24 */
 var _siValid = 0;                    /* 0=无效（0 或非有限或超范围） 1=有效 */
 
+/* 全局欧几里得 gcd：原七份副本合并于此。调用点已各自保证入参非负，
+ * 保留裸欧几里得符号语义。 */
+function igcd(a, b) {
+  var x = a;
+  var y = b;
+  var t = 0;
+  while (y !== 0) { t = x % y; x = y; y = t; }
+  return x;
+}
+
+/* 全局十进制整数位发射器 —— 合并四份同语义副本
+ * （groebner.pushInt / ode._pushInt / ratroot._pushInt / symboltree._pushInt，
+ * 仅数字垫与出字符函数不同）。缓冲存数字值低位在前，0 以 buf[0]=0 占位
+ * 统一走发射循环；ratroot 调用点已各自预取绝对值，负号分支对其不可达。 */
+function emitInt(v, push, buf) {
+  var nd = 0;
+  var m = v;
+  if (m < 0) { push(45); m = -m; }
+  if (m === 0) { buf[0] = 0; nd = 1; }
+  else {
+    while (m > 0) {
+      buf[nd] = m % 10;
+      nd++;
+      m = (m - (m % 10)) / 10;
+    }
+  }
+  while (nd > 0) { nd--; push(48 + buf[nd]); }
+}
+
 /* 模块一：进制转换
  * 只支持 2/8/10/16；超过 53 位安全整数范围拒绝。
  * _baseBuf 逆序存放（低位在前），baseToString 反向遍历得正序字符串。 */

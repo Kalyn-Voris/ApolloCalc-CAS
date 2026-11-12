@@ -1,11 +1,21 @@
 /* ApolloCalc · test-multivar.js — 多变量多项式 + 高阶三角/复数补充 测试
 
-   被测模块：src/core_multivar.js（自包含，不依赖既有 9 个 core）
+   被测模块：src/core_multivar.js（复数域原语委托 core_complex.js 的 cSqrt/cExp/cLn/cPowInt
+   与全局寄存器 _aRe/_aIm/_tmpRe/_tmpIm，_tmpRe/_tmpIm 由 core_parser.js 声明；
+   加载序 parser→complex→multivar 最小闭包拼接，其余 core 一概不装——跨界引用即
+   ReferenceError，自包含金丝雀保留。再授权见 docs/contracts/svd-format-v26.md §10）
    运行：node test/test-multivar.js   （JS/128KB 目录下）
    全过输出：==== multivar: N pass, 0 fail ==== */
-"use strict";
-
-var M = require("../src/core_multivar.js");
+/* 加载器（svd-format-v26.md §10 再授权）：最小闭包拼接 parser→complex→multivar——
+   complex 供委托原语 cSqrt/cExp/cLn/cPowInt 与寄存器 _aRe/_aIm，parser 声明
+   _tmpRe/_tmpIm；闭包外 core 一概不装，意外引用即 ReferenceError（自包含
+   金丝雀保留）。不用 "use strict"，严格模式会把 eval 内 var 困在 eval 作用域 */
+var fs = require("fs");
+var dir = __dirname + "/../src";
+var code = ["core_parser.js", "core_complex.js", "core_multivar.js"]
+  .map(function (f) { return fs.readFileSync(dir + "/" + f, "utf8"); }).join("\n");
+eval(code);
+var M = ApolloMultivar;
 
 var pass = 0, fail = 0;
 function approx(a, b, tol) {
@@ -481,7 +491,7 @@ ok("解析失败路径分配增量 = 0", M.allocCount() - allocP3 === 0,
    "delta=" + (M.allocCount() - allocP3));
 
 /* 模块自包含性与预分配 */
-ok("模块独立 require 成功", typeof M === "object" && M !== null);
+ok("模块独立闭包加载成功", typeof M === "object" && M !== null);
 ok("导出 parse/evalSlot/mul/toString 等核心接口",
    typeof M.parse === "function" && typeof M.evalSlot === "function" &&
    typeof M.mul === "function" && typeof M.polyToString === "function" &&

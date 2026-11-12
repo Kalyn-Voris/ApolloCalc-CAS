@@ -855,16 +855,7 @@ var ApolloSymboltree = (function () {
     _outLen++;
   }
   function _pushInt(v) {
-    var nd = 0;
-    var m = v;
-    if (m < 0) { _pushCC(45); m = -m; }               /* '-' */
-    if (m === 0) { _pushCC(48); return; }             /* '0' */
-    while (m > 0) {
-      _workI[nd] = m % 10;
-      nd++;
-      m = (m - (m % 10)) / 10;
-    }
-    while (nd > 0) { nd--; _pushCC(48 + _workI[nd]); }
+    emitInt(v, _pushCC, _workI);
   }
   function _pushNum(v) {
     if (v === Math.PI) { _pushStr("pi"); return; }

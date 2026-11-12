@@ -1,10 +1,10 @@
 # C/128KB-ProTEXT · 组件变更记录
 
 本文件从**组件视角**记录 Pro 层的版本递进，格式遵循
-[Keep a Changelog](https://keepachangelog.com/)。与根
-[CHANGELOG.md](../../CHANGELOG.md) 的口径区分：根记录**全局版本节点**（仓库级 Tag，
+[Keep a Changelog](https://keepachangelog.com/)。根
+[CHANGELOG.md](../../CHANGELOG.md) 记录**全局版本节点**（仓库级 Tag，
 一次发布可只覆盖部分组件），本文件记录**组件版本**（见本目录 [VERSION](VERSION)）。
-双轨两个口径不必同号：全局版本每次发布都会注明对应的组件版本。
+全局版本每次发布都会注明对应的组件版本。
 
 ## v1.8.0 (2026-11-04) · 对应全局 v2.6.0
 

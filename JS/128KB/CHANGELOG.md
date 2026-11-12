@@ -1,8 +1,8 @@
 # JS/128KB · 组件变更记录
 
 本文件从**组件视角**记录 JS/128KB 的版本递进，格式遵循
-[Keep a Changelog](https://keepachangelog.com/)。与根
-[CHANGELOG.md](../../CHANGELOG.md) 的口径区分：根记录**全局版本节点**（仓库级 Tag，
+[Keep a Changelog](https://keepachangelog.com/)。根
+[CHANGELOG.md](../../CHANGELOG.md) 记录**全局版本节点**（仓库级 Tag，
 一次发布可只覆盖部分组件），本文件记录**组件版本**（见本目录 [VERSION](VERSION)）。
 
 ## v2.5.0 (2026-11-04) · 对应全局 v2.5.0
@@ -13,12 +13,12 @@
   零分叉，与 C 侧同语料 789 行差分零分歧。132 项测试（test-complex-ext.js）。
 - **二元方程组 GB 消元数值全解**（`core_groebner.js` sysolve 扩段，捆绑
   Durand-Kerner 高次求根移植）：全部解含复数解，GB={1} → 0 解、正维数
-  诚实拒绝；h 次数 5..8 两侧同走 DK，本功能全域零分叉，与 C 侧 20/20 对拍
+  按错误码拒绝；h 次数 5..8 两侧同走 DK，本功能全域零分叉，与 C 侧 20/20 对拍
   一致。契约 [sysolve-format-v25](../../docs/contracts/sysolve-format-v25.md)。
   40 项测试（test-sysolve.js）。
 - **Sturm 序列镜像**（`core_ratroot.js` 扩段，≤4 次）：与 C 侧域内零分叉
   （计数 + 隔离区间逐字一致）；链中间量超出 2^53−1 精确域即报 ECOEF，
-  绝不输出失真值；5..8 次按契约返回次数超限（依赖 JS 大整数，v2.6 收口）。
+  不输出失真值；5..8 次按契约返回次数超限（依赖 JS 大整数，v2.6 收口）。
   契约 [sturm-format-v25](../../docs/contracts/sturm-format-v25.md) 三层
   （dual / cOnly-DEG / cOnly-OVF）。68 项测试（test-sturm.js）。
 - **一般实矩阵全部特征值**（`core_matrix.js` pro 层 `proSchur*` API）：

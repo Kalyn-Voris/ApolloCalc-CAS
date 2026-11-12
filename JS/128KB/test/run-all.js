@@ -1,16 +1,17 @@
-/* ApolloCalc · run-all.js — JS/128KB 全量测试入口：顺序运行同目录全部 test-*.js（当前 20 个）
+/* ApolloCalc · run-all.js — JS/128KB 全量测试入口：顺序运行同目录全部 test-*.js（当前 26 个）
 
    运行：node test/run-all.js   （JS/128KB 目录下；亦可从仓库根以路径直呼）
 
    规则：
      每个文件以 node 子进程顺序执行，exit 0 才算过
      每跑完一个打印一行「PASS/FAIL 文件名 (用例数)」
-     末行打印 TOTAL: <n> pass, <m> fail —— n/m 为各测试文件自报用例数聚合（基线 1183/0）
+     末行打印 TOTAL: <n> pass, <m> fail —— n/m 为各测试文件自报用例数聚合（基线 1635/0）
      任一文件非零退出（或其自报 fail>0 / 汇总行不可解析）→ 整体退出码 1
 
-   注：test-*.js 为红线文件不可改，其汇总行格式即契约，共三种形态（parseCounts 逐一解析，
-       自末行向前取首个命中）：
-         1) ==== <name>: N pass[, I improve], M fail ====   （18 个，含 consistency）
+   注：test-*.js 的断言与汇总行为红线文件，汇总行格式即契约，共三种形态（parseCounts 逐一解析，
+       自末行向前取首个命中）；v2.7 例外：6 个单文件 require 加载器改独立 eval 拼接（断言不动），
+       再授权与动因见 docs/contracts/svd-format-v26.md §10：
+         1) ==== <name>: N pass[, I improve], M fail ====   （19 个，含 consistency）
          2) ---- N passed, M failed ----                    （test-evaluator.js）
          3) COMPLEX TESTS OK, all N passed                  （test-complex.js）
 

@@ -3,9 +3,12 @@
    被测模块：src/core_matrix.js（自包含，不依赖既有 core）
    运行：node test/test-matrix.js   （JS/128KB 目录下）
    全过输出：==== matrix: N pass, 0 fail ==== */
-"use strict";
-
-var M = require("../src/core_matrix.js");
+/* 加载器（svd-format-v26.md §10 再授权）：单文件独立 eval——不装其余 core，
+   被测模块意外引用其他 core 全局即 ReferenceError（自包含金丝雀保留）。
+   不用 "use strict"，严格模式会把 eval 内 var 困在 eval 作用域 */
+var fs = require("fs");
+eval(fs.readFileSync(__dirname + "/../src/core_matrix.js", "utf8"));
+var M = ApolloMatrix;
 
 var pass = 0, fail = 0;
 function approx(a, b, tol) {

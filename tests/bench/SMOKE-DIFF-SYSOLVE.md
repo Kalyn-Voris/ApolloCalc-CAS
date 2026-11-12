@@ -1,6 +1,6 @@
 # SMOKE-DIFF-SYSOLVE (v2.5.0 F2)
 
-C (ac_pro_sysolve) vs JS (core_groebner.sysolve) — 20 cases, tolerance 1e-9
+C (ac_pro_sysolve) vs JS (core_groebner.sysolve)，20 cases, tolerance 1e-9
 
 | case | verdict | C rc | JS rc | C out | JS out |
 |---|---|---|---|---|---|

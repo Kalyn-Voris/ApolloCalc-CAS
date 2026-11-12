@@ -25,19 +25,6 @@ var EXACT_INT_MAX = 9007199254740991;
 
 /* 模块一：基础工具 */
 
-function exactGcd(a, b) {
-  /* 欧几里得算法（迭代版）：零分配，仅局部标量，无递归 */
-  var x = a;
-  var y = b;
-  var t = 0;
-  while (y !== 0) {
-    t = x % y;
-    x = y;
-    y = t;
-  }
-  return x;
-}
-
 function exactSimplifyRadical(D) {
   /* 提取完全平方因子：返回外系数 k，原地写 exactRad 为无平方因子部分
      试除法：命中 i*i 即从 D 中除尽、外系数乘 i
@@ -124,9 +111,9 @@ function exactNormalize() {
   /* 三数（rat, radNum, den）取最大公约数约分 */
   var ar = exactRat < 0 ? -exactRat : exactRat;
   var abn = exactRadNum < 0 ? -exactRadNum : exactRadNum;
-  var g1 = exactGcd(ar, exactDen);
-  var g2 = exactGcd(abn, exactDen);
-  var g = exactGcd(g1, g2);
+  var g1 = igcd(ar, exactDen);
+  var g2 = igcd(abn, exactDen);
+  var g = igcd(g1, g2);
   if (g > 1) {
     exactRat = exactRat / g;
     exactRadNum = exactRadNum / g;

@@ -254,6 +254,102 @@ var EXPORTED_NAMES = [
 /* --minify：压缩体 eval 回归需要、但不在导出契约内的内部名（83 项测试代码直接引用） */
 var MIN_TEST_ONLY_NAMES = ["_coeffs", "_rpnLen", "_evalSp", "_evalResult"];
 
+/* mangle.properties 白名单。三个来源：
+   1) PROPS_BUILTIN 手抄静态表 —— 标准库成员属性（Math/String/Array/Number/JSON/Error/RegExp/
+      TypedArray/Function/Object 原型与静态）。terser 5.51.2 自带 builtins 数据集失效
+      （charCodeAt/length 被改写致冒烟 TypeError），只能手抄。
+   2) EXPORT_BLOCK 顶层键 —— 导出契约（demos 内联产物 + 3 个 product-import 测试按属性名访问）。
+   3) 各 src 模块最后一个 "return {" 的顶层键 —— 九个 Apollo* 命名空间方法名（同一访问面）。
+   属性名改写一致性由单遍全模块压缩保证；2)/3) 运行时提取，API 演化时白名单自维护。 */
+var PROPS_BUILTIN = ("prototype,constructor,length,byteLength,byteOffset,BYTES_PER_ELEMENT,buffer,set,subarray,fill,slice," +
+  "abs,acos,acosh,asin,asinh,atan,atan2,atanh,cbrt,ceil,clz32,cos,cosh,exp,expm1,floor,fround,hypot,imul," +
+  "log,log10,log1p,log2,max,min,pow,random,round,sign,sin,sinh,sqrt,tan,tanh,trunc,E,LN10,LN2,LOG10E,LOG2E,PI,SQRT1_2,SQRT2," +
+  "EPSILON,MAX_SAFE_INTEGER,MIN_SAFE_INTEGER,MAX_VALUE,MIN_VALUE,POSITIVE_INFINITY,NEGATIVE_INFINITY,NaN,isInteger,isSafeInteger," +
+  "parseFloat,parseInt,isNaN,isFinite,toFixed,toPrecision,toExponential,toString,valueOf," +
+  "charAt,charCodeAt,codePointAt,concat,endsWith,includes,indexOf,lastIndexOf,match,normalize,padEnd,padStart,repeat," +
+  "replace,replaceAll,search,split,startsWith,substring,substr,toLowerCase,toUpperCase,trim,trimStart,trimEnd," +
+  "fromCharCode,fromCodePoint,raw,copyWithin,every,filter,find,findIndex,findLast,findLastIndex,flat,flatMap,forEach," +
+  "join,keys,values,entries,at,isArray,from,of,pop,push,reduce,reduceRight,reverse,shift,some,sort,splice,unshift," +
+  "assign,freeze,getOwnPropertyNames,create,defineProperty,stringify,parse," +
+  "call,apply,bind,name,message,stack,test,exec,lastIndex,source,flags,global,sticky,then,catch,finally," +
+  "Infinity,undefined,console").split(",");
+
+/* 对象字面量深度 1 键扫描（start 指向 "{" 之后）：跳过嵌套对象/字符串/注释，
+   支持 key: 值 与 key(...)/key: function 两种形态来源。 */
+function scanObjectKeys(src, start) {
+  var keys = [];
+  var i = start, depth = 1, n = src.length, inStr = null;
+  while (i < n && depth > 0) {
+    var c = src[i];
+    if (inStr) {
+      if (c === "\\") { i += 2; continue; }
+      if (c === inStr) { inStr = null; }
+      i++; continue;
+    }
+    if (c === "'" || c === "\"") { inStr = c; i++; continue; }
+    if (c === "/" && src[i + 1] === "*") { i += 2; while (i < n && !(src[i] === "*" && src[i + 1] === "/")) { i++; } i += 2; continue; }
+    if (c === "/" && src[i + 1] === "/") { while (i < n && src[i] !== "\n") { i++; } continue; }
+    if (c === "{") { depth++; i++; continue; }
+    if (c === "}") { depth--; i++; continue; }
+    if (depth === 1 && /[A-Za-z_$]/.test(c)) {
+      var j = i, w = "";
+      while (j < n && /[\w$]/.test(src[j])) { w += src[j]; j++; }
+      var k = j;
+      while (k < n && (src[k] === " " || src[k] === "\t")) { k++; }
+      if (src[k] === ":") {
+        keys.push(w);
+        var v = k + 1;
+        while (v < n && (src[v] === " " || src[v] === "\t" || src[v] === "\n")) { v++; }
+        if (src[v] === "{") {                       /* 嵌套对象值：整块跳过，键不算顶层 */
+          var d2 = 1; v++;
+          while (v < n && d2 > 0) { if (src[v] === "{") { d2++; } else if (src[v] === "}") { d2--; } v++; }
+          i = v; continue;
+        }
+        if (src[v] === "'" || src[v] === "\"") {    /* 字符串值：跳过避免误收内容 */
+          var q2 = src[v]; v++;
+          while (v < n && src[v] !== q2) { if (src[v] === "\\") { v++; } v++; }
+          i = v + 1; continue;
+        }
+      }
+      i = j; continue;
+    }
+    i++;
+  }
+  return keys;
+}
+
+/* 单文件命名空间键提取，两种构造形态：
+   A) IIFE —— 最后一个 "return {"（九个 Apollo* 模块的同款收口）；
+   B) 顶层 var Apollo* = { 对象字面量（v2.5 ApolloComplexExt 先例）。 */
+function extractNamespaceKeys(src) {
+  var keys = [];
+  var idx = src.lastIndexOf("return {");
+  if (idx >= 0) { keys = keys.concat(scanObjectKeys(src, idx + 8)); }
+  var reNs = /(?:^|\n)var (Apollo\w+)\s*=\s*\{/g, mm;
+  while ((mm = reNs.exec(src)) !== null) {
+    keys = keys.concat(scanObjectKeys(src, mm.index + mm[0].length));
+  }
+  return keys;
+}
+
+function collectPropsReserved() {
+  var set = {}, out = [], i;
+  for (i = 0; i < PROPS_BUILTIN.length; i++) { set[PROPS_BUILTIN[i]] = 1; }
+  var reKey = /^\s*([A-Za-z_$][\w$]*)\s*:/mg, m;
+  while ((m = reKey.exec(EXPORT_BLOCK)) !== null) { set[m[1]] = 1; }
+  for (i = 0; i < FILES.length; i++) {
+    var keys = extractNamespaceKeys(fs.readFileSync(path.join(COMMON, FILES[i]), "utf8"));
+    for (var ki = 0; ki < keys.length; ki++) { set[keys[ki]] = 1; }
+  }
+  /* 金丝雀守卫：三类命名空间形态各钉一个代表键，提取器失灵即构建失败（fail-fast） */
+  var canaries = ["csin", "setA", "groebner", "parseExpression", "charCodeAt"];
+  for (i = 0; i < canaries.length; i++) {
+    if (!set[canaries[i]]) { die("BUILD FAILED: props 白名单金丝雀缺失: " + canaries[i] + "（命名空间提取器失灵?）"); }
+  }
+  for (var k in set) { if (set.hasOwnProperty(k)) { out.push(k); } }
+  return out;
+}
+
 var MINIFY = process.argv.indexOf("--minify") >= 0;
 /* MIN_HEADER 精简版：必须保留 "MINIFIED BUILD" 字样（无参构建靠它识别压缩产物防误覆盖），
  生成方式与禁改说明并入同一短句，压缩产物里每字节都算钱 */
@@ -318,8 +414,8 @@ function startTerser() {
   return terser.minify(kernelBody + "\n" + EXPORT_BLOCK, {
     ecma: 2015,
     module: true,
-    compress: { passes: 2, toplevel: true, unsafe_arrows: true, pure_getters: true, keep_fargs: false },
-    mangle: { toplevel: true },
+    compress: { passes: 4, toplevel: true, unsafe_arrows: true, pure_getters: true, keep_fargs: false, sequences: 16 },
+    mangle: { toplevel: true, properties: { reserved: collectPropsReserved() } },
     format: { comments: false }
   }).then(function (r1) {
     if (r1.error) { throw r1.error; }

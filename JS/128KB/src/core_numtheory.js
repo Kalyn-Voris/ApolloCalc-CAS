@@ -386,7 +386,3 @@ var ApolloNumtheory = (function () {
     allocCount: allocCount
   };
 })();
-
-if (typeof module === "object" && module && module.exports) {
-  module.exports = ApolloNumtheory;
-}

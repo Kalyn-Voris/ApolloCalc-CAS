@@ -1,6 +1,6 @@
 # SMOKE-DIFF-STURM (v2.5.0 F3)
 
-C (ac_pro_sturm) vs JS (core_ratroot sturm 扩段) — 62 checks
+C (ac_pro_sturm) vs JS (core_ratroot sturm 扩段)，共 62 checks
 
 | case | verdict | detail |
 |---|---|---|

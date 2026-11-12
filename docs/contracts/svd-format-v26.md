@@ -288,4 +288,68 @@ eigen-format-v25.md §4 完全一致：不定死则差分对拍被符号翻转�
   CSV 对拍）。**R2 熔断线预案先例**：v2.4.0 schur 的 C-first 分叉反向版
   （ROADMAP.md:315 ②「G2 的 JS 面顺延 v2.7、SVD 成文 C-only」）。
 - 红线：上游 C/128KB、根账本文件（CHANGELOG/features/README/VERSION）、
-  JS 侧 20 个 test-*.js 一概不碰。
+  JS 侧 20 个 test-*.js 一概不碰（v2.7 加载器例外的定向再授权见 §10）。
+
+---
+
+## 9. v2.7 JS 面落地注记（core_matrix.js pro 层；本节为落地状态记录，非语义变更）
+
+v2.7.0 G2 兑现 §8 顺延项：`core_matrix.js` pro 层 `proSvd*` 按 §3/§4 **逐字转录**
+`C/128KB-ProTEXT/src/ac_pro_svd.c`（表达式书写顺序、三道跳过次序、30 sweep 预算、
+§3.7 出口序列、排序全序、符号规范化、双闸门、错误码全同）。当前两侧语义**对称**，
+无 §7 式不对等项需成文：
+
+- **非有限域闸对称**：C ac_pro_svd.c:76-80 自查 NaN/±Inf → −1；JS `proSvd` 同查
+  （`v − v ≠ 0` 判据）→ −1。两侧同行为，非 JS-only 域闸（与 eigen-format-v25.md
+  §7.1 schur 的 JS-only 域闸不同）。
+- **缩放指数对称**：e ≥ 1024 → −1（C ac_pro_svd.c:87；JS 同值同语义）。JS 无
+  frexp：按 eigen-format-v25.md §3.1 同款 log2 初值 + 双侧精确校正环逼近同一
+  整数，与 C frexp 逐位一致（core_matrix.js schur 缩放环同款复用）。
+
+JS API 面（§3.10 同构镜像；C 列指针 accessor 在 JS 面按 pro 惯例改元素访问，
+越界 NaN 与 proEigVector/proSchurVector 同款）：
+
+| JS | C 对应 | 语义 |
+|---|---|---|
+| `proSvd()` | `ac_pro_svd_all(a, m, n)` | 输入经 `proSetA(rows, cols, i, v)` 装入（**矩形合法**，守卫 `_pDimsOK` 非 `_pSquareOK`），返回值 = C 同款 1/−1/−2/−3 |
+| `proSvdCount()` | `ac_pro_svd_count` | 成功 = k = min(m,n)；任何失败路径 = 0 |
+| `proSvdValue(k)` | `ac_pro_svd_value(k)` | σ_k 降序；越界返 0.0（proEigValue 同款） |
+| `proSvdU(k, i)` | `ac_pro_svd_u(k)[i]` | U 第 k 列第 i 分量（m 维）；越界返 NaN |
+| `proSvdV(k, i)` | `ac_pro_svd_v(k)[i]` | V 第 k 列第 i 分量（n 维）；越界返 NaN |
+
+- **池映射（零新池，F4 先例）**：红线 `proAllocCount()===7` 不动。B→`_luBuf`
+  （Jacobi 就地迭代）、V→`_vBuf`（k×k 列主序旋转累计阵）、U→`_pr`（借结果寄存器
+  ——SVD 不写 proGetR 维度，set-then-call UI 契约允许借寄存器）、w→`_eigLam[0..12)`
+  （eig λ 槽，union「一次调用失效」语义同 C）、work→`_work[0..24)`（[0..12) 排序
+  b 列 + [12..24) V 列/补全残量）。`reset()` 清 `_svdM/_svdN/_svdK`（`_schCount`
+  同款）；失败路径三态全零 → getter 恒 NaN/0.0，视图不得读取。
+- **测试面**：`JS/128KB/test/test-svd.js`（§5 关键用例族黄金值 + 不变量 +
+  越界边界）与 `tests/bench/diff-svd.js`（读 §6 金标准 `tests/bench/svd128-c.csv`
+  对拍 + `tests/bench/svd-corpus.csv` 输入矩阵，diff-eigen.js 同款流程）。
+  契约域内 rc ∉ {−2,−3} 反向断言（§3.9）。
+
+---
+
+## 10. v2.7 加载器例外（对 §8 test-*.js 红线的定向再授权）
+
+v2.7 JS 面落地改变了 src 加载通道的两处前提，6 个原「单文件 `require`」测试的加载器改为
+**独立 eval 拼接**（test-ode 同款形态、不用 "use strict" 以免 eval 内 var 被困；
+断言与汇总行一概不动，仅动各文件头部加载器块）：
+
+1. **动因一（require 通道失效）**：本版剥离 `core_matrix.js` / `core_numtheory.js` /
+   `core_special.js` / `core_multivar.js` 四处 `module.exports` 尾（内核字节），裸
+   `require` 返回 `{}`——test-matrix / -eig / -pro / -numtheory / -special 五文件随之改
+   **单文件独立 eval**（各自只装被测的 core_*.js 一个文件）。
+2. **动因二（复数原语委托）**：multivar 复数域实现委托 core_complex 全局
+   `cSqrt/cExp/cLn/cPowInt` 与寄存器 `_aRe/_aIm/_tmpRe/_tmpIm`（`_tmpRe/_tmpIm` 由
+   core_parser.js 声明，core_complex.js:4 自证该依赖）——test-multivar.js 改
+   **parser→complex→multivar 三文件最小闭包拼接**。
+
+**自包含金丝雀不弃（本再授权的边界）**：加载面收敛到被测最小闭包——
+matrix/numtheory/special 仍单文件独立（其 `_modulePoolSum` 池钩子本就是 `typeof`
+守卫的可选协议，core_parser.js:20-26 自证；单文件加载时钩子静默降级，与原 require
+形态一致）；multivar 闭包外的任何 core 全局引用仍 ReferenceError（v2.7 实验 #4
+捕获 multivar 跨模块引用的机制保留，其 194 断言全量回归即金丝雀本体）。
+曾采用的「test-ode 同款 9 文件全拼接」就此**否决**：那会使 matrix/numtheory/special
+四模块的意外跨模块引用静默解析。test-multivar.js 头部依赖声明与「模块独立 require
+成功」断言名随实际加载形态更正（断言检查体不动）。

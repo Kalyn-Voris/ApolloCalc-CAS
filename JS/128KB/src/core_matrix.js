@@ -43,8 +43,10 @@
  *   ——只扩容 _eigLam（+192 B）与 _work（+288 B）两个既有池，增量 +480 B
  *   ≪ ROADMAP F4 池封顶 ~2816 B。C 侧 eig 视图 2592 B / schur 视图 2744 B
  *   （ac_pro_scratch.h:335）作上界参照，JS 以共享池替代 union 视图。
- *   共享草稿约定：LU/det/rank/inv/eig/schur 依次复用 _luBuf，一次调用使
+ *   共享草稿约定：LU/det/rank/inv/eig/schur/svd 依次复用 _luBuf，一次调用使
  *   上一次的草稿结果失效（C Pro union「一次调用只持有一个视图」同款语义）。
+ *   svd 槽位：B→_luBuf、V→_vBuf、U→_pr（借结果寄存器，不写 proGetR 维度）、
+ *   w→_eigLam[0..12)、work→_work[0..24)（C svd 视图 3760 B 的 JS 共享池对位）。
  *
  *   - 部分主元消元核 = C ac_matrix.c mat_echelon（主元阈值 1e-12、零列
  *     右移计秩、swap 奇偶定 det 符号）；rank 支持矩形 m×n。
@@ -72,6 +74,16 @@
  *     特征向量符号规范化）见 docs/contracts/eigen-format-v25.md；
  *     差分对拍 tests/bench/diff-eigen.js（C 探针 eig128-c.csv）。
  *     JS 侧特有（C 无、契约 §7 成文不对等）：NaN/±Inf 域闸返 −1。
+ *   - SVD（v2.7.0 G2）= C/128KB-ProTEXT/src/ac_pro_svd.c 逐字转录：m×n 实
+ *     矩形 one-sided Jacobi（Hestenes，LAPACK dgesvj 同族），幂 2 精确缩放
+ *     + 30 sweep 预算 + 列 2-范数降序稳定插入排序 + 零 σ Gram-Schmidt
+ *     补全 + 符号规范化 + 出口双闸门（R1 相对 1e-9·(1+‖A_s‖∞)、R2 绝对
+ *     1e-9）；m < n 内部转置对偶。矩形接口（守卫 _pDimsOK，m≠n 合法），
+ *     结果经 proSvdValue/proSvdU/proSvdV/proSvdCount 读取。错误码
+ *     1/−1/−2/−3 与 C 同值同语义；NaN/±Inf 与缩放指数 e ≥ 1024 域闸 C 侧
+ *     ac_pro_svd.c:76-87 同查（对称，非 JS-only）。契约
+ *     docs/contracts/svd-format-v26.md（§9 JS 落地注记）；差分对拍
+ *     tests/bench/diff-svd.js（C 探针 svd128-c.csv）。
  *
  * pro 层错误码（getError，与既有码共用通道）
  *   0 OK / 1 维度超界（>12 或 ≤0 或下标越界或非有限输入）/ 3 非方阵 /
@@ -82,6 +94,10 @@
  *   proSchur 返回值同 C ac_pro_schur_all：1 成功 / −1 维度（含非有限
  *   输入，JS 域闸）/ −2 QR 迭代不收敛 / −3 特征向量全败（此时特征值
  *   已正确但一并放弃，count=0，调用方不得读取视图——C 同款语义）。
+ *   proSvd 返回值同 C ac_pro_svd_all：1 成功 / −1 维度或非有限输入或
+ *   缩放指数 e ≥ 1024 / −2 30 sweep 预算耗尽 / −3 双闸门或零 σ 补全
+ *   失败（−2/−3 走返回值通道，_err 保持 0；count=0，视图不得读取——
+ *   契约 §3.9「不过闸绝不硬凑」纪律）。
  *
  * 零 GC：10 个 TypedArray 加载期一次分配，全路径无对象/数组字面量、
  * 无字符串操作、无递归。
@@ -141,6 +157,8 @@ var ApolloMatrix = (function () {
   var _schCount = 0;                /* 最近一次成功 schur 的特征值个数（失败恒 0，C 同款） */
   var _swaps = 0;                   /* echelon 行交换奇偶计数（标量寄存） */
   var _allocProCount = 7;
+  /* v2.7.0 G2 SVD：最近一次成功分解的形状与 σ 个数（C m_st/n_st/k_st 同构） */
+  var _svdM = 0, _svdN = 0, _svdK = 0;
 
   function allocCount() { return _allocCount; }
   function getOpCount() { return _opCount; }
@@ -193,6 +211,7 @@ var ApolloMatrix = (function () {
     _pRowsR = 0; _pColsR = 0;
     _pN = 0; _luN = 0; _eigCount = 0; _schCount = 0;
     _qrM = 0; _qrN = 0;
+    _svdM = 0; _svdN = 0; _svdK = 0;
     return 0;
   }
 
@@ -1470,6 +1489,239 @@ var ApolloMatrix = (function () {
     return _vBuf[k * _schCount + i];
   }
 
+  /* ===== v2.7.0 G2：m×n 实矩阵奇异值分解（one-sided Jacobi） =====
+   * C/128KB-ProTEXT/src/ac_pro_svd.c 逐字转录（契约 docs/contracts/
+   * svd-format-v26.md §3/§4：旋转公式表达式书写顺序、三道跳过次序、
+   * 30 sweep 预算、§3.7 出口序列、排序全序、符号规范化、双闸门、
+   * 错误码 1/−1/−2/−3，两侧逐字一致）。
+   * 视图映射（对应 C svd 视图槽 ac_pro_scratch.h:585-650）：B → _luBuf
+   * （Jacobi 就地迭代）、V → _vBuf（k×k 列主序旋转累计阵）、U → _pr
+   * （借结果寄存器，SVD 不写 proGetR 维度）、w → _eigLam[0..12)、
+   * work → _work[0..24)（[0..12) 排序 b 列 + [12..24) V 列/补全残量）。
+   * 零新池（红线 proAllocCount()===7，F4 先例只借槽）。幂 2 缩放 =
+   * schur 同款 log2 初值 + 双侧精确校正环（与 C frexp 逐位一致）；
+   * NaN/±Inf 域闸与 e ≥ 1024 域界拒绝 C ac_pro_svd.c:76-87 同查（对称，
+   * 契约 §9 成文无不对等项）。m < n 内部走转置对偶（契约 §3.2/§3.7d），
+   * 出口 U/V 角色对调后共用 §4 符号规范化与双闸门。 */
+  var SVD_MAX_SWEEPS = 30,      /* sweep 预算封顶，超限返 −2（契约 §3.1） */
+      SVD_ORTHO_TOL = 1e-14,    /* 列对正交判据（相对 √(αβ)） */
+      SVD_ZERO_TOL = 1e-12,     /* 数值零列/零 σ 判据（相对） */
+      SVD_COMPLETE_MIN = 0.25,  /* 零 σ 列补全残量验收线（Bessel 下界） */
+      SVD_RESID = 1e-9;         /* 出口双闸门容差 */
+
+  /* 主入口：契约 §3.3-§3.8 逐字实现。返回值 = C ac_pro_svd_all 同值同语义。
+   * 结果读取：proSvdCount/proSvdValue/proSvdU/proSvdV——U 第 k 列（m 维）
+   * 在 _pr[k·m..k·m+m)、V 第 k 列（n 维）在 _vBuf[k·n..)，列主序布局与
+   * C accessor（ac_pro_scratch.h:828-833）同构。失败路径 _svdM/_svdN/
+   * _svdK 全零 → getter 恒 NaN/0.0，视图不得读取（C 同款）。 */
+  function proSvd() {
+    _err = 0;
+    if (!_pDimsOK(_pRowsA, _pColsA)) { _err = 1; _svdK = 0; return -1; }
+    _opCount++;
+    var m = _pRowsA;
+    var n = _pColsA;
+    _svdM = 0; _svdN = 0; _svdK = 0;   /* 失败路径的 accessor 归零（C 同款） */
+    var i, j, l, pp, q, qq, tt, sweep, rotated = 0, idx, completed;
+    var mmax = 0.0, nonfinite = 0;
+    /* −1 参数拒绝：非有限元素（C ac_pro_svd.c:76-80 同查；v−v≠0 ⇔ NaN/±Inf） */
+    for (i = 0; i < m * n; i++) {
+      var e0 = _pa[i];
+      if (e0 - e0 !== 0.0) { nonfinite = 1; break; }
+      var a0 = e0 < 0.0 ? -e0 : e0;
+      if (a0 > mmax) { mmax = a0; }
+    }
+    if (nonfinite === 1) { _err = 1; return -1; }
+    /* 幂 2 缩放（契约 §3.3）：scale = 2^e 与 frexp 逐位一致（2^(e−1) ≤ mmax
+     * < 2^e 的唯一整数 e）；e ≥ 1024 ⟹ scale 非有限 → 域界诚实拒绝 */
+    var scaleExp = 0, scale = 1.0;
+    if (mmax > 0.0) {
+      scaleExp = Math.ceil(Math.log2(mmax));
+      while (Math.pow(2, scaleExp) <= mmax) { scaleExp++; }
+      while (scaleExp > -1022 && Math.pow(2, scaleExp - 1) > mmax) { scaleExp--; }
+      if (scaleExp >= 1024) { _err = 1; return -1; }
+      scale = Math.pow(2, scaleExp);
+    }
+    var k = (m < n) ? m : n;
+    var tr = (m < n) ? 1 : 0;
+    var p = tr ? n : m;
+    /* 工作副本 B（p×k 行主序，缩放域；m < n 时 B = Aᵗ，契约 §3.2） */
+    for (i = 0; i < p; i++) {
+      for (j = 0; j < k; j++) { _luBuf[i * k + j] = (tr ? _pa[j * n + i] : _pa[i * n + j]) / scale; }
+    }
+    /* V ← I_k（列主序 v[j*k+i]，即第 j 列 = &v[j*k]） */
+    for (j = 0; j < k * k; j++) { _vBuf[j] = 0.0; }
+    for (j = 0; j < k; j++) { _vBuf[j * k + j] = 1.0; }
+    /* one-sided Jacobi sweep（契约 §3.4：表达式书写顺序逐字冻结） */
+    for (sweep = 0; sweep < SVD_MAX_SWEEPS; sweep++) {
+      rotated = 0;
+      for (pp = 0; pp < k - 1; pp++) {
+        for (q = pp + 1; q < k; q++) {
+          var alpha = 0.0, beta = 0.0, gamma = 0.0, smin, smax, zeta, t, c, s;
+          for (i = 0; i < p; i++) { alpha += _luBuf[i * k + pp] * _luBuf[i * k + pp]; }
+          for (i = 0; i < p; i++) { beta += _luBuf[i * k + q] * _luBuf[i * k + q]; }
+          for (i = 0; i < p; i++) { gamma += _luBuf[i * k + pp] * _luBuf[i * k + q]; }
+          if (gamma === 0.0) { continue; }               /* 精确正交/精确零列 */
+          smin = Math.sqrt((alpha < beta) ? alpha : beta);
+          smax = Math.sqrt((alpha > beta) ? alpha : beta);
+          if (smin <= SVD_ZERO_TOL * smax) { continue; } /* 数值零列对（终止性保证） */
+          if (Math.abs(gamma) <= SVD_ORTHO_TOL * Math.sqrt(alpha * beta)) {
+            continue;                                    /* 已正交 */
+          }
+          zeta = (beta - alpha) / (2.0 * gamma);
+          t = ((zeta >= 0.0) ? 1.0 : -1.0)
+            / (Math.abs(zeta) + Math.sqrt(1.0 + zeta * zeta));
+          c = 1.0 / Math.sqrt(1.0 + t * t);
+          s = c * t;
+          for (i = 0; i < p; i++) {
+            var bp = _luBuf[i * k + pp];
+            var bq = _luBuf[i * k + q];
+            _luBuf[i * k + pp] = c * bp - s * bq;
+            _luBuf[i * k + q] = s * bp + c * bq;
+          }
+          for (i = 0; i < k; i++) {
+            var vp = _vBuf[pp * k + i];
+            var vq = _vBuf[q * k + i];
+            _vBuf[pp * k + i] = c * vp - s * vq;
+            _vBuf[q * k + i] = s * vp + c * vq;
+          }
+          rotated++;
+        }
+      }
+      if (rotated === 0) { break; }
+    }
+    if (rotated !== 0) { return -2; }   /* 30 sweep 预算耗尽，诚实失败 */
+
+    /* 奇异值 = 列 2-范数（求和按 i 升序，契约 §3.6） */
+    for (j = 0; j < k; j++) {
+      var s2 = 0.0;
+      for (i = 0; i < p; i++) { s2 += _luBuf[i * k + j] * _luBuf[i * k + j]; }
+      _eigLam[j] = Math.sqrt(s2);
+    }
+    /* 降序稳定插入排序（schur 同款：严格 < 才前移，并列保持提取序），
+     * b 列（_work[0..11]）与 V 列（_work[12..23]）同步换序（契约 §3.6） */
+    for (i = 1; i < k; i++) {
+      var key = _eigLam[i];
+      l = i - 1;
+      for (j = 0; j < p; j++) { _work[j] = _luBuf[j * k + i]; }
+      for (j = 0; j < k; j++) { _work[12 + j] = _vBuf[i * k + j]; }
+      while (l >= 0 && _eigLam[l] < key) {
+        _eigLam[l + 1] = _eigLam[l];
+        for (j = 0; j < p; j++) { _luBuf[j * k + l + 1] = _luBuf[j * k + l]; }
+        for (j = 0; j < k; j++) { _vBuf[(l + 1) * k + j] = _vBuf[l * k + j]; }
+        l--;
+      }
+      _eigLam[l + 1] = key;
+      for (j = 0; j < p; j++) { _luBuf[j * k + l + 1] = _work[j]; }
+      for (j = 0; j < k; j++) { _vBuf[(l + 1) * k + j] = _work[12 + j]; }
+    }
+    /* 数值零 σ 判定（契约 §3.7a2）：w_j ≤ 1e-12·w_0 → 精确置 0（确定性
+     * 优于保留 fp 噪声谱尾，被弃质量 ≪ R1 闸门） */
+    for (j = 0; j < k; j++) { if (_eigLam[j] <= SVD_ZERO_TOL * _eigLam[0]) { _eigLam[j] = 0.0; } }
+    /* 数据列归一化（w_j > 0，缩放域除法；契约 §3.7b） */
+    for (j = 0; j < k; j++) {
+      if (_eigLam[j] > 0.0) { for (i = 0; i < p; i++) { _luBuf[i * k + j] /= _eigLam[j]; } }
+    }
+    /* 零 σ 列 Gram-Schmidt 补全（契约 §3.7c：候选 e_0..e_{p−1} 首个可收即停；
+     * 投影求和 j' = 0..k−1 升序跳 j；残量复用 _work[12..23]） */
+    for (j = 0; j < k; j++) {
+      if (_eigLam[j] !== 0.0) { continue; }
+      completed = 0;
+      for (tt = 0; tt < p && completed === 0; tt++) {
+        var nr = 0.0;
+        for (i = 0; i < p; i++) { _work[12 + i] = (i === tt) ? 1.0 : 0.0; }
+        for (qq = 0; qq < k; qq++) {
+          var dot = 0.0;
+          if (qq === j) { continue; }
+          for (i = 0; i < p; i++) { dot += _luBuf[i * k + qq] * _work[12 + i]; }
+          for (i = 0; i < p; i++) { _work[12 + i] -= dot * _luBuf[i * k + qq]; }
+        }
+        for (i = 0; i < p; i++) { nr += _work[12 + i] * _work[12 + i]; }
+        nr = Math.sqrt(nr);
+        if (nr >= SVD_COMPLETE_MIN) {
+          for (i = 0; i < p; i++) { _luBuf[i * k + j] = _work[12 + i] / nr; }
+          completed = 1;
+        }
+      }
+      if (completed === 0) { return -3; }   /* Bessel 保证不发生；诚实路径 */
+    }
+    /* 出口构造（契约 §3.7d；纯数据搬移零舍入） */
+    if (tr === 0) {
+      /* m ≥ n：U ← b 转置重排（k = n，_vBuf 列主序 k×k 已是最终 V） */
+      for (j = 0; j < k; j++) { for (i = 0; i < m; i++) { _pr[j * m + i] = _luBuf[i * k + j]; } }
+    } else {
+      /* m < n：U ← V'（旋转累计阵即最终 U）；V ← b 转置重排（V = U'）。
+       * 先拷 U 再覆写 V（U 在 _pr、V 在 _vBuf，异槽无别名） */
+      for (j = 0; j < k; j++) { for (i = 0; i < m; i++) { _pr[j * m + i] = _vBuf[j * k + i]; } }
+      for (j = 0; j < k; j++) { for (i = 0; i < n; i++) { _vBuf[j * n + i] = _luBuf[i * k + j]; } }
+    }
+    /* 符号规范化（契约 §4：U 每列最大 |·| 分量置正、并列取最小索引；
+     * V 同因子成对翻转，零 σ 补全列同规则） */
+    for (j = 0; j < k; j++) {
+      var mx = Math.abs(_pr[j * m]);
+      idx = 0;
+      for (i = 1; i < m; i++) {
+        var a3 = Math.abs(_pr[j * m + i]);
+        if (a3 > mx) { mx = a3; idx = i; }
+      }
+      if (_pr[j * m + idx] < 0.0) {
+        for (i = 0; i < m; i++) { _pr[j * m + i] = -_pr[j * m + i]; }
+        for (i = 0; i < n; i++) { _vBuf[j * n + i] = -_vBuf[j * n + i]; }
+      }
+    }
+    /* 双闸门回乘验证（契约 §3.8，缩放域，A_s = a/scale 幂 2 除法即时重算，
+     * 零额外缓冲） */
+    var anorm = 0.0, r1 = 0.0, r2 = 0.0;
+    for (i = 0; i < m; i++) {
+      var rs = 0.0;
+      for (l = 0; l < n; l++) { rs += Math.abs(_pa[i * n + l] / scale); }
+      if (rs > anorm) { anorm = rs; }
+    }
+    /* R1：‖A_s − UΣ_sVᵗ‖∞ ≤ RESID·(1+‖A_s‖∞)；acc 乘法结合序 (U·w)·V */
+    for (i = 0; i < m; i++) {
+      var rs1 = 0.0;
+      for (l = 0; l < n; l++) {
+        var acc = 0.0;
+        for (j = 0; j < k; j++) { acc += (_pr[j * m + i] * _eigLam[j]) * _vBuf[j * n + l]; }
+        rs1 += Math.abs(_pa[i * n + l] / scale - acc);
+      }
+      if (rs1 > r1) { r1 = rs1; }
+    }
+    if (!(r1 <= SVD_RESID * (1.0 + anorm))) { return -3; }
+    /* R2：‖UᵗU − I‖∞ ≤ RESID（绝对） */
+    for (pp = 0; pp < k; pp++) {
+      for (q = 0; q < k; q++) {
+        var dot2 = 0.0, d;
+        for (i = 0; i < m; i++) { dot2 += _pr[i + pp * m] * _pr[i + q * m]; }
+        d = Math.abs(((pp === q) ? 1.0 : 0.0) - dot2);
+        if (d > r2) { r2 = d; }
+      }
+    }
+    if (!(r2 <= SVD_RESID)) { return -3; }
+    /* 缩放还原（乘幂 2，精确）+ accessor 停泊（契约 §3.7g） */
+    for (j = 0; j < k; j++) { _eigLam[j] *= scale; }
+    _svdM = m;
+    _svdN = n;
+    _svdK = k;
+    return 1;
+  }
+
+  /* SVD 结果读取（C ac_pro_svd_value/u/v/count 同款边界语义；跨 API 调用
+   * 后视图失效——共享池 union「一次调用失效」语义，proSetA/proSvd 均
+   * 可作失效源，ac_pro_scratch.h 视图持有纪律③ JS 对位） */
+  function proSvdValue(k) {
+    if (k < 0 || k >= _svdK) { return 0.0; }
+    return _eigLam[k];
+  }
+  function proSvdU(k, i) {
+    if (k < 0 || i < 0 || k >= _svdK || i >= _svdM) { return NaN; }
+    return _pr[k * _svdM + i];
+  }
+  function proSvdV(k, i) {
+    if (k < 0 || i < 0 || k >= _svdK || i >= _svdN) { return NaN; }
+    return _vBuf[k * _svdN + i];
+  }
+  function proSvdCount() { return _svdK; }
+
   return {
     MAX_DIM: MAX_DIM,
     PRO_MAX_DIM: PRO_MAX_DIM,
@@ -1521,6 +1773,13 @@ var ApolloMatrix = (function () {
     proSchurHasVec: proSchurHasVec,
     proSchurVector: proSchurVector,
 
+    /* v2.7.0 G2：m×n 实矩阵奇异值分解（one-sided Jacobi，契约 svd-format-v26） */
+    proSvd: proSvd,
+    proSvdValue: proSvdValue,
+    proSvdU: proSvdU,
+    proSvdV: proSvdV,
+    proSvdCount: proSvdCount,
+
     reset: reset,
     getError: getError,
     getOpCount: getOpCount,
@@ -1530,7 +1789,3 @@ var ApolloMatrix = (function () {
     rBuffer: rBuffer
   };
 })();
-
-if (typeof module === "object" && module && module.exports) {
-  module.exports = ApolloMatrix;
-}

@@ -15,7 +15,6 @@ C99 对等 JS 128KB + 大整数 / 矩阵 / 特殊函数 / 符号求导四大 C �
 ## 零堆内存（Zero-GC）与编译器级 union 重叠
 
 本版本把「不分配」从**运行时约定**推进到**编译期结构**：
-
 | 层次 | 手段 | 保障 |
 |:---|:---|:---|
 | 静态分配 | 全部池为全局 / 模块内 `static` 数组，无 VLA、无递归 | 编译期确定 `.bss` 大小 |
@@ -26,13 +25,13 @@ C99 对等 JS 128KB + 大整数 / 矩阵 / 特殊函数 / 符号求导四大 C �
 | 链接期拦截 | `-Wl,--wrap=malloc -Wl,--wrap=free` | 二进制内不残留 malloc/free 符号 |
 | 运行期强制 | `__wrap_malloc` 在 `s_kernel_live` 期间命中即 `abort()` | 零分配是硬性校验，不是约定 |
 
-**union 的互斥性不是靠运行时检查，而是靠结构事实**：`ac_sym_derivative` / `ac_sym_eval` /
-`ac_sym_equal` 三组视图在同一调用路径上永不并发（无递归 + 模块边界清晰），故它们共享
+**union 的互斥性靠结构事实，不靠运行时检查**：`ac_sym_derivative` / `ac_sym_eval` /
+`ac_sym_equal` 三组视图在同一调用路径上永不并发（无递归 + 模块边界清晰），故共享
 一块 8224 B 存储。所有开关（`AC_SCRATCH_UNION` 及 `SYM/MAT/CALC/RATROOT/BIGINT/STK/LRHS`）
-都可用 `-D...=0` 单独回退，源码一行不用改回。
+都可用 `-D...=0` 单独回退，源码不用改。
 
 > **准入判据（教训）**：能进 union 的不是「谁调用它」，而是「它是否持有跨调用可变状态」。
-> 懒初始化缓存（带 `ready` 标志的查表）**必须排除**——放进 union 会让 CRC32 在被其它模块
+> 懒初始化缓存（带 `ready` 标志的查表）**必须排除**：放进 union 会让 CRC32 在被其它模块
 > 覆写后静默返回错值（实测 `CBF43926` → `C4D28698`），且 1000+ 测试全绿也发现不了。
 
 ## 功能清单
@@ -178,14 +177,13 @@ nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wrap   # 应无�
 `98304 B`（128KB × 75%）即置 `g_solve_error = 4`。v1.1.0 实测占用 39408 B，
 仅用掉门禁的 **40.09%**，余量 58896 B。
 
-
 ## Zero-GC 验证
 
 三层保障：
 
 1. **静态分配**：所有池为 `static` 全局数组或模块内 `static` 工作区，无 VLA、无递归
 2. **链接期拦截**：`-Wl,--wrap=malloc -Wl,--wrap=free`
-3. **运行期强制**：`test_main.c` 的 `__wrap_malloc` / `__wrap_free` 在 `s_kernel_live`（main 进入到返回）期间命中即 `abort()`；CRT 启动期（main 之前）的合法堆调用经 `GetProcAddress` 转发到 msvcrt，因此二进制内不残留任何静态 malloc/free 符号
+3. **运行期强制**：`test_main.c` 的 `__wrap_malloc` / `__wrap_free` 在 `s_kernel_live`（main 进入到返回）期间命中即 `abort()`；CRT 启动期（main 之前）的合法堆调用经 `GetProcAddress` 转发到 msvcrt，因此二进制内无静态 malloc/free 符号
 
 验证命令：
 
@@ -206,7 +204,7 @@ nm test_runner.exe | grep -iE "malloc|free|realloc" | grep -v __wrap   # 应无�
 - 水位门禁 48KB → **96KB**
 - 新增四大 C 独有模块：`ac_bigint` / `ac_matrix` / `ac_special` / `ac_symbolic`
 
-**vs JS 128KB**：**功能对等**（JS 128KB 的全部功能均已实现），并额外提供上述四大 C 独有模块。唯一不提供的是 `guardMultivariateNonlinear`——该函数在 JS 侧已定义但未被任何求解流水线调用（死代码）。
+**vs JS 128KB**：**功能对等**（JS 128KB 的全部功能均已实现），另提供上述四大 C 独有模块。唯一不提供的是 `guardMultivariateNonlinear`，该函数在 JS 侧已定义但未被任何求解流水线调用（死代码）。
 
 ## 测试规模
 

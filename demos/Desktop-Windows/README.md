@@ -4,12 +4,12 @@
 
 ## Overview
 
-A native Windows graphing-calculator demo built on top of the ApolloCalc-CAS
-C99 engine: expression parsing, evaluation and sampling all run inside the C
+A native Windows graphing-calculator demo built on the ApolloCalc-CAS C99
+engine: expression parsing, evaluation and sampling all run inside the C
 kernel (`ApolloCalc.dll`); the C# WinForms layer only handles input, the
 sampling loop and GDI+ drawing.
 
-The demo is **physically isolated** from the core library — `C/128KB-ProTEXT/`
+The demo is **physically isolated** from the core library: `C/128KB-ProTEXT/`
 and `C/128KB/` stay byte-identical. The DLL is compiled straight from the core
 sources by a standalone script in this directory; the core build system is
 never invoked.
@@ -42,10 +42,10 @@ dotnet run --project demos\Desktop-Windows\ApolloCalc.Desktop
 ```
 
 Two commands: the first compiles `ApolloCalc.dll` from the C99 sources, the
-second builds and launches the GUI. The `.csproj` automatically copies
+second builds and launches the GUI. The `.csproj` copies
 `c_bridge\ApolloCalc.dll` into the output directory when present, and the
-first evaluation acts as a probe — if the DLL is missing you get an explicit
-dialog telling you to run `build.bat`.
+first evaluation acts as a probe: if the DLL is missing you get a dialog
+telling you to run `build.bat`.
 
 ## Get the ready-to-run EXE
 
@@ -53,9 +53,9 @@ dialog telling you to run `build.bat`.
 demos\Desktop-Windows\c_bridge\publish.bat
 ```
 
-then double-click `demos\Desktop-Windows\publish\ApolloCalc.Desktop.exe` —
+then double-click `demos\Desktop-Windows\publish\ApolloCalc.Desktop.exe`;
 no build tools needed on the machine. The publish output is
-**framework-dependent** (small, a few MB): it requires the
+**framework-dependent** (a few MB): it requires the
 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
 and carries the native `ApolloCalc.dll` with it. Manual equivalent:
 
@@ -74,17 +74,17 @@ and block the launch. This is expected behavior, not a virus warning:
 
 - **Why it happens**: this is a free, open-source, non-profit demo. Commercial
   code-signing certificates cost hundreds of dollars a year, so the EXE
-  carries no signature — Windows treats any unsigned, never-seen-before
+  carries no signature; Windows treats any unsigned, never-seen-before
   binary as an "unknown publisher".
 - **Safety statement**: the program is built entirely from the open source
-  code in this repository (C99 kernel, bridge layer, C# UI — all three layers
-  are in the repo). It contains no malware: no installer, no telemetry, no
-  network access; everything runs offline on your machine. Feel free to audit
-  every line, or just build it yourself with `build.bat` + `publish.bat`.
+  code in this repository (C99 kernel, bridge layer, C# UI, all three layers
+  in the repo). It contains no installer, no telemetry and no network access;
+  everything runs offline. Audit every line, or build it yourself with
+  `build.bat` + `publish.bat`.
 - **How to run it anyway**:
   1. In the blue dialog, click **More info**;
-  2. Click the **Run anyway** button that appears at the bottom right — the
-     app then starts normally (the prompt only shows on first launch).
+  2. Click the **Run anyway** button that appears at the bottom right. The
+     prompt only shows on first launch.
 
 ## Prerequisites
 
@@ -118,7 +118,7 @@ void   ac_gui_set_angle_mode(int deg);   /* 0 = RAD, non-zero = DEG */
   `ac_eval_expression_at(x)`;
 - returns a finite `double` = `f(x)`; `NaN` = empty expression / parse error /
   evaluation error (`EVAL_DIV_ZERO`, `EVAL_DOMAIN`, `EVAL_OVERFLOW`);
-- the kernel uses global pools — single-threaded by design (as the core
+- the kernel uses global pools, single-threaded by design (as the core
   library always has): call from the UI thread only;
 - trigonometric functions default to **degrees** (`g_angle_deg = 1`, mirroring
   the JS `angleMode="DEG"`); `ac_gui_set_angle_mode` is a demo-layer
@@ -136,9 +136,9 @@ private static extern double ac_gui_eval(string expr, double x);
 - Type any `f(x)` (`sin(x)*exp(-x/5)`, `x^3-3x`, `ln(abs(x)+1)` …), press
   **Plot** (or Enter);
 - the app samples `[-10, 10]` at step `0.1` through `ac_gui_eval` (201
-  points), auto-scales the y-axis, and draws grid, axes and the curve in the
+  points), auto-scales the y-axis, and draws grid, axes and curve in the
   `PictureBox.Paint` event; `NaN` samples break the curve
-  (`ln(x)` simply does not draw for `x < 0`);
+  (`ln(x)` does not draw for `x < 0`);
 - a **Radians (RAD)** checkbox switches the angle mode and re-plots;
 - a small MIT copyright notice sits in the bottom-right corner of the window;
 - **UI language defaults to English**; if the system language is `zh-*` the
@@ -156,8 +156,8 @@ display the notice in-app (HTML footer / desktop status bar).
   directories stay untouched;
 - the bridge DLL is a **demo artifact**: it never enters the core build
   system and is not committed (see `.gitignore`);
-- the core library's `.bss` ledger, gates and Makefiles are none of this
-  demo's business.
+- the core library's `.bss` ledger, gates and Makefiles are out of scope for
+  this demo.
 
 ---
 
@@ -169,8 +169,8 @@ display the notice in-app (HTML footer / desktop status bar).
 表达式解析、求值与采样全部在 C 内核（`ApolloCalc.dll`）里完成，C# WinForms
 层只负责输入、采样循环和 GDI+ 绘图。
 
-Demo 与核心库**物理隔离** —— `C/128KB-ProTEXT/` 与 `C/128KB/` 逐字节不动。
-DLL 由本目录下的独立脚本直接编译核心源码产出，全程不调用核心库构建系统。
+Demo 与核心库**物理隔离**：`C/128KB-ProTEXT/` 与 `C/128KB/` 逐字节不动。
+DLL 由本目录下的独立脚本直接编译核心源码产出，不调用核心库构建系统。
 
 ## 目录结构
 
@@ -200,8 +200,8 @@ dotnet run --project demos\Desktop-Windows\ApolloCalc.Desktop
 ```
 
 第一条命令把 C99 源码独立编译成 `ApolloCalc.dll`，第二条直接编译并运行
-GUI。`csproj` 检测到 `c_bridge\ApolloCalc.dll` 存在时会自动复制到输出目录；
-首次求值是一次探针调用，DLL 缺失时会弹窗提示先跑 `build.bat`。
+GUI。`csproj` 检测到 `c_bridge\ApolloCalc.dll` 存在时自动复制到输出目录；
+首次求值是一次探针调用，DLL 缺失时弹窗提示先跑 `build.bat`。
 
 ## 获取打包好的 EXE
 
@@ -212,7 +212,7 @@ demos\Desktop-Windows\c_bridge\publish.bat
 然后双击 `demos\Desktop-Windows\publish\ApolloCalc.Desktop.exe` 即可运行，
 目标机器**无需任何构建工具**。publish 产物是**依赖框架**的精简包（几 MB）：
 需要机器装有 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)，
-原生 `ApolloCalc.dll` 会随包一起带出。等价的手动命令：
+原生 `ApolloCalc.dll` 随包带出。等价的手动命令：
 
 ```bat
 dotnet publish demos\Desktop-Windows\ApolloCalc.Desktop -c Release -r win-x64 --self-contained false
@@ -228,16 +228,14 @@ dotnet publish demos\Desktop-Windows\ApolloCalc.Desktop -c Release -r win-x64 --
 不是病毒告警：
 
 - **原因**：本程序是免费、开源、非营利的演示软件。商业代码签名证书每年
-  需要数百美元，因此 EXE 未签名 —— Windows 会把任何「无签名 + 信誉度为零
-  的本地新构建」一律当作"未知发布者"拦截。
+  需要数百美元，因此 EXE 未签名；Windows 会把任何「无签名 + 信誉度为零
+  的本地新构建」当作"未知发布者"拦截。
 - **安全声明**：程序完全由本仓库的开源代码在本地构建（C99 内核、桥接层、
-  C# 界面三层都在仓库里），不含任何恶意软件：无安装器、无遥测、无网络
-  访问，完全在本地离线运行。欢迎逐行审计，或直接自己构建
-  （`build.bat` + `publish.bat`）。
+  C# 界面三层都在仓库里），无安装器、无遥测、无网络访问，完全本地离线运行。
+  欢迎逐行审计，或直接自己构建（`build.bat` + `publish.bat`）。
 - **放行步骤**：
   1. 在蓝色弹窗中点击 **更多信息**（More info）；
-  2. 点击右下角出现的 **仍要运行**（Run anyway）按钮，即可正常体验
-     （该提示只在首次启动时出现）。
+  2. 点击右下角出现的 **仍要运行**（Run anyway）按钮（该提示只在首次启动时出现）。
 
 ## 前置要求
 
@@ -254,7 +252,7 @@ dotnet publish demos\Desktop-Windows\ApolloCalc.Desktop -c Release -r win-x64 --
    把 **桥接 TU + `C/128KB-ProTEXT/src/*.c` 全部包装/增量 TU** 一次编译成
    `c_bridge\ApolloCalc.dll`（`-shared`，`__declspec(dllexport)` 导出，
    不需要导入库）；
-3. **绝不**把 `C/128KB/src/*.c` 直接列入链接 —— 上游 `.c` 已被包装 TU
+3. **绝不**把 `C/128KB/src/*.c` 直接列入链接：上游 `.c` 已被包装 TU
    `#include` 编译恰好一次，重复列入会 multiple definition（核心 Makefile
    头注第 3 条的同款纪律）。
 
@@ -267,7 +265,7 @@ void   ac_gui_set_angle_mode(int deg);   /* 0 = RAD，非零 = DEG */
 
 - `ac_gui_eval` 的调用序列与核心库自检 `ac_pro_smoke.c` 同款：
   `ac_solvers_reset()` → `ac_parse_expression()` → `ac_eval_expression_at(x)`；
-- 返回有限 `double` = `f(x)`；返回 `NaN` = 表达式为空 / 解析失败 /
+- 返回有限 `double` = `f(x)`；`NaN` = 表达式为空 / 解析失败 /
   求值错误（除零 `EVAL_DIV_ZERO`、定义域 `EVAL_DOMAIN`、溢出 `EVAL_OVERFLOW`）；
 - 内核使用全局池，与核心库既有单线程约定一致：只在 UI 线程调用；
 - 三角函数默认**角度制**（`g_angle_deg = 1`，镜像 JS `angleMode="DEG"`）；
@@ -294,11 +292,11 @@ private static extern double ac_gui_eval(string expr, double x);
 
 ## 许可证
 
-MIT © 2026 Kalyn-Voris —— 见仓库根目录 [`LICENSE`](../../LICENSE)。两个
+MIT © 2026 Kalyn-Voris，见仓库根目录 [`LICENSE`](../../LICENSE)。两个
 Demo 均在界面内展示版权声明（HTML 页脚 / 桌面状态栏）。
 
 ## 隔离红线（本 Demo 的边界约定）
 
 - 只允许改动 `demos/Desktop-Windows/` 下的文件；核心库目录零改动；
 - 桥接 DLL 是**演示层产物**，不进核心库构建系统，也不入库（见 `.gitignore`）；
-- 核心库的 `.bss` 账本、门禁与 Makefile 均与本 Demo 无关。
+- 核心库的 `.bss` 账本、门禁与 Makefile 与本 Demo 无关。
